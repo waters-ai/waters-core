@@ -1,0 +1,89 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 750" font-family="Arial, sans-serif">
+  
+  <!-- Фон -->
+  <rect width="900" height="750" fill="#0a0e27" rx="16"/>
+  
+  <!-- Заголовок -->
+  <text x="450" y="38" fill="#6b9fff" font-size="18" font-weight="bold" text-anchor="middle">🧠 Нервная система WATERS — Планёрки, События, Оповещения</text>
+  <text x="450" y="60" fill="#888" font-size="12" text-anchor="middle">Event-Driven Architecture на Kafka (Redpanda) и Redis</text>
+
+  <!-- ====== ВХОД (Внешние запросы) ====== -->
+  <rect x="250" y="80" width="400" height="50" rx="12" fill="#1a1a3e" stroke="#ffd700" stroke-width="1.5"/>
+  <text x="450" y="110" fill="#ffd700" font-size="14" font-weight="bold" text-anchor="middle">📥 ВНЕШНИЕ ЗАПРОСЫ (external.requests.v1)</text>
+
+  <!-- Стрелка от входа -->
+  <line x1="450" y1="130" x2="450" y2="155" stroke="#ffd700" stroke-width="2"/>
+
+  <!-- ====== KAFKA (Журнал событий) ====== -->
+  <rect x="60" y="158" width="780" height="220" rx="14" fill="#1a1a2a" stroke="#3498db" stroke-width="2"/>
+  <text x="450" y="186" fill="#3498db" font-size="15" font-weight="bold" text-anchor="middle">🔷 KAFKA / REDPANDA — ЖУРНАЛ ВСЕХ СОБЫТИЙ</text>
+
+  <!-- Планёрки -->
+  <rect x="85" y="202" width="170" height="55" rx="8" fill="#1a2a2a" stroke="#3498db" stroke-width="1"/>
+  <text x="170" y="228" fill="#3498db" font-size="12" font-weight="bold" text-anchor="middle">📋 ПЛАНЁРКИ</text>
+  <text x="170" y="246" fill="#aaa" font-size="10" text-anchor="middle">meeting, questions</text>
+  <text x="170" y="258" fill="#aaa" font-size="10" text-anchor="middle">answers, proscons</text>
+
+  <!-- Презентации/Решения -->
+  <rect x="270" y="202" width="170" height="55" rx="8" fill="#1a2a2a" stroke="#3498db" stroke-width="1"/>
+  <text x="355" y="228" fill="#3498db" font-size="12" font-weight="bold" text-anchor="middle">📊 ПРЕЗЕНТАЦИИ</text>
+  <text x="355" y="246" fill="#aaa" font-size="10" text-anchor="middle">presentations</text>
+  <text x="355" y="258" fill="#aaa" font-size="10" text-anchor="middle">decisions</text>
+
+  <!-- Интерпретации -->
+  <rect x="455" y="202" width="170" height="55" rx="8" fill="#2a1a2a" stroke="#9b59b6" stroke-width="1"/>
+  <text x="540" y="228" fill="#9b59b6" font-size="12" font-weight="bold" text-anchor="middle">💭 ИНТЕРПРЕТАЦИИ</text>
+  <text x="540" y="246" fill="#aaa" font-size="10" text-anchor="middle">interpretations</text>
+  <text x="540" y="258" fill="#aaa" font-size="10" text-anchor="middle">(Директор по Смыслу)</text>
+
+  <!-- Задания -->
+  <rect x="640" y="202" width="175" height="55" rx="8" fill="#1a2a2a" stroke="#3498db" stroke-width="1"/>
+  <text x="727" y="228" fill="#3498db" font-size="12" font-weight="bold" text-anchor="middle">✅ ЗАДАНИЯ</text>
+  <text x="727" y="246" fill="#aaa" font-size="10" text-anchor="middle">tasks.assigned</text>
+  <text x="727" y="258" fill="#aaa" font-size="10" text-anchor="middle">tasks.completed/overdue</text>
+
+  <!-- События и Оповещения -->
+  <rect x="150" y="272" width="250" height="48" rx="8" fill="#1a1a1a" stroke="#e74c3c" stroke-width="1"/>
+  <text x="275" y="294" fill="#e74c3c" font-size="12" font-weight="bold" text-anchor="middle">⚡ СОБЫТИЯ</text>
+  <text x="275" y="310" fill="#aaa" font-size="10" text-anchor="middle">events.system.v1 · events.agent.v1</text>
+
+  <rect x="430" y="272" width="250" height="48" rx="8" fill="#1a1a1a" stroke="#e74c3c" stroke-width="1"/>
+  <text x="555" y="294" fill="#e74c3c" font-size="12" font-weight="bold" text-anchor="middle">🚨 ОПОВЕЩЕНИЯ</text>
+  <text x="555" y="310" fill="#aaa" font-size="10" text-anchor="middle">alerts.security.v1 · alerts.mission.v1</text>
+
+  <!-- Стрелки от Kafka -->
+  <line x1="170" y1="258" x2="170" y2="272" stroke="#3498db" stroke-width="0.5"/>
+  <line x1="355" y1="258" x2="275" y2="272" stroke="#3498db" stroke-width="0.5"/>
+  <line x1="540" y1="258" x2="555" y2="272" stroke="#9b59b6" stroke-width="0.5"/>
+  <line x1="727" y1="258" x2="727" y2="272" stroke="#3498db" stroke-width="0.5"/>
+
+  <!-- Стрелка от Kafka вниз -->
+  <line x1="450" y1="378" x2="450" y2="410" stroke="#3498db" stroke-width="2"/>
+
+  <!-- ====== REDIS ====== -->
+  <rect x="250" y="413" width="400" height="55" rx="12" fill="#2a1a1a" stroke="#e74c3c" stroke-width="1.5"/>
+  <text x="450" y="440" fill="#e74c3c" font-size="14" font-weight="bold" text-anchor="middle">⚡ REDIS PUB/SUB — МГНОВЕННЫЕ ОПОВЕЩЕНИЯ</text>
+  <text x="450" y="458" fill="#aaa" font-size="11" text-anchor="middle">notifications.architect · .constructor · .integrator · .director · .keeper · .lawkeeper</text>
+
+  <!-- Стрелка от Redis -->
+  <line x1="450" y1="468" x2="450" y2="500" stroke="#e74c3c" stroke-width="2"/>
+
+  <!-- ====== ГЕКСАДА ====== -->
+  <rect x="60" y="503" width="780" height="100" rx="14" fill="#1a1a3e" stroke="#6b9fff" stroke-width="2"/>
+  <text x="450" y="530" fill="#6b9fff" font-size="15" font-weight="bold" text-anchor="middle">👁️ ГЕКСАДА — ПОЛУЧАТЕЛИ ОПОВЕЩЕНИЙ</text>
+
+  <text x="160" y="565" fill="#2ecc71" font-size="12" text-anchor="middle">🏛️ Архитектор</text>
+  <text x="290" y="565" fill="#2ecc71" font-size="12" text-anchor="middle">🌐 Конструктор</text>
+  <text x="420" y="565" fill="#2ecc71" font-size="12" text-anchor="middle">📡 Интегратор</text>
+  <text x="550" y="565" fill="#3498db" font-size="12" text-anchor="middle">🙏 Директор</text>
+  <text x="670" y="565" fill="#e74c3c" font-size="12" text-anchor="middle">🛡️ Хранитель</text>
+  <text x="780" y="565" fill="#e74c3c" font-size="12" text-anchor="middle">⚖️ Законодатель</text>
+
+  <!-- ====== ЛЕГЕНДА ====== -->
+  <rect x="80" y="625" width="740" height="100" rx="12" fill="#0d0d2a" stroke="#333" stroke-width="1"/>
+  <text x="450" y="652" fill="#ffd700" font-size="14" font-weight="bold" text-anchor="middle">📋 Конвейер решений</text>
+  <text x="110" y="676" fill="#aaa" font-size="11">1. Внешний запрос попадает в Kafka → 2. Планёрка обсуждает (+/−) → 3. Директор интерпретирует</text>
+  <text x="110" y="696" fill="#aaa" font-size="11">4. Специалист готовит презентацию → 5. CEO/Совет принимает решение → 6. Задание назначается</text>
+  <text x="110" y="716" fill="#888" font-size="11">7. Контроль: выполнено → dopamine (награда FFF) | просрочено → cortisol (экономия FFF)</text>
+
+</svg>

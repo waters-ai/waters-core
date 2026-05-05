@@ -1,0 +1,89 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 750" font-family="Arial, sans-serif">
+  
+  <!-- Фон -->
+  <rect width="900" height="750" fill="#0a0e27" rx="16"/>
+  
+  <!-- Заголовок -->
+  <text x="450" y="38" fill="#6b9fff" font-size="18" font-weight="bold" text-anchor="middle">🧬 Бионическая архитектура Мозга WATERS</text>
+  <text x="450" y="60" fill="#888" font-size="12" text-anchor="middle">Клетки, органы и эволюция платформы</text>
+
+  <!-- ====== ПРАВОЕ ПОЛУШАРИЕ ====== -->
+  <rect x="60" y="80" width="250" height="180" rx="12" fill="#1a1a2a" stroke="#3498db" stroke-width="2"/>
+  <text x="185" y="108" fill="#3498db" font-size="14" font-weight="bold" text-anchor="middle">💡 ПРАВОЕ ПОЛУШАРИЕ</text>
+  <text x="185" y="128" fill="#aaa" font-size="11" text-anchor="middle">Интуиция и ассоциативный поиск</text>
+  <line x1="80" y1="138" x2="290" y2="138" stroke="#3498db" stroke-width="0.5" opacity="0.5"/>
+  
+  <text x="100" y="158" fill="#ddd" font-size="11">🧠 retriever_semantic</text>
+  <text x="100" y="178" fill="#ddd" font-size="11">🕸️ retriever_graph</text>
+  <text x="100" y="198" fill="#ddd" font-size="11">👁️ retriever_multimodal</text>
+  <text x="100" y="218" fill="#ddd" font-size="11">💭 daydreamer</text>
+  <text x="100" y="238" fill="#ddd" font-size="11">🎵 muser</text>
+
+  <!-- ====== ЛЕВОЕ ПОЛУШАРИЕ ====== -->
+  <rect x="590" y="80" width="250" height="180" rx="12" fill="#1a2a1a" stroke="#2ecc71" stroke-width="2"/>
+  <text x="715" y="108" fill="#2ecc71" font-size="14" font-weight="bold" text-anchor="middle">⚡ ЛЕВОЕ ПОЛУШАРИЕ</text>
+  <text x="715" y="128" fill="#aaa" font-size="11" text-anchor="middle">Логика и быстрые решения</text>
+  <line x1="610" y1="138" x2="820" y2="138" stroke="#2ecc71" stroke-width="0.5" opacity="0.5"/>
+  
+  <text x="630" y="158" fill="#ddd" font-size="11">✅ validator</text>
+  <text x="630" y="178" fill="#ddd" font-size="11">🔀 router</text>
+  <text x="630" y="198" fill="#ddd" font-size="11">🏷️ classifier</text>
+
+  <!-- ====== МОЗОЛИСТОЕ ТЕЛО ====== -->
+  <rect x="340" y="130" width="220" height="80" rx="12" fill="#2a1a2a" stroke="#9b59b6" stroke-width="2"/>
+  <text x="450" y="158" fill="#9b59b6" font-size="14" font-weight="bold" text-anchor="middle">🔗 МОЗОЛИСТОЕ ТЕЛО</text>
+  <text x="450" y="180" fill="#aaa" font-size="12" text-anchor="middle">MCP-шина (JSON-RPC 2.0)</text>
+  <text x="450" y="198" fill="#888" font-size="11" text-anchor="middle">Маршрутизация · Внешние агенты</text>
+
+  <!-- Линии от полушарий к мозолистому телу -->
+  <line x1="310" y1="170" x2="340" y2="170" stroke="#3498db" stroke-width="1.5"/>
+  <line x1="560" y1="170" x2="590" y2="170" stroke="#2ecc71" stroke-width="1.5"/>
+
+  <!-- Линии вниз -->
+  <line x1="185" y1="260" x2="185" y2="300" stroke="#3498db" stroke-width="1.5"/>
+  <line x1="450" y1="210" x2="450" y2="300" stroke="#9b59b6" stroke-width="1.5"/>
+  <line x1="715" y1="260" x2="715" y2="300" stroke="#2ecc71" stroke-width="1.5"/>
+  
+  <line x1="185" y1="295" x2="715" y2="295" stroke="#555" stroke-width="1"/>
+  <line x1="450" y1="295" x2="450" y2="320" stroke="#555" stroke-width="1.5"/>
+
+  <!-- ====== ЛИМБИЧЕСКАЯ СИСТЕМА ====== -->
+  <rect x="60" y="322" width="780" height="100" rx="12" fill="#2a1a1a" stroke="#e74c3c" stroke-width="2"/>
+  <text x="450" y="350" fill="#e74c3c" font-size="15" font-weight="bold" text-anchor="middle">❤️ ЛИМБИЧЕСКАЯ СИСТЕМА (Эмоции, память, рефлексы)</text>
+  
+  <!-- Пять колонок -->
+  <rect x="80" y="365" width="135" height="42" rx="8" fill="#3a1a1a" stroke="#e74c3c" stroke-width="1"/>
+  <text x="147" y="391" fill="#e74c3c" font-size="12" font-weight="bold" text-anchor="middle">cortisol</text>
+  
+  <rect x="230" y="365" width="135" height="42" rx="8" fill="#3a1a1a" stroke="#e74c3c" stroke-width="1"/>
+  <text x="297" y="391" fill="#e74c3c" font-size="12" font-weight="bold" text-anchor="middle">dopamine</text>
+  
+  <rect x="380" y="365" width="135" height="42" rx="8" fill="#3a1a1a" stroke="#e74c3c" stroke-width="1"/>
+  <text x="447" y="391" fill="#e74c3c" font-size="12" font-weight="bold" text-anchor="middle">oxytocin</text>
+  
+  <rect x="530" y="365" width="135" height="42" rx="8" fill="#3a1a1a" stroke="#e74c3c" stroke-width="1"/>
+  <text x="597" y="391" fill="#e74c3c" font-size="12" font-weight="bold" text-anchor="middle">memory_b</text>
+  
+  <rect x="680" y="365" width="135" height="42" rx="8" fill="#3a1a1a" stroke="#e74c3c" stroke-width="1"/>
+  <text x="747" y="391" fill="#e74c3c" font-size="12" font-weight="bold" text-anchor="middle">memory_t</text>
+
+  <!-- Линия вниз -->
+  <line x1="450" y1="422" x2="450" y2="455" stroke="#e74c3c" stroke-width="1.5"/>
+
+  <!-- ====== СТВОЛ МОЗГА ====== -->
+  <rect x="150" y="458" width="600" height="80" rx="12" fill="#1a2a1a" stroke="#f39c12" stroke-width="2"/>
+  <text x="450" y="485" fill="#f39c12" font-size="15" font-weight="bold" text-anchor="middle">💀 СТВОЛ МОЗГА (Жизнеобеспечение)</text>
+  
+  <text x="200" y="515" fill="#ddd" font-size="11">🫁 respirer</text>
+  <text x="340" y="515" fill="#ddd" font-size="11">❤️ pumper</text>
+  <text x="470" y="515" fill="#ddd" font-size="11">🧹 janitor</text>
+  <text x="590" y="515" fill="#ddd" font-size="11">🛡️ guardian</text>
+  <text x="720" y="515" fill="#ddd" font-size="11">📡 echo</text>
+
+  <!-- ====== ЛЕГЕНДА ====== -->
+  <rect x="60" y="560" width="780" height="80" rx="10" fill="#0d0d2a" stroke="#333" stroke-width="1"/>
+  <text x="450" y="585" fill="#ffd700" font-size="13" font-weight="bold" text-anchor="middle">📋 Эволюция: Пожирание паттернов</text>
+  <text x="100" y="608" fill="#aaa" font-size="11">Успешные цепочки клеток отслеживаются через Kafka → LightRAG → Сборка в Docker-контейнер → Регистрация NFT</text>
+  <text x="100" y="628" fill="#888" font-size="11">Пример: retriever_multimodal → retriever_graph → dopamine = Агент-Шахтёр (Miner)</text>
+
+</svg>
