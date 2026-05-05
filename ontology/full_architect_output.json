@@ -1,0 +1,248 @@
+{
+  "ontology": {
+    "@context": {
+      "lunar": "http://waters.platform/lunar#",
+      "schema": "http://schema.org/"
+    },
+    "@id": "lunar:mission_ontology_v0.1",
+    "@type": "owl:Ontology",
+    "title": "Lunar Mission Ontology v0.1",
+    "description": "Ontology for the WATERS lunar mission, including celestial bodies, assets, and agent roles.",
+    "classes": [
+      {
+        "@id": "lunar:CelestialBody",
+        "@type": "rdfs:Class",
+        "comment": "Any astronomical object, e.g., Moon, Earth, Sun."
+      },
+      {
+        "@id": "lunar:LunarAsset",
+        "@type": "rdfs:Class",
+        "comment": "Physical asset deployed on the Moon, e.g., rover, lander, instrument."
+      },
+      {
+        "@id": "lunar:AgentRole",
+        "@type": "rdfs:Class",
+        "comment": "Role of an autonomous agent in the mission."
+      },
+      {
+        "@id": "lunar:LunarMission",
+        "@type": "rdfs:Class",
+        "comment": "A specific mission or operation on the Moon."
+      }
+    ],
+    "individuals": [
+      {
+        "@id": "lunar:ShackletonCrater",
+        "@type": "lunar:CelestialBody",
+        "name": "Shackleton Crater",
+        "location": "South Pole-Aitken Basin"
+      },
+      {
+        "@id": "lunar:LunarProspectorRover",
+        "@type": "lunar:LunarAsset",
+        "name": "Lunar Prospector Rover",
+        "hasPart": [
+          "drill",
+          "spectrometer",
+          "camera"
+        ]
+      },
+      {
+        "@id": "lunar:LunarGeologist",
+        "@type": "lunar:AgentRole",
+        "name": "Lunar Geologist",
+        "skills": [
+          "mineral identification",
+          "ice detection",
+          "regolith analysis"
+        ],
+        "usesAsset": "lunar:LunarProspectorRover"
+      },
+      {
+        "@id": "lunar:DeimaSearchWaterMission",
+        "@type": "lunar:LunarMission",
+        "name": "Deima Search Water v0.1",
+        "target": "lunar:ShackletonCrater",
+        "agentRole": "lunar:LunarGeologist"
+      }
+    ]
+  },
+  "agent_spec": {
+    "agent_id": "lunar_geologist_v0.1",
+    "name": "Lunar Geologist Agent",
+    "description": "Autonomous agent for lunar geology, focusing on water ice detection and regolith analysis.",
+    "version": "0.1",
+    "role": "LunarGeologist",
+    "skills": [
+      "mineral_spectroscopy",
+      "terrain_mapping",
+      "ice_detection",
+      "sample_collection",
+      "data_fusion"
+    ],
+    "tools": [
+      {
+        "name": "Laser-Induced Breakdown Spectrometer (LIBS)",
+        "purpose": "elemental composition analysis"
+      },
+      {
+        "name": "Neutron Spectrometer",
+        "purpose": "hydrogen/water ice detection"
+      },
+      {
+        "name": "Regolith Drill",
+        "purpose": "subsurface sampling"
+      },
+      {
+        "name": "Multispectral Camera",
+        "purpose": "surface imaging and mineral mapping"
+      }
+    ],
+    "thinking_mode": "ReAct",
+    "thinking_spec": {
+      "loop": "Reasoning + Acting",
+      "observation": "Process sensor data and pre-processed inputs",
+      "reasoning": "Update internal world model, hypothesize water presence, select next action",
+      "action": "Execute tool command (e.g., drill, scan, move), communicate with platform",
+      "output": "Logs, scientific findings, and mission status"
+    },
+    "constraints": {
+      "max_power_consumption_w": 50,
+      "operating_temperature_c": [
+        -150,
+        100
+      ],
+      "safety_override": "Avoid steep slopes > 30°, return to base on low battery"
+    }
+  },
+  "mission": {
+    "mission_id": "deima_search_water_v0.1",
+    "name": "Deima Search Water in Shackleton Crater",
+    "version": "0.1",
+    "objective": "Detect and characterize water ice deposits in permanently shadowed regions of Shackleton Crater.",
+    "success_criteria": [
+      "Locate at least one confirmed water ice deposit > 1% by weight",
+      "Map ice distribution with 10m resolution over 1 km²",
+      "Transmit analysis data to orbital relay within 8 Earth hours of collection"
+    ],
+    "steps": [
+      {
+        "step_id": "1",
+        "action": "Navigate to crater rim using pre-loaded terrain map.",
+        "success_check": "Arrive at coordinates (89.9°S, 0°E) within 2 hours."
+      },
+      {
+        "step_id": "2",
+        "action": "Deploy neutron spectrometer to scan for hydrogen anomalies.",
+        "success_check": "Map hydrogen abundance with >95% confidence."
+      },
+      {
+        "step_id": "3",
+        "action": "Select highest-probability site, approach, and drill to 1m depth.",
+        "success_check": "Core sample obtained; temperature below -100°C."
+      },
+      {
+        "step_id": "4",
+        "action": "Analyze core with LIBS and camera; transmit results.",
+        "success_check": "Water ice detection report filed; data uplinked."
+      }
+    ],
+    "contingency": "If no ice found at initial site, iterate over top 5 predicted locations."
+  },
+  "roadmap": {
+    "product": "WATERS Platform - Deima Mission",
+    "sprint_duration_days": 9,
+    "days": [
+      {
+        "day": 1,
+        "goal": "Ontology and Agent Foundation",
+        "kpis": [
+          "lunar_mission.jsonld finalized",
+          "lunar_geologist_v0.1 specification complete",
+          "ReAct loop diagram approved"
+        ],
+        "milestone": "Agent framework ready for coding"
+      },
+      {
+        "day": 2,
+        "goal": "Agent Implementation - Skeleton",
+        "kpis": [
+          "Agent code skeleton with tool interfaces",
+          "Sensor simulators connected",
+          "Unit tests for ReAct loop pass"
+        ],
+        "milestone": "First 'pirozhok' build successful"
+      },
+      {
+        "day": 3,
+        "goal": "Simulation Environment Setup",
+        "kpis": [
+          "Shackleton Crater virtual environment ready",
+          "Rover dynamics model integrated",
+          "Communication delay model working"
+        ],
+        "milestone": "Test mission can be executed in simulation"
+      },
+      {
+        "day": 4,
+        "goal": "Mission Scripting and Dry Run",
+        "kpis": [
+          "deima_search_water_v0.1 mission script run in sim",
+          "Agent follows all steps without human intervention",
+          "Success criteria scored"
+        ],
+        "milestone": "Baseline performance recorded"
+      },
+      {
+        "day": 5,
+        "goal": "Optimization and Edge Cases",
+        "kpis": [
+          "Ice detection accuracy > 90% in sim",
+          "Agent handles 5 contingency scenarios",
+          "Power budget maintained"
+        ],
+        "milestone": "Agent robust to variations"
+      },
+      {
+        "day": 6,
+        "goal": "Integration and Compliance",
+        "kpis": [
+          "Agent complies with HiveMind protocols",
+          "All data formats match platform standards",
+          "Yasa code review passed"
+        ],
+        "milestone": "Ready for hardware-in-the-loop"
+      },
+      {
+        "day": 7,
+        "goal": "Hardware Deployment on Rover Prototype",
+        "kpis": [
+          "Agent runs on real rover hardware",
+          "Drill and spectrometer actuated",
+          "Latency and power measured"
+        ],
+        "milestone": "Physical demonstration completed"
+      },
+      {
+        "day": 8,
+        "goal": "End-to-End Mission Rehearsal",
+        "kpis": [
+          "Full mission executed on analog terrain",
+          "Data pipeline from rover to platform verified",
+          "All success criteria achieved"
+        ],
+        "milestone": "Mission readiness certified"
+      },
+      {
+        "day": 9,
+        "goal": "Launch Preparation and Documentation",
+        "kpis": [
+          "Final report published",
+          "Operation manuals delivered",
+          "Handover to Mission Control"
+        ],
+        "milestone": "Deima mission greenlit for launch window"
+      }
+    ]
+  }
+}
