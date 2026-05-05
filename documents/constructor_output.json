@@ -1,0 +1,205 @@
+{
+  "memory_choices": {
+    "vector_memory": {
+      "chosen_tool": "Qdrant",
+      "reason": "Qdrant offers GPU acceleration, sharding, and filtering capabilities, outperforming ChromaDB for scalable vector search. LanceDB is embedded and lacks server capabilities, making it less suitable for multi-agent architectures.",
+      "alternatives_not_chosen": {
+        "ChromaDB": "Already deployed but lacks sharding and GPU support; for basic scenario only.",
+        "LanceDB": "Embedded, no server, difficult to share across distributed agents."
+      }
+    },
+    "graph_memory": {
+      "chosen_tool": "LightRAG",
+      "reason": "Dynamic graph construction with low token consumption, ideal for evolving knowledge graphs. Uses LLM to build graphs, avoiding manual schema design. Stores graph in a back-end like Neo4j, enabling scalability.",
+      "alternatives_not_chosen": {
+        "GraphRAG Microsoft": "Static graph, high token consumption, not suited for continuous updates.",
+        "Neo4j + LLM": "Requires manual schema design and lacks dynamic knowledge discovery; can serve as storage for LightRAG."
+      }
+    },
+    "operational_memory": {
+      "chosen_tool": "Dragonfly",
+      "reason": "Fully Redis-compatible but significantly faster, lower latency, and supports larger datasets, making it better for high-throughput agent states. For basic scenario, existing Redis suffices.",
+      "alternatives_not_chosen": {
+        "Redis": "Already deployed, mature, but slower and less scalable under high load.",
+        "Valkey": "Fork of Redis with BSD license, but not yet proven at scale."
+      }
+    },
+    "structural_memory": {
+      "chosen_tool": "CozoDB",
+      "reason": "Datalog-based logical programming excels at enforcing hierarchies, contracts, and complex relational queries. Perfect for Ясы and strict schemas. TypeDB is stricter but heavier, FalkorDB uses Cypher which is less logic-oriented.",
+      "alternatives_not_chosen": {
+        "FalkorDB": "Property Graph with Cypher, not as strong for rule-based reasoning.",
+        "TypeDB": "Strict typing is powerful but complex to deploy and query for rapid iteration."
+      }
+    },
+    "event_memory": {
+      "chosen_tool": "Redpanda",
+      "reason": "Already deployed, Kafka-compatible, simpler operations, and sufficient for current loads. For advanced scenario with 10k agents, Apache Kafka provides finer control over retention and partitions.",
+      "alternatives_not_chosen": {
+        "Apache Kafka": "Full control, but heavier operational burden; used only for advanced scenario.",
+        "NATS JetStream": "Lighter but limited retention and management compared to Kafka-like systems."
+      }
+    },
+    "multimodal_memory": {
+      "chosen_tool": "SigLIP",
+      "reason": "Improved version of CLIP with better accuracy and still lightweight enough for CPU. ImageBind adds unnecessary modality complexity for initial use cases (images, spectrograms).",
+      "alternatives_not_chosen": {
+        "CLIP": "Simpler but lower accuracy; basic scenario could use it.",
+        "ImageBind": "6 modalities, overkill for current needs."
+      }
+    }
+  },
+  "scenarios": {
+    "basic": {
+      "tools": {
+        "vector": "ChromaDB",
+        "graph": "LightRAG (with Neo4j storage)",
+        "operational": "Redis",
+        "structural": "CozoDB",
+        "event": "Redpanda",
+        "multimodal": "CLIP"
+      },
+      "cost_per_month_usd": 60,
+      "cost_breakdown": "Single EC2 t3.medium instance ($40) hosting all services via Docker Compose, plus $20 for Neo4j Cloud AuraDB Free tier or self-hosted.",
+      "migration_to_optimal": [
+        "1. Deploy Qdrant alongside ChromaDB and run data export/import scripts.",
+        "2. Swap Redis with Dragonfly by starting Dragonfly container and pointing agents (Redis-compatible, no code change).",
+        "3. Replace CLIP with SigLIP; re-index multimodal assets.",
+        "4. Validate LightRAG graph consistency, may need to rebuild if storage migrates.",
+        "5. Gradual cutover using feature flags in MCP."
+      ],
+      "risks": [
+        "ChromaDB's single-node limitation under growth.",
+        "Redis may become bottleneck with many concurrent agents.",
+        "CLIP lower accuracy could degrade multimodal search.",
+        "Manual failover for stateful services."
+      ]
+    },
+    "optimal": {
+      "tools": {
+        "vector": "Qdrant",
+        "graph": "LightRAG (with Neo4j storage)",
+        "operational": "Dragonfly",
+        "structural": "CozoDB",
+        "event": "Redpanda",
+        "multimodal": "SigLIP"
+      },
+      "cost_per_month_usd": 220,
+      "cost_breakdown": "AWS: m5.large for core (Redpanda, Dragonfly, CozoDB) $90; g4dn.xlarge for Qdrant (GPU) $160 via spot; Neo4j Aura Professional $70; SigLIP on $20 compute. Total ~$220 with reserved instances.",
+      "risks": [
+        "GPU availability for Qdrant; cost spikes if on-demand.",
+        "Dragonfly's compatibility quirks under extreme load.",
+        "LightRAG depends on LLM, which adds latency and cost; need reliable LLM API (Ollama/local)."
+      ]
+    },
+    "advanced": {
+      "tools": {
+        "vector": "Qdrant (sharded cluster)",
+        "graph": "LightRAG with GraphRAG fallback",
+        "operational": "Dragonfly (cluster)",
+        "structural": "CozoDB (Raft cluster)",
+        "event": "Apache Kafka (multi-broker)",
+        "multimodal": "ImageBind"
+      },
+      "cost_per_month_usd": 750,
+      "cost_breakdown": "Qdrant cluster (3 GPU nodes) $450; Dragonfly cluster $100; Kafka cluster (3 brokers) $150; CozoDB Raft $50; Neo4j Enterprise $200; ImageBind on GPU $100. Estimated $750 with reserved capacity.",
+      "risks": [
+        "Operational complexity of managing Kafka and multiple clusters; requires dedicated DevOps.",
+        "ImageBind's multi-modality may not be fully utilized; unnecessary overhead.",
+        "GraphRAG hybrid approach may introduce inconsistency between dynamic and static graphs."
+      ]
+    }
+  },
+  "mcp_design": {
+    "protocol": "JSON-RPC 2.0 over WebSocket and HTTP",
+    "endpoints": {
+      "memory": {
+        "vector_search": {
+          "method": "memory.vector.search",
+          "params": {
+            "query_vector": "array",
+            "top_k": "int",
+            "filter": "object"
+          },
+          "backend": "Qdrant/ChromaDB"
+        },
+        "graph_query": {
+          "method": "memory.graph.query",
+          "params": {
+            "type": "path|neighbors|subgraph",
+            "params": "object"
+          },
+          "backend": "LightRAG+Neo4j"
+        },
+        "cache_get": {
+          "method": "memory.cache.get",
+          "params": {
+            "key": "string"
+          },
+          "backend": "Dragonfly/Redis"
+        },
+        "cache_set": {
+          "method": "memory.cache.set",
+          "params": {
+            "key": "string",
+            "value": "any",
+            "ttl": "int"
+          },
+          "backend": "Dragonfly/Redis"
+        },
+        "structural_query": {
+          "method": "memory.structural.query",
+          "params": {
+            "query": "string (Datalog)",
+            "params": "object"
+          },
+          "backend": "CozoDB"
+        },
+        "event_publish": {
+          "method": "memory.event.publish",
+          "params": {
+            "topic": "string",
+            "message": "object"
+          },
+          "backend": "Redpanda/Kafka"
+        },
+        "event_read": {
+          "method": "memory.event.read",
+          "params": {
+            "topic": "string",
+            "offset": "int",
+            "limit": "int"
+          },
+          "backend": "Redpanda/Kafka"
+        },
+        "multimodal_search": {
+          "method": "memory.multimodal.search",
+          "params": {
+            "modality": "string",
+            "data": "binary|text",
+            "top_k": "int"
+          },
+          "backend": "SigLIP/ImageBind"
+        }
+      },
+      "onboarding": {
+        "method": "agent.onboard",
+        "params": {
+          "agent_id": "string"
+        },
+        "returns": {
+          "manifest": "document",
+          "hivemind": "document",
+          "hexada": "document",
+          "topic_map": "object"
+        }
+      }
+    },
+    "onboarding_flow": "Upon agent creation, MCP validates agent identity (via JWT), then returns the Manifest, HiveMind v2.0, Hexada composition, and a map of Kafka topics with their purposes (e.g., decisions, logs). The agent stores these in its short-term memory and subscribes to relevant event streams.",
+    "architecture": "MCP server acts as a facade providing a unified API. It connects to each backend using their native clients. Agents speak only JSON-RPC to the MCP server, which handles failover, caching, and resource pooling. The server is stateless for read operations but maintains websocket connections for event streaming. For scalability, deploy with multiple replicas behind a load balancer, sharing state via Dragonfly."
+  },
+  "docker_compose": {
+    "comment": "docker-compose.yml for optimal scenario",
+    "content": "version: '3.8'\nservices:\n  # Event Bus (Redpanda)\n  redpanda:\n    image: docker.redpanda.com/redpandadata/redpanda:v23.2.1\n    command:\n      - redpanda start\n      - --smp 1\n      - --memory 512M\n      - --reserve-memory 0M\n      - --overprovisioned\n      - --node-id 0\n      - --check=false\n    ports:\n      - \"9092:9092\"\n      - \"9644:9644\"\n    volumes:\n      - redpanda_data:/var/lib/redpanda/data\n    networks:\n      - waters-net\n\n  # Operational Memory (Dragonfly, Redis-compatible)\n  dragonfly:\n    image: docker.dragonflydb.io/dragonflydb/dragonfly\n    command:\n      - --maxmemory=2gb\n      - --cache_mode=true\n    ports:\n      - \"6379:6379\"\n    networks:\n      - waters-net\n    volumes:\n      - dragonfly_data:/data\n\n  # Vector Memory (Qdrant)\n  qdrant:\n    image: qdrant/qdrant\n    ports:\n      - \"6333:6333\"\n    volumes:\n      - qdrant_data:/qdrant/storage\n    networks:\n      - waters-net\n    deploy:\n      resources:\n        reservations:\n          devices:\n            - driver: nvidia\n              count: 1\n              capabilities: [gpu]\n\n  # Graph Storage for LightRAG (Neo4j)\n  neo4j:\n    image: neo4j:5\n    environment:\n      NEO4J_AUTH: neo4j/password\n    ports:\n      - \"7474:7474\"\n      - \"7687:7687\"\n    volumes:\n      - neo4j_data:/data\n    networks:\n      - waters-net\n\n  # Structural Memory (CozoDB)\n  cozodb:\n    image: cozodb/cozo:latest\n    command: --port 9070\n    ports:\n      - \"9070:9070\"\n    networks:\n      - waters-net\n    volumes:\n      - cozo_data:/data\n\n  # Multimodal Index (SigLIP via local service)\n  multimodal:\n    image: your-registry/siglip-service:latest  # Custom service wrapping SigLIP with API\n    ports:\n      - \"8000:8000\"\n    networks:\n      - waters-net\n    environment:\n      MODEL: siglip\n\n  # LLM for LightRAG (Ollama)\n  ollama:\n    image: ollama/ollama:latest\n    ports:\n      - \"11434:11434\"\n    volumes:\n      - ollama_data:/root/.ollama\n    networks:\n      - waters-net\n\n  # MCP Server (custom)\n  mcp:\n    build: ./mcp-server\n    ports:\n      - \"8080:8080\"\n      - \"8081:8081\"  # WebSocket\n    environment:\n      QDRANT_URL: \"http://qdrant:6333\"\n      DRAGONFLY_URL: \"dragonfly:6379\"\n      REDPANDA_BROKERS: \"redpanda:9092\"\n      NEO4J_URL: \"bolt://neo4j:7687\"\n      COZODB_URL: \"http://cozodb:9070\"\n      MULTIMODAL_URL: \"http://multimodal:8000\"\n      OLLAMA_URL: \"http://ollama:11434\"\n      JWT_SECRET: \"change-me\"\n    networks:\n      - waters-net\n    depends_on:\n      - redpanda\n      - dragonfly\n      - qdrant\n      - neo4j\n      - cozodb\n      - multimodal\n      - ollama\n\nnetworks:\n  waters-net:\n    driver: bridge\n\nvolumes:\n  redpanda_data:\n  dragonfly_data:\n  qdrant_data:\n  neo4j_data:\n  cozo_data:\n  ollama_data:\n"
+  }
+}
