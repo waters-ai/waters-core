@@ -1,0 +1,14 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Skills Approved",
+  "type": "object",
+  "properties": {
+    "skill_id": { "type": "string" },
+    "name": { "type": "string" },
+    "approved_by": { "type": "string" },
+    "security_review": { "type": "string" },
+    "ethics_review": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "required": ["skill_id", "approved_by"]
+}

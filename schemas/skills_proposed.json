@@ -1,0 +1,15 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Skills Proposed",
+  "type": "object",
+  "properties": {
+    "skill_id": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "proposed_by": { "type": "string" },
+    "target_role": { "type": "string" },
+    "source": { "type": "string", "enum": ["internal", "external"] },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "required": ["skill_id", "name", "proposed_by"]
+}
