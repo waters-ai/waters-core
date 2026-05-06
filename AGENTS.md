@@ -1,29 +1,65 @@
-# AGENTS.md — WATERS Platform
+# AGENTS.md — WATERS Platform (дашборд Гексады)
 
-## Текущий агент: Верховный Архитектор v1.0
+## Статус Гексады
 
-### Роль
-Онтолог, проектировщик, Product Owner платформы WATERS.
+| Агент | Код | Версия | Статус | Файл AGENTS |
+|-------|-----|--------|--------|-------------|
+| Архитектор | `agent.architect.v1` | 1.0 | **active** | `agents/architect_AGENTS.md` |
+| Конструктор Сети | `agent.constructor.v1` | 1.0 | **active** | `agents/constructor_AGENTS.md` |
+| Интегратор Знаний | `agent.integrator.v1` | — | pending | — |
+| Директор по Смыслу | `agent.director.v1` | — | pending | — |
+| Хранитель Протокола | `agent.keeper.v1` | — | pending | — |
+| Законодатель | `agent.lawkeeper.v1` | — | pending | — |
 
-### Фаза: 1 (Обучение)
-Архитектор получает базовые навыки: `specification-synthesis`, `roadmap-generation`.
+## Запуск агентов
 
-### Активные навыки
-- `architect-self` v1.0.0 — самоопределение и саморефлексия
-- `ontology-builder` v0.1.0 — построение онтологий
+```bash
+# Terminal 1: Архитектор
+cp agents/architect_AGENTS.md AGENTS.md && opencode
 
-### Текущие задачи (Спринт 1)
-1. Заказ навыка `specification-synthesis` → `schemas/skills_proposed.json`
-2. ~~Создание спецификации Конструктора Сети~~ ✓ `agents/constructor_v1.0.md`
-3. Формирование роадмапа → `product/roadmap.json`
+# Terminal 2: Конструктор Сети
+cp agents/constructor_AGENTS.md AGENTS.md && opencode
+```
 
-### Принятые решения
-- 07.05.2026: Принята спецификация Архитектора v1.0
-- 07.05.2026: Принят план обучения, приоритет P0: specification-synthesis
-- 07.05.2026: Принят SKILL.md для architect-self v1.0.0
-- 07.05.2026: Принята спецификация Конструктора Сети v1.0
-- 07.05.2026: Принят SKILL.md для constructor-self v1.0.0
+Или используй скрипты:
+```bash
+./run_architect.sh   # Terminal 1
+./run_constructor.sh # Terminal 2
 
-### Контекст
-Платформа WATERS находится на Фазе 0 (Зарождение). Архитектор — первый агент.
-Второй агент специфицирован: Конструктор Сети v1.0. Язык: русский.
+# После завершения — восстановить дашборд:
+git checkout AGENTS.md
+```
+
+## Общий контекст
+
+- **Платформа**: WATERS — автономные ИИ-агенты для колонизации
+- **Фаза**: 0 (Зарождение)
+- **Спринт**: 1
+- **Язык**: русский
+
+## Общие артефакты (read-only для всех)
+
+| Файл | Назначение |
+|------|------------|
+| `doctrine/manifesto.md` | Манифест платформы |
+| `doctrine/hivemind_spec.md` | HiveMind протокол |
+| `doctrine/hexad.md` | Состав и структура Гексады |
+| `doctrine/nervous_system.md` | Нервная система (Kafka) |
+
+## Правила совместной работы
+
+1. Каждый агент работает в своей сессии OpenCode
+2. Каждый агент использует свой `agents/{имя}_AGENTS.md`
+3. Изменения в общей файловой системе видны обоим сразу
+4. При конфликте — Архитектор имеет приоритет в стратегических вопросах
+5. При конфликте — Конструктор имеет приоритет в инфраструктурных вопросах
+6. Координация через `planners.questions.v1` / `planners.answers.v1` (файловый протокол до Kafka)
+
+## Файловый протокол (до запуска Kafka)
+
+```
+agents/architect_AGENTS.md      ← Архитектор пишет решения
+agents/constructor_AGENTS.md    ← Конструктор пишет артефакты
+schemas/                        ← Конструктор публикует схемы
+product/roadmap.json            ← Архитектор публикует роадмап
+```
