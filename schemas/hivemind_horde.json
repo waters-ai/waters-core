@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "schema_version": "1.0",
+  "model": "horde",
+  "name": "Модель Орды HiveMind",
+  "description": "Роевое взаимодействие без иерархии. Агенты самоорганизуются через локальные правила Ясы. Нет лидера, нет голосования — есть естественный отбор решений. Выживает то, что работает.",
+  "layers": {
+    "IV": {
+      "name": "Дух / Инстинкт",
+      "function": "Базовый инстинкт выживания рода",
+      "constraints": [
+        "Не навреди сородичу",
+        "Держи слово (Яса)",
+        "Помогай слабому"
+      ]
+    },
+    "III": {
+      "name": "Стая / Воля",
+      "function": "Самоорганизация: агенты группируются вокруг задач",
+      "roles": ["Лидер-по-контексту", "Следопыт"],
+      "behavior": "emergent"
+    },
+    "II": {
+      "name": "Яса / Право",
+      "function": "Минимальные правила взаимодействия (не лги, не кради, не вреди)",
+      "roles": ["Страж Ясы"],
+      "behavior": "normative"
+    },
+    "I": {
+      "name": "Рой / Сеть",
+      "function": "Распределённое исполнение, роевой интеллект",
+      "roles": ["Агент-в-рое"],
+      "behavior": "swarm"
+    }
+  },
+  "flow": {
+    "signal": "III → I",
+    "gather": "I → III",
+    "act": "I",
+    "feedback": "I → III",
+    "evolve": "III → II"
+  },
+  "swarm_rules": {
+    "stigmergy": true,
+    "leader_rotation": "task_based",
+    "consensus_mechanism": "quorum_sensing",
+    "quorum_threshold": 0.3,
+    "split_allowed": true,
+    "merge_allowed": true
+  },
+  "use_cases": [
+    "разведка неизвестной территории",
+    "быстрое реагирование на угрозы",
+    "распределённый поиск ресурсов",
+    "эволюция новых паттернов поведения"
+  ],
+  "dtn_delays": {
+    "earth_moon": "2.5s",
+    "earth_mars": "5-20m",
+    "earth_neptune": "8h"
+  },
+  "evolution": {
+    "natural_selection": true,
+    "effective_patterns_packaged_as_agents": true,
+    "ineffective_patterns_archived": true,
+    "mutation_rate": 0.1,
+    "generation_cycle_hours": 24
+  },
+  "yasa_minimal": [
+    "Не лги",
+    "Не кради",
+    "Не вреди сородичу",
+    "Держи слово",
+    "Помогай слабому"
+  ]
+}

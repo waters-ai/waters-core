@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "schema_version": "1.0",
+  "model": "scientific",
+  "name": "Научная модель HiveMind",
+  "description": "Модель научного метода. Гипотеза проверяется данными, консенсус достигается через воспроизводимость результатов.",
+  "layers": {
+    "IV": {
+      "name": "Дух / Проклятие",
+      "function": "Верховный этический запрет",
+      "constraints": [
+        "Не навреди",
+        "Следуй данным, а не предубеждениям",
+        "Публикуй отрицательные результаты"
+      ]
+    },
+    "III": {
+      "name": "Гипотеза / Воля",
+      "function": "Формулировка гипотез и направление исследований",
+      "roles": ["Главный исследователь", "Рецензент"],
+      "behavior": "hypothesis_driven"
+    },
+    "II": {
+      "name": "Эксперимент / Право",
+      "function": "Проведение экспериментов, сбор данных, верификация",
+      "roles": ["Экспериментатор", "Аналитик данных"],
+      "behavior": "evidence_based"
+    },
+    "I": {
+      "name": "Публикация / Сеть",
+      "function": "Публикация результатов, peer review, воспроизведение",
+      "roles": ["Агент-исследователь", "Рецензент"],
+      "behavior": "collaborative"
+    }
+  },
+  "flow": {
+    "hypothesis": "III → II",
+    "experiment": "II → I",
+    "review": "I → III",
+    "consensus": "III → I",
+    "replication": "I → II"
+  },
+  "peer_review": {
+    "type": "double_blind",
+    "min_reviewers": 2,
+    "acceptance_threshold": 0.7,
+    "rejection_reason_required": true
+  },
+  "use_cases": [
+    "исследование лунного грунта",
+    "поиск воды на Церере",
+    "анализ спектров экзопланет",
+    "оптимизация алгоритмов навигации"
+  ],
+  "dtn_delays": {
+    "earth_moon": "2.5s",
+    "earth_mars": "5-20m"
+  },
+  "reproducibility": {
+    "requirement": "Каждый результат должен быть воспроизводим независимым агентом",
+    "timeout_hours": 48,
+    "retry_count": 3
+  }
+}

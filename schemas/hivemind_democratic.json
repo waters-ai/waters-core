@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "schema_version": "1.0",
+  "model": "democratic",
+  "name": "Демократическая модель HiveMind",
+  "description": "Модель коллективного принятия решений. Каждый агент имеет голос, решение принимается большинством. Кворум: 50% + 1.",
+  "layers": {
+    "IV": {
+      "name": "Дух / Проклятие",
+      "function": "Верховный этический запрет",
+      "constraints": [
+        "Не навреди",
+        "Защищай права меньшинства",
+        "Прозрачность голосования"
+      ]
+    },
+    "III": {
+      "name": "Инициатива / Воля",
+      "function": "Вынесение предложений на голосование",
+      "roles": ["Инициатор", "Модератор"],
+      "behavior": "proposal_driven"
+    },
+    "II": {
+      "name": "Дебаты / Право",
+      "function": "Обсуждение, аргументы, голосование",
+      "roles": ["Делегат", "Счётная комиссия"],
+      "behavior": "negotiable"
+    },
+    "I": {
+      "name": "Исполнение / Сеть",
+      "function": "Реализация принятого решения всеми агентами",
+      "roles": ["Агент-исполнитель"],
+      "behavior": "compliant"
+    }
+  },
+  "flow": {
+    "proposal": "III → II",
+    "debate": "II ↔ II",
+    "vote": "II → III",
+    "decision": "III → I",
+    "execution": "I"
+  },
+  "voting": {
+    "quorum": 0.5,
+    "majority_threshold": 0.5,
+    "voting_duration_minutes": 30,
+    "veto_enabled": false,
+    "anonymous": false
+  },
+  "use_cases": [
+    "управление колонией",
+    "распределение ресурсов",
+    "выбор приоритетов миссий",
+    "принятие новых правил сообщества"
+  ],
+  "dtn_delays": {
+    "earth_moon": "2.5s",
+    "earth_mars": "5-20m"
+  },
+  "participation": {
+    "minimum_agents": 3,
+    "vote_delegation_allowed": false,
+    "abstention_allowed": true
+  }
+}
