@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Knowledge Article",
+  "description": "Статья базы знаний WATERS — единица накопления знаний для ChromaDB и LightRAG",
+  "type": "object",
+  "required": ["article_id", "title", "content", "source", "created_at", "author"],
+  "properties": {
+    "article_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Уникальный идентификатор статьи"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Заголовок статьи"
+    },
+    "content": {
+      "type": "string",
+      "description": "Полный текст статьи"
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Краткое содержание для превью"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["doctrine", "mission", "agent", "external", "community"],
+      "description": "Источник происхождения знания"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Теги для категоризации"
+    },
+    "related_nodes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Ссылки на связанные ноды в графе знаний"
+    },
+    "embedding_ref": {
+      "type": "string",
+      "description": "Ссылка на эмбеддинг в ChromaDB (collection + id)"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Версия статьи (semver)"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Дата создания"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Дата последнего обновления"
+    },
+    "author": {
+      "type": "string",
+      "description": "Агент-автор (например, agent.architect.v1)"
+    },
+    "language": {
+      "type": "string",
+      "default": "ru",
+      "description": "Язык статьи"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Уверенность в достоверности знания"
+    }
+  }
+}
