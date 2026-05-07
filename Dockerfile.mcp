@@ -1,0 +1,19 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY scripts/mcp_proxy.py /app/mcp_proxy.py
+COPY requirements.txt /app/requirements.txt
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+CMD ["python", "mcp_proxy.py", "--host", "0.0.0.0", "--port", "8080"]

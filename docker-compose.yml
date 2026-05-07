@@ -1,0 +1,155 @@
+# WATERS Platform — Базовый сценарий (Фаза 0)
+# С DMZ-зоной для внешних запросов
+#
+# Сети:
+#   waters-internal — внутренняя сеть агентов (без доступа в интернет)
+#   waters-dmz      — DMZ-зона (MCP-прокси, доступ к интернету)
+#
+# Запуск:
+#   docker compose up -d
+#
+
+services:
+  # ═══════════════════════════════════════════
+  # БРОКЕР СООБЩЕНИЙ (Kafka/Redpanda)
+  # ═══════════════════════════════════════════
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: waters-redpanda
+    ports:
+      - "9092:9092"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    environment:
+      REDPANDA_BROKER_ID: "0"
+      REDPANDA_ADVERTISED_KAFKA_API_ADDRESSES: "localhost:9092"
+    networks:
+      - waters-internal
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════
+  # КЭШ (Redis)
+  # ═══════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: waters-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - waters-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════
+  # ВЕКТОРНАЯ БД (ChromaDB)
+  # ═══════════════════════════════════════════
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: waters-chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      ALLOW_RESET: "true"
+      IS_PERSISTENT: "true"
+    networks:
+      - waters-internal
+      - waters-dmz
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════
+  # СТРУКТУРНАЯ БД (CozoDB)
+  # ═══════════════════════════════════════════
+  cozodb:
+    image: cozodb/cozo:latest
+    container_name: waters-cozo
+    ports:
+      - "9070:9070"
+    volumes:
+      - cozo-data:/data
+    networks:
+      - waters-internal
+
+  # ═══════════════════════════════════════════
+  # MCP-ПРОКСИ (DMZ-зона)
+  # Единственный шлюз во внешний интернет
+  # ═══════════════════════════════════════════
+  mcp-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    container_name: waters-mcp-proxy
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_HOST: waters-redis
+      REDIS_PORT: "6379"
+      CHROMA_HOST: waters-chroma
+      CHROMA_PORT: "8000"
+      KAFKA_BOOTSTRAP: waters-redpanda:9092
+    networks:
+      - waters-internal
+      - waters-dmz
+    depends_on:
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════
+  # NGINX — обратный прокси для DMZ
+  # ═══════════════════════════════════════════
+  nginx:
+    image: nginx:alpine
+    container_name: waters-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - waters-dmz
+    depends_on:
+      - mcp-proxy
+    restart: unless-stopped
+
+networks:
+  waters-internal:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+  waters-dmz:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+volumes:
+  redpanda-data:
+  redis-data:
+  chroma-data:
+  cozo-data:
