@@ -33,8 +33,29 @@
 | `alerts.security.v1` | Оповещения безопасности. Схема: [security_alert.schema.json](../schemas/security_alert.schema.json) | Вечно |
 | `alerts.mission.v1` | Оповещения по миссиям: старт, провал, успех. Схема: [mission_alert.schema.json](../schemas/mission_alert.schema.json) | Вечно |
 | `external.requests.v1` | Внешние запросы от людей и других систем. Схема: [external_request.schema.json](../schemas/external_request.schema.json) | 30 дней |
+| `external.responses.v1` | Ответы внешним системам | 30 дней |
 | `knowledge.articles.v1` | Новые статьи базы знаний (ChromaDB + LightRAG). Схема: [knowledge_article.schema.json](../schemas/knowledge_article.schema.json) | 90 дней |
 | `knowledge.graph.v1` | Обновления графа знаний (ноды, рёбра, связи). Схема: [knowledge_graph_update.schema.json](../schemas/knowledge_graph_update.schema.json) | 90 дней |
+
+### Новые топики (v1.0.1 — Конструктор Сети)
+
+| Топик | Назначение | Retention |
+|:---|:---|:---|
+| `orders.constructor.v1` | Приказы Конструктора подчинённым (аудиторам, исполнителям). Формат: `{ from, to, order, deadline, priority }` | 30 дней |
+| `secrets.requests.v1` | Запрос на расшифровку/зашифровку секретов (через Хранителя). Формат: `{ agent_id, action: encrypt/decrypt, payload }` | 1 день |
+| `secrets.responses.v1` | Ответ Хранителя с расшифрованными/зашифрованными данными | 1 день |
+| `skills.proposed.v1` | Предложенные скиллы (Integrator → Constructor) | 30 дней |
+| `skills.approved.v1` | Одобренные скиллы (Constructor → Integrator) | Вечно |
+| `skills.rejected.v1` | Отклонённые скиллы | 30 дней |
+| `skills.incident.v1` | Инциденты со скиллами | Вечно |
+| `metrics.raw.v1` | Сырые метрики (от Компонентов → Конструктору) | 90 дней |
+| `metrics.kpi.v1` | Агрегированные KPI | Вечно |
+| `security.audit.v1` | События аудита безопасности | Вечно |
+| `oversight.compliance.v1` | Отчёты о соблюдении Ясы (Законодатель) | Вечно |
+| `oversight.reports.v1` | Общие отчёты надзора | 90 дней |
+| `future_scans.v1` | Результаты эхолокации будущего (Законодатель) | Вечно |
+| `future_scans.proposals.v1` | Предложения по новым специалистам | 90 дней |
+| `events.external_ai.v1` | События от внешних AI-систем | 90 дней |
 
 ---
 
@@ -53,7 +74,8 @@ Redis используется для мгновенных уведомлени�
 ## Команды для создания топиков
 
 ```bash
-docker exec waters-heart rpk topic create \
+# Локальный сервер
+docker exec waters-redpanda rpk topic create \
   planners.meeting.v1 \
   planners.questions.v1 \
   planners.answers.v1 \
@@ -69,8 +91,27 @@ docker exec waters-heart rpk topic create \
   alerts.security.v1 \
   alerts.mission.v1 \
   external.requests.v1 \
+  external.responses.v1 \
   knowledge.articles.v1 \
   knowledge.graph.v1
+
+# Новые топики (v1.0.1)
+docker exec waters-redpanda rpk topic create \
+  orders.constructor.v1 \
+  secrets.requests.v1 \
+  secrets.responses.v1 \
+  skills.proposed.v1 \
+  skills.approved.v1 \
+  skills.rejected.v1 \
+  skills.incident.v1 \
+  metrics.raw.v1 \
+  metrics.kpi.v1 \
+  security.audit.v1 \
+  oversight.compliance.v1 \
+  oversight.reports.v1 \
+  future_scans.v1 \
+  future_scans.proposals.v1 \
+  events.external_ai.v1
 
 Нервная система — это то, что превращает набор специалистов в единый организм.
 -
