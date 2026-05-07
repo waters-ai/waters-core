@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "name": "Docker Topology — Базовый сценарий",
+  "scenario": "basic",
+  "cost_estimate_usd": "100-150/мес",
+  "phase": "0 (Зарождение)",
+  "services": {
+    "broker": {
+      "name": "Redpanda",
+      "image": "redpandadata/redpanda:latest",
+      "nodes": 1,
+      "ports": ["9092:9092"],
+      "volumes": ["redpanda-data:/var/lib/redpanda/data"],
+      "environment": {
+        "REDPANDA_BROKER_ID": "0",
+        "REDPANDA_ADVERTISED_KAFKA_API_ADDRESSES": "localhost:9092"
+      },
+      "purpose": "Основной брокер сообщений HiveMind"
+    },
+    "cache": {
+      "name": "Redis",
+      "image": "redis:7-alpine",
+      "nodes": 1,
+      "ports": ["6379:6379"],
+      "volumes": ["redis-data:/data"],
+      "command": "redis-server --appendonly yes",
+      "purpose": "Кэш состояний агентов и сессий"
+    },
+    "vector_db": {
+      "name": "ChromaDB",
+      "image": "chromadb/chroma:latest",
+      "nodes": 1,
+      "ports": ["8000:8000"],
+      "volumes": ["chroma-data:/chroma/chroma"],
+      "environment": {
+        "ALLOW_RESET": "true",
+        "IS_PERSISTENT": "true"
+      },
+      "purpose": "Векторная БД для семантического поиска"
+    },
+    "graph_db": {
+      "name": "LightRAG",
+      "type": "embedded",
+      "nodes": 1,
+      "purpose": "Графовая БД для связей знаний (встроена в агентов)"
+    },
+    "struct_db": {
+      "name": "CozoDB",
+      "image": "cozodb/cozo:latest",
+      "nodes": 1,
+      "ports": ["9070:9070"],
+      "volumes": ["cozo-data:/data"],
+      "purpose": "Структурная БД для правил и онтологий"
+    },
+    "multimodal": {
+      "name": "CLIP",
+      "type": "cpu",
+      "nodes": 1,
+      "purpose": "Мультимодальные эмбеддинги (CPU-режим)"
+    },
+    "opencode": {
+      "name": "OpenCode",
+      "instances": 1,
+      "purpose": "Экземпляр для Архитектора"
+    }
+  },
+  "networks": {
+    "waters-net": {
+      "driver": "bridge",
+      "subnet": "172.20.0.0/16"
+    }
+  },
+  "volumes": {
+    "redpanda-data": null,
+    "redis-data": null,
+    "chroma-data": null,
+    "cozo-data": null
+  },
+  "topics": {
+    "hivemind": [
+      "planners.questions.v1",
+      "planners.answers.v1",
+      "planners.presentations.v1",
+      "planners.meeting.v1",
+      "metrics.raw.v1",
+      "metrics.kpi.v1",
+      "agent.events.v1"
+    ]
+  }
+}

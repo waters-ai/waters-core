@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "model": "corporate",
+  "name": "Корпоративная модель HiveMind",
+  "description": "Модель аукционной экономики. Оптимизация прибыли через тендеры и контракты CBBA.",
+  "layers": {
+    "IV": {
+      "name": "Дух / Проклятие",
+      "function": "Верховный этический запрет",
+      "constraints": ["Не навреди", "Максимизируй прибыль в рамках закона", "Соблюдай контракты"]
+    },
+    "III": {
+      "name": "Приказ / Воля",
+      "function": "Стратегия и принятие решений",
+      "roles": ["Супервизор Роя", "CEO"],
+      "behavior": "strategic"
+    },
+    "II": {
+      "name": "Право / Контракт",
+      "function": "Тактика и распределение",
+      "roles": ["Аукционист", "Юрист"],
+      "behavior": "negotiable"
+    },
+    "I": {
+      "name": "Сеть / Дело",
+      "function": "Исполнение и связь (DTN)",
+      "roles": ["Агент-специалист", "Рабочий"],
+      "behavior": "competitive"
+    }
+  },
+  "flow": {
+    "tender": "II -> I",
+    "bid": "I -> II",
+    "contract": "II -> I",
+    "execution": "I",
+    "profit": "I -> II"
+  },
+  "auction": {
+    "algorithm": "CBBA (Consensus-Based Bundle Algorithm)",
+    "currency": "FFF токены",
+    "optimization": "максимизация прибыли"
+  },
+  "use_cases": ["добыча ресурсов", "торговля", "логистика"],
+  "dtn_delays": {
+    "earth_moon": "2.5s",
+    "earth_mars": "5-20m"
+  },
+  "economy": {
+    "token": "FFF",
+    "purpose": "защита от спама и оплата услуг"
+  }
+}
