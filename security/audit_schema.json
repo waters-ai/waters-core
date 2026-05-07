@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0",
+  "name": "Схема аудита решений WATERS",
+  "author": "Хранитель Протокола v1.0",
+  "date": "07.05.2026",
+  "scope": "Фиксация и верификация всех решений агентов",
+
+  "audit_record": {
+    "type": "object",
+    "required": ["timestamp", "agent_id", "decision_type", "decision", "justification", "yasa_compliance", "hash"],
+    "properties": {
+      "timestamp": { "type": "string", "format": "date-time" },
+      "agent_id": { "type": "string", "enum": ["agent.architect.v1", "agent.constructor.v1", "agent.integrator.v1", "agent.director.v1", "agent.keeper.v1", "agent.lawkeeper.v1"] },
+      "decision_type": { "type": "string", "enum": ["skill_approval", "mission_launch", "resource_allocation", "yasa_enforcement", "specification", "integration", "interpretation"] },
+      "decision": { "type": "string" },
+      "justification": { "type": "string" },
+      "yasa_compliance": {
+        "type": "object",
+        "properties": {
+          "checked": { "type": "boolean" },
+          "rules_verified": { "type": "array", "items": { "type": "string" } },
+          "violations": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "evidence": { "type": "array", "items": { "type": "string" } },
+      "hash": { "type": "string", "description": "SHA-256 hash of the record for tamper detection" }
+    }
+  },
+
+  "verification": {
+    "method": "SHA-256 chaining (blockchain-like)",
+    "chain_storage": "ChromaDB collection: audit_trail",
+    "verification_frequency": "every 10 minutes",
+    "tamper_detection": "hash mismatch → alert → lockdown → postmortem"
+  },
+
+  "coverage": {
+    "all_agents": true,
+    "all_decisions": true,
+    "all_skill_approvals": true,
+    "all_mission_launches": true,
+    "all_yasa_violations": true,
+    "exclusions": []
+  },
+
+  "retention": {
+    "hot_storage_days": 90,
+    "cold_storage_years": 10,
+    "deletion_requires": "unanimous vote of all agents"
+  },
+
+  "access_control": {
+    "read": "all agents (full audit trail)",
+    "write": "only the agent making the decision",
+    "modify": "nobody (immutable)",
+    "delete": "nobody (immutable)"
+  },
+
+  "reporting": {
+    "daily_summary": true,
+    "weekly_analysis": true,
+    "anomaly_detection": true,
+    "export_formats": ["json", "csv", "markdown"]
+  }
+}

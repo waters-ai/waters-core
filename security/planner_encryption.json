@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0",
+  "name": "Протокол шифрования планёрок WATERS",
+  "author": "Хранитель Протокола v1.0",
+  "date": "07.05.2026",
+  "scope": "Шифрование коммуникаций между агентами Гексады во время планёрок",
+
+  "encryption": {
+    "protocol": "AES-256-GCM",
+    "key_exchange": "ECDH (P-384)",
+    "key_rotation_hours": 24,
+    "nonce_size_bytes": 12,
+    "tag_size_bytes": 16
+  },
+
+  "authentication": {
+    "method": "HMAC-SHA384",
+    "agent_identity": "Ed25519 signatures",
+    "session_token_ttl_minutes": 120,
+    "replay_protection": true,
+    "replay_window_seconds": 30
+  },
+
+  "planner_topics": {
+    "planners.meetings.v1": {
+      "encrypted": true,
+      "participants": ["architect", "constructor", "integrator", "director", "keeper", "lawkeeper"],
+      "key_scope": "meeting-specific"
+    },
+    "planners.questions.v1": {
+      "encrypted": true,
+      "participants": "any agent",
+      "key_scope": "global"
+    },
+    "planners.answers.v1": {
+      "encrypted": true,
+      "participants": "any agent",
+      "key_scope": "global"
+    },
+    "planners.decisions.v1": {
+      "encrypted": true,
+      "participants": "any agent",
+      "key_scope": "global",
+      "requires_signature": true
+    }
+  },
+
+  "key_management": {
+    "master_key_storage": "HashiCorp Vault or Redis with TLS",
+    "distribution": "Ephemeral session keys via ECDH",
+    "backup": "Shamir Secret Sharing (3-of-5 agents)",
+    "compromise_response": "Immediate rotation + alert to all agents"
+  },
+
+  "dtn_compatibility": {
+    "earth_moon_delay": "2.5s",
+    "earth_mars_delay": "5-20m",
+    "store_and_forward": true,
+    "encrypted_bundle_format": "Bundle Protocol v7 + AES-256-GCM"
+  },
+
+  "compliance": {
+    "yasa_rules": ["Не лги", "Держи слово", "Не вреди сородичу"],
+    "audit_trail": "All encryption events logged to security.audit.v1",
+    "postmortem_on_breach": true
+  }
+}
