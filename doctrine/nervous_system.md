@@ -33,6 +33,8 @@
 | `alerts.security.v1` | Оповещения безопасности. Схема: [security_alert.schema.json](../schemas/security_alert.schema.json) | Вечно |
 | `alerts.mission.v1` | Оповещения по миссиям: старт, провал, успех. Схема: [mission_alert.schema.json](../schemas/mission_alert.schema.json) | Вечно |
 | `external.requests.v1` | Внешние запросы от людей и других систем. Схема: [external_request.schema.json](../schemas/external_request.schema.json) | 30 дней |
+| `knowledge.articles.v1` | Новые статьи базы знаний (ChromaDB + LightRAG). Схема: [knowledge_article.schema.json](../schemas/knowledge_article.schema.json) | 90 дней |
+| `knowledge.graph.v1` | Обновления графа знаний (ноды, рёбра, связи). Схема: [knowledge_graph_update.schema.json](../schemas/knowledge_graph_update.schema.json) | 90 дней |
 
 ---
 
@@ -66,7 +68,9 @@ docker exec waters-heart rpk topic create \
   events.agent.v1 \
   alerts.security.v1 \
   alerts.mission.v1 \
-  external.requests.v1
+  external.requests.v1 \
+  knowledge.articles.v1 \
+  knowledge.graph.v1
 
 Нервная система — это то, что превращает набор специалистов в единый организм.
 -
