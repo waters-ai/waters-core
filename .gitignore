@@ -1,1 +1,4 @@
 .chroma_data/
+.secrets/
+*.enc
+/opt/waters/secrets/
