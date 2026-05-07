@@ -1,65 +1,51 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "schema_version": "1.0",
   "model": "democratic",
   "name": "Демократическая модель HiveMind",
-  "description": "Модель коллективного принятия решений. Каждый агент имеет голос, решение принимается большинством. Кворум: 50% + 1.",
+  "description": "Модель управления через голосование. Решение принимается большинством голосов агентов.",
   "layers": {
     "IV": {
       "name": "Дух / Проклятие",
       "function": "Верховный этический запрет",
-      "constraints": [
-        "Не навреди",
-        "Защищай права меньшинства",
-        "Прозрачность голосования"
-      ]
+      "constraints": ["Не навреди", "Воля большинства", "Права меньшинства"]
     },
     "III": {
-      "name": "Инициатива / Воля",
-      "function": "Вынесение предложений на голосование",
-      "roles": ["Инициатор", "Модератор"],
-      "behavior": "proposal_driven"
+      "name": "Приказ / Воля",
+      "function": "Стратегия и принятие решений",
+      "roles": ["Супервизор Роя"],
+      "behavior": "representative"
     },
     "II": {
-      "name": "Дебаты / Право",
-      "function": "Обсуждение, аргументы, голосование",
-      "roles": ["Делегат", "Счётная комиссия"],
-      "behavior": "negotiable"
+      "name": "Право / Контракт",
+      "function": "Тактика и распределение",
+      "roles": ["Избиратель", "Счётчик голосов"],
+      "behavior": "voting"
     },
     "I": {
-      "name": "Исполнение / Сеть",
-      "function": "Реализация принятого решения всеми агентами",
-      "roles": ["Агент-исполнитель"],
-      "behavior": "compliant"
+      "name": "Сеть / Дело",
+      "function": "Исполнение и связь (DTN)",
+      "roles": ["Агент-избиратель"],
+      "behavior": "participatory"
     }
   },
   "flow": {
-    "proposal": "III → II",
-    "debate": "II ↔ II",
-    "vote": "II → III",
-    "decision": "III → I",
-    "execution": "I"
+    "proposal": "II -> I",
+    "voting": "I -> II (голосование)",
+    "decision": "II -> III (решение большинства)",
+    "execution": "III -> I"
   },
-  "voting": {
-    "quorum": 0.5,
-    "majority_threshold": 0.5,
-    "voting_duration_minutes": 30,
-    "veto_enabled": false,
-    "anonymous": false
+  "voting_rules": {
+    "quorum": "51%",
+    "majority": "simple_majority",
+    "veto": "Слой IV (этическое вето)"
   },
-  "use_cases": [
-    "управление колонией",
-    "распределение ресурсов",
-    "выбор приоритетов миссий",
-    "принятие новых правил сообщества"
-  ],
+  "use_cases": ["управление колонией", "распределение общих ресурсов"],
   "dtn_delays": {
     "earth_moon": "2.5s",
     "earth_mars": "5-20m"
   },
-  "participation": {
-    "minimum_agents": 3,
-    "vote_delegation_allowed": false,
-    "abstention_allowed": true
+  "economy": {
+    "token": "FFF",
+    "purpose": "защита от спама и оплата участия в голосовании"
   }
 }
