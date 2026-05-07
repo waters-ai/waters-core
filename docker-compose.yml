@@ -134,6 +134,80 @@ services:
       - mcp-proxy
     restart: unless-stopped
 
+  # ══════════════════════════════════════════
+  # BRAVE SEARCH (DMZ-зона)
+  # ══════════════════════════════════════════
+  brave-search:
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile.brave-search
+    container_name: waters-brave-search
+    restart: unless-stopped
+    networks:
+      - waters-internal
+      - waters-dmz
+    ports:
+      - "8081:8081"
+    environment:
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - REDIS_HOST=redis-dmz
+      - REDIS_PORT=6380
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - KAFKA_BROKER=waters-redpanda:9092
+    volumes:
+      - ./scripts:/app/scripts
+    depends_on:
+      - mcp-proxy
+      - waters-redpanda
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ══════════════════════════════════════════
+  # REDIS (DMZ-зона, изолированный)
+  # ══════════════════════════════════════════
+  redis-dmz:
+    image: redis:7-alpine
+    container_name: waters-redis-dmz
+    restart: unless-stopped
+    networks:
+      - waters-dmz
+    ports:
+      - "6380:6380"
+    command: redis-server --port 6380 --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-dmz-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6380", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ══════════════════════════════════════════
+  # CHROMADB (DMZ-зона, read-only)
+  # ══════════════════════════════════════════
+  chromadb-dmz:
+    image: chromadb/chroma:latest
+    container_name: waters-chroma-dmz
+    restart: unless-stopped
+    networks:
+      - waters-dmz
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma-dmz-data:/chroma/chroma
+    environment:
+      - ALLOW_RESET=false
+      - IS_PERSISTENT=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
   waters-internal:
     driver: bridge
