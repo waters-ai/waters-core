@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Knowledge Graph Update",
+  "description": "Обновление графа знаний WATERS — добавление/удаление/изменение нод и рёбер",
+  "type": "object",
+  "required": ["update_id", "operation", "timestamp", "author"],
+  "properties": {
+    "update_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Уникальный идентификатор обновления"
+    },
+    "operation": {
+      "type": "string",
+      "enum": ["add_node", "update_node", "delete_node", "add_edge", "update_edge", "delete_edge"],
+      "description": "Тип операции над графом"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Время обновления"
+    },
+    "author": {
+      "type": "string",
+      "description": "Агент, инициировавший обновление"
+    },
+    "node": {
+      "type": "object",
+      "description": "Данные ноды (для операций с нодами)",
+      "properties": {
+        "node_id": { "type": "string" },
+        "label": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["concept", "agent", "mission", "skill", "doctrine", "event", "artifact"]
+        },
+        "properties": { "type": "object" },
+        "embedding_ref": { "type": "string" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "description": "Данные ребра (для операций с рёбрами)",
+      "properties": {
+        "edge_id": { "type": "string" },
+        "source_node_id": { "type": "string" },
+        "target_node_id": { "type": "string" },
+        "relation": {
+          "type": "string",
+          "enum": ["depends_on", "implements", "produces", "consumes", "relates_to", "specializes", "inherits", "triggers", "blocks", "validates"]
+        },
+        "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "properties": { "type": "object" }
+      }
+    },
+    "reason": {
+      "type": "string",
+      "description": "Причина обновления"
+    },
+    "batch_id": {
+      "type": "string",
+      "description": "Идентификатор пакетного обновления (если применяется)"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "operation": { "enum": ["add_node", "update_node", "delete_node"] } } },
+      "then": { "required": ["node"] }
+    },
+    {
+      "if": { "properties": { "operation": { "enum": ["add_edge", "update_edge", "delete_edge"] } } },
+      "then": { "required": ["edge"] }
+    }
+  ]
+}
