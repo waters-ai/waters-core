@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "External Response",
+  "description": "Ответ от внешнего источника (поиск, AI, веб-запрос)",
+  "type": "object",
+  "required": ["response_id", "request_id", "source", "timestamp"],
+  "properties": {
+    "response_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Уникальный идентификатор ответа"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "ID оригинального запроса из external.requests.v1"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["exa_search", "web_fetch", "arxiv", "claude", "gpt", "ollama", "deepseek"],
+      "description": "Источник ответа"
+    },
+    "content": {
+      "type": "string",
+      "description": "Содержимое ответа"
+    },
+    "data": {
+      "type": "object",
+      "description": "Структурированные данные ответа"
+    },
+    "error": {
+      "type": "string",
+      "description": "Текст ошибки (если произошла)"
+    },
+    "cache_hit": {
+      "type": "boolean",
+      "description": "Был ли ответ получен из кэша"
+    },
+    "processing_time_ms": {
+      "type": "number",
+      "description": "Время обработки в миллисекундах"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Время ответа"
+    },
+    "requesting_agent": {
+      "type": "string",
+      "description": "Агент, отправивший запрос"
+    }
+  }
+}

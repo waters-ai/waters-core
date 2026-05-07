@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "External AI Event",
+  "description": "Событие взаимодействия с внешним AI через MCP-прокси",
+  "type": "object",
+  "required": ["event_id", "ai_provider", "agent", "timestamp"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Уникальный идентификатор события"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["request_sent", "response_received", "error", "cache_hit", "rate_limited"],
+      "description": "Тип события"
+    },
+    "ai_provider": {
+      "type": "string",
+      "enum": ["claude", "gpt", "ollama", "deepseek"],
+      "description": "Провайдер внешнего AI"
+    },
+    "agent": {
+      "type": "string",
+      "description": "Агент, инициировавший запрос"
+    },
+    "query_preview": {
+      "type": "string",
+      "maxLength": 200,
+      "description": "Превью запроса (без чувствительных данных)"
+    },
+    "response_length": {
+      "type": "integer",
+      "description": "Длина ответа в символах"
+    },
+    "tokens_estimated": {
+      "type": "integer",
+      "description": "Оценка использованных токенов"
+    },
+    "cache_hit": {
+      "type": "boolean",
+      "description": "Ответ из кэша"
+    },
+    "processing_time_ms": {
+      "type": "number",
+      "description": "Время обработки"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Время события"
+    }
+  }
+}
