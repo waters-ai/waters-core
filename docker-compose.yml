@@ -5,7 +5,19 @@
 #   waters-internal — внутренняя сеть агентов (без доступа в интернет)
 #   waters-dmz      — DMZ-зона (MCP-прокси, доступ к интернету)
 #
-# Запуск:
+# Удалённый сервер:
+#   Хост: 171.22.180.238 (Перекрёсток-1)
+#   Назначение: Kafka (Redpanda), Redis для карусели агентов
+#   Подключение: через переменные окружения REMOTE_*
+#     REMOTE_KAFKA_BOOTSTRAP=171.22.180.238:9092
+#     REMOTE_REDIS_HOST=171.22.180.238
+#     REMOTE_REDIS_PORT=6379
+#
+# Запуск с удалённым сервером:
+#   export REMOTE_KAFKA_BOOTSTRAP=171.22.180.238:9092
+#   docker compose up -d
+#
+# Локальный запуск (без удалёнки):
 #   docker compose up -d
 #
 
@@ -23,6 +35,8 @@ services:
     environment:
       REDPANDA_BROKER_ID: "0"
       REDPANDA_ADVERTISED_KAFKA_API_ADDRESSES: "localhost:9092"
+      # REMOTE_KAFKA_BOOTSTRAP — если задан, агенты используют удалённый брокер
+      REMOTE_KAFKA_BOOTSTRAP: "${REMOTE_KAFKA_BOOTSTRAP:-}"
     networks:
       - waters-internal
     healthcheck:
@@ -73,17 +87,17 @@ services:
       retries: 5
 
   # ═══════════════════════════════════════════
-  # СТРУКТУРНАЯ БД (CozoDB)
+  # СТРУКТУРНАЯ БД (CozoDB) — временно отключена (image не существует)
   # ═══════════════════════════════════════════
-  cozodb:
-    image: cozodb/cozo:latest
-    container_name: waters-cozo
-    ports:
-      - "9070:9070"
-    volumes:
-      - cozo-data:/data
-    networks:
-      - waters-internal
+  # cozodb:
+  #   image: cozodb/cozo:latest
+  #   container_name: waters-cozo
+  #   ports:
+  #     - "9070:9070"
+  #   volumes:
+  #     - cozo-data:/data
+  #   networks:
+  #     - waters-internal
 
   # ═══════════════════════════════════════════
   # MCP-ПРОКСИ (DMZ-зона)
@@ -102,6 +116,9 @@ services:
       CHROMA_HOST: waters-chroma
       CHROMA_PORT: "8000"
       KAFKA_BOOTSTRAP: waters-redpanda:9092
+      REMOTE_KAFKA_BOOTSTRAP: "${REMOTE_KAFKA_BOOTSTRAP:-}"
+      REMOTE_REDIS_HOST: "${REMOTE_REDIS_HOST:-}"
+      REMOTE_REDIS_PORT: "${REMOTE_REDIS_PORT:-6379}"
     networks:
       - waters-internal
       - waters-dmz
@@ -155,11 +172,14 @@ services:
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
       - KAFKA_BROKER=waters-redpanda:9092
+      - REMOTE_KAFKA_BOOTSTRAP=${REMOTE_KAFKA_BOOTSTRAP:-}
+      - REMOTE_REDIS_HOST=${REMOTE_REDIS_HOST:-}
+      - REMOTE_REDIS_PORT=${REMOTE_REDIS_PORT:-6379}
     volumes:
       - ./scripts:/app/scripts
     depends_on:
       - mcp-proxy
-      - waters-redpanda
+      - redpanda
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 10s
@@ -226,4 +246,6 @@ volumes:
   redpanda-data:
   redis-data:
   chroma-data:
+  redis-dmz-data:
+  chroma-dmz-data:
   cozo-data:
