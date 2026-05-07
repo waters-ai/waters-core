@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Установка зависимостей
+RUN pip install --no-cache-dir requests redis chromadb kafka-python
+
+# Копирование скрипта
+COPY mcp_brave_search.py /app/
+
+# Проброс порта
+EXPOSE 8081
+
+# Запуск
+CMD ["python", "/app/mcp_brave_search.py"]
