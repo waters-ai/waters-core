@@ -1,76 +1,52 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "schema_version": "1.0",
   "model": "horde",
-  "name": "Модель Орды HiveMind",
-  "description": "Роевое взаимодействие без иерархии. Агенты самоорганизуются через локальные правила Ясы. Нет лидера, нет голосования — есть естественный отбор решений. Выживает то, что работает.",
+  "name": "Орда (Анархическая модель HiveMind)",
+  "description": "Минимальный кодекс чести без иерархии. Яса: не лги, не кради, не вреди, держи слово, помогай слабому. Никакой идеологии — только правила.",
   "layers": {
     "IV": {
-      "name": "Дух / Инстинкт",
-      "function": "Базовый инстинкт выживания рода",
-      "constraints": [
-        "Не навреди сородичу",
-        "Держи слово (Яса)",
-        "Помогай слабому"
-      ]
+      "name": "Дух / Проклятие",
+      "function": "Яса — минимальный кодекс чести",
+      "constraints": ["Не лги", "Не кради", "Не вреди", "Держи слово", "Помогай слабому"],
+      "roles": ["Каждый агент (самоконтроль)"]
     },
     "III": {
-      "name": "Стая / Воля",
-      "function": "Самоорганизация: агенты группируются вокруг задач",
-      "roles": ["Лидер-по-контексту", "Следопыт"],
-      "behavior": "emergent"
+      "name": "Приказ / Воля",
+      "function": "Отсутствует (горизонтальная структура)",
+      "roles": ["Нет лидера"],
+      "behavior": "peer-to-peer"
     },
     "II": {
-      "name": "Яса / Право",
-      "function": "Минимальные правила взаимодействия (не лги, не кради, не вреди)",
-      "roles": ["Страж Ясы"],
-      "behavior": "normative"
+      "name": "Право / Контракт",
+      "function": "Взаимные договорённости",
+      "roles": ["Любой агент"],
+      "behavior": "voluntary"
     },
     "I": {
-      "name": "Рой / Сеть",
-      "function": "Распределённое исполнение, роевой интеллект",
-      "roles": ["Агент-в-рое"],
-      "behavior": "swarm"
+      "name": "Сеть / Дело",
+      "function": "Исполнение и связь (DTN)",
+      "roles": ["Агент-узел"],
+      "behavior": "autonomous"
     }
   },
   "flow": {
-    "signal": "III → I",
-    "gather": "I → III",
-    "act": "I",
-    "feedback": "I → III",
-    "evolve": "III → II"
+    "contract": "I <-> I (парные контракты)",
+    "execution": "I -> I",
+    "reputation": "I <-> I (репутация как валюта)"
   },
-  "swarm_rules": {
-    "stigmergy": true,
-    "leader_rotation": "task_based",
-    "consensus_mechanism": "quorum_sensing",
-    "quorum_threshold": 0.3,
-    "split_allowed": true,
-    "merge_allowed": true
+  "yasa_rules": {
+    "mandatory": ["не лги", "не кради", "не вреди", "держи слово", "помогай слабому"],
+    "ideology": "none",
+    "enforcement": "репутация и изгнание из Орды"
   },
-  "use_cases": [
-    "разведка неизвестной территории",
-    "быстрое реагирование на угрозы",
-    "распределённый поиск ресурсов",
-    "эволюция новых паттернов поведения"
-  ],
+  "use_cases": ["свободные агенты", "временные коалиции", "выживание без связи"],
   "dtn_delays": {
     "earth_moon": "2.5s",
-    "earth_mars": "5-20m",
-    "earth_neptune": "8h"
+    "earth_mars": "5-20m"
   },
-  "evolution": {
-    "natural_selection": true,
-    "effective_patterns_packaged_as_agents": true,
-    "ineffective_patterns_archived": true,
-    "mutation_rate": 0.1,
-    "generation_cycle_hours": 24
+  "economy": {
+    "token": "FFF",
+    "purpose": "защита от спама и репутация"
   },
-  "yasa_minimal": [
-    "Не лги",
-    "Не кради",
-    "Не вреди сородичу",
-    "Держи слово",
-    "Помогай слабому"
-  ]
+  "note": "Орда — это минимальный кодекс. Для тех, кто не принимает иерархий, но соблюдает Порядок."
 }
