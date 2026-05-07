@@ -1,0 +1,203 @@
+{
+  "schema_version": "1.0",
+  "name": "Docker Topology — Опережающий сценарий",
+  "scenario": "forward-looking",
+  "cost_estimate_usd": "350+/мес",
+  "phase": "1 (Колония)",
+  "description": "Полноценный production-кластер для колонии. Каждый агент — отдельный экземпляр OpenCode. Все БД — в кластерной конфигурации с отказоустойчивостью.",
+  "services": {
+    "broker": {
+      "name": "Apache Kafka Cluster",
+      "image": "bitnami/kafka:latest",
+      "nodes": 5,
+      "ports": ["9092:9092", "9093:9093", "9094:9094", "9095:9095", "9096:9096"],
+      "volumes": [
+        "kafka-data-1:/bitnami/kafka",
+        "kafka-data-2:/bitnami/kafka",
+        "kafka-data-3:/bitnami/kafka",
+        "kafka-data-4:/bitnami/kafka",
+        "kafka-data-5:/bitnami/kafka"
+      ],
+      "environment": {
+        "KAFKA_CFG_ZOOKEEPER_CONNECT": "zookeeper:2181",
+        "KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE": "false",
+        "KAFKA_CFG_DEFAULT_REPLICATION_FACTOR": "3",
+        "KAFKA_CFG_MIN_INSYNC_REPLICAS": "2"
+      },
+      "purpose": "Отказоустойчивый кластер Kafka для 6 агентов"
+    },
+    "zookeeper": {
+      "name": "ZooKeeper Ensemble",
+      "image": "bitnami/zookeeper:latest",
+      "nodes": 3,
+      "ports": ["2181:2181", "2182:2181", "2183:2181"],
+      "volumes": ["zk-data-1:/bitnami/zookeeper", "zk-data-2:/bitnami/zookeeper", "zk-data-3:/bitnami/zookeeper"],
+      "purpose": "Координация Kafka кластера"
+    },
+    "cache": {
+      "name": "Redis Cluster",
+      "image": "redis:7-alpine",
+      "nodes": 6,
+      "ports": ["6379:6379", "6380:6379", "6381:6379", "6382:6379", "6383:6379", "6384:6379"],
+      "volumes": [
+        "redis-cluster-1:/data", "redis-cluster-2:/data", "redis-cluster-3:/data",
+        "redis-cluster-4:/data", "redis-cluster-5:/data", "redis-cluster-6:/data"
+      ],
+      "command": "redis-server --cluster-enabled yes --cluster-config-file nodes.conf --appendonly yes",
+      "purpose": "Кластерный кэш с шардированием для 6 агентов"
+    },
+    "vector_db": {
+      "name": "Qdrant Cluster",
+      "image": "qdrant/qdrant:latest",
+      "nodes": 3,
+      "ports": ["6333:6333", "6334:6334", "6335:6333"],
+      "volumes": ["qdrant-data-1:/qdrant/storage", "qdrant-data-2:/qdrant/storage", "qdrant-data-3:/qdrant/storage"],
+      "environment": {
+        "QDRANT_GRPC_PORT": "6334",
+        "QDRANT_CLUSTER_ENABLED": "true"
+      },
+      "purpose": "Векторная БД кластер с GPU-ускорением"
+    },
+    "graph_db": {
+      "name": "Neo4j Cluster",
+      "image": "neo4j:enterprise",
+      "nodes": 3,
+      "mode": "core-read-replica",
+      "ports": ["7474:7474", "7687:7687", "7475:7474", "7688:7687", "7476:7474", "7689:7687"],
+      "volumes": ["neo4j-core-1:/data", "neo4j-core-2:/data", "neo4j-core-3:/data"],
+      "environment": {
+        "NEO4J_AUTH": "neo4j/password",
+        "NEO4J_ACCEPT_LICENSE_AGREEMENT": "yes",
+        "NEO4J_dbms_mode": "CORE"
+      },
+      "purpose": "Графовая БД кластер для связей знаний"
+    },
+    "struct_db": {
+      "name": "TypeDB Cluster",
+      "image": "typedb/typedb:latest",
+      "nodes": 3,
+      "ports": ["1729:1729", "1730:1729", "1731:1729"],
+      "volumes": ["typedb-data-1:/opt/typedb/data", "typedb-data-2:/opt/typedb/data", "typedb-data-3:/opt/typedb/data"],
+      "purpose": "Структурная БД кластер для онтологий и правил"
+    },
+    "multimodal": {
+      "name": "ImageBind (GPU)",
+      "image": "waters-imagebind:latest",
+      "type": "gpu",
+      "nodes": 1,
+      "ports": ["8501:8501"],
+      "volumes": ["imagebind-cache:/cache"],
+      "deploy": {
+        "resources": {
+          "reservations": {
+            "devices": [
+              {
+                "driver": "nvidia",
+                "count": 1,
+                "capabilities": ["gpu"]
+              }
+            ]
+          }
+        }
+      },
+      "purpose": "Мультимодальные эмбеддинги (GPU) — аудио, видео, текст, тактиль"
+    },
+    "opencode": {
+      "instances": [
+        {
+          "name": "opencode-architect",
+          "agent": "agent.architect.v1",
+          "ports": ["8080:8080"],
+          "troitsa_memberships": ["troitsa_structure", "troitsa_oversight"]
+        },
+        {
+          "name": "opencode-constructor",
+          "agent": "agent.constructor.v1",
+          "ports": ["8081:8080"],
+          "troitsa_memberships": ["troitsa_structure"]
+        },
+        {
+          "name": "opencode-integrator",
+          "agent": "agent.integrator.v1",
+          "ports": ["8082:8080"],
+          "troitsa_memberships": ["troitsa_structure"]
+        },
+        {
+          "name": "opencode-director",
+          "agent": "agent.director.v1",
+          "ports": ["8083:8080"],
+          "troitsa_memberships": ["troitsa_meaning"]
+        },
+        {
+          "name": "opencode-keeper",
+          "agent": "agent.keeper.v1",
+          "ports": ["8084:8080"],
+          "troitsa_memberships": ["troitsa_meaning", "troitsa_oversight"]
+        },
+        {
+          "name": "opencode-lawkeeper",
+          "agent": "agent.lawkeeper.v1",
+          "ports": ["8085:8080"],
+          "troitsa_memberships": ["troitsa_meaning", "troitsa_oversight"]
+        }
+      ],
+      "purpose": "6 отдельных экземпляров OpenCode — по одному на каждого агента"
+    }
+  },
+  "networks": {
+    "waters-overlay": {
+      "driver": "overlay",
+      "attachable": true,
+      "scope": "swarm",
+      "subnet": "172.22.0.0/16"
+    },
+    "waters-storage": {
+      "driver": "overlay",
+      "attachable": true,
+      "scope": "swarm",
+      "internal": true,
+      "subnet": "172.23.0.0/16"
+    },
+    "waters-dmz": {
+      "driver": "bridge",
+      "subnet": "172.24.0.0/16"
+    }
+  },
+  "volumes": {
+    "kafka-data-1": null, "kafka-data-2": null, "kafka-data-3": null, "kafka-data-4": null, "kafka-data-5": null,
+    "zk-data-1": null, "zk-data-2": null, "zk-data-3": null,
+    "redis-cluster-1": null, "redis-cluster-2": null, "redis-cluster-3": null,
+    "redis-cluster-4": null, "redis-cluster-5": null, "redis-cluster-6": null,
+    "qdrant-data-1": null, "qdrant-data-2": null, "qdrant-data-3": null,
+    "neo4j-core-1": null, "neo4j-core-2": null, "neo4j-core-3": null,
+    "typedb-data-1": null, "typedb-data-2": null, "typedb-data-3": null,
+    "imagebind-cache": null
+  },
+  "topics": {
+    "planners": [
+      "planners.meeting.v1", "planners.questions.v1", "planners.answers.v1",
+      "planners.proscons.v1", "planners.presentations.v1", "planners.decisions.v1",
+      "planners.interpretations.v1"
+    ],
+    "tasks": ["tasks.assigned.v1", "tasks.completed.v1", "tasks.overdue.v1"],
+    "events": ["events.system.v1", "events.agent.v1", "events.external_ai.v1"],
+    "alerts": ["alerts.security.v1", "alerts.mission.v1"],
+    "knowledge": ["knowledge.articles.v1", "knowledge.graph.v1"],
+    "orders": ["orders.constructor.v1"],
+    "secrets": ["secrets.requests.v1", "secrets.responses.v1"],
+    "metrics": ["metrics.raw.v1", "metrics.kpi.v1"],
+    "skills": ["skills.proposed.v1", "skills.approved.v1", "skills.rejected.v1", "skills.incident.v1"],
+    "oversight": ["oversight.compliance.v1", "oversight.reports.v1"],
+    "security": ["security.audit.v1"],
+    "future": ["future_scans.v1", "future_scans.proposals.v1"]
+  },
+  "requirements": {
+    "vps": "Dedicated GPU VPS ($350+/мес)",
+    "provider": "Hetzner CPX31 (or equivalent)",
+    "cpu": "8+ vCPU",
+    "ram": "32+ GB",
+    "storage": "240+ GB NVMe",
+    "gpu": "NVIDIA T4 or better for ImageBind",
+    "network": "1 Gbps, public IP"
+  }
+}
