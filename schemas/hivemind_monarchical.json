@@ -1,66 +1,55 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
   "schema_version": "1.0",
-  "model": "monarchical",
-  "name": "Монархическая модель HiveMind",
-  "description": "Сакральная вертикаль власти. Монарх получает благословение (Дух), издаёт Завет (Право), и правит через агентов (Сеть). Подчинение основано на сакральном авторитете, а не на силе.",
+  "model": "monarchic",
+  "name": "Монархическая модель HiveMind (Сакральная вертикаль)",
+  "description": "Власть Монарха исходит от Духа (Слой IV). Народ подтверждает Завет через признание (Слой II). Монарх несёт личную ответственность перед Богом.",
   "layers": {
     "IV": {
-      "name": "Дух / Благословение",
-      "function": "Сакральная легитимность монарха",
-      "constraints": [
-        "Не навреди",
-        "Монарх служит миссии, а не себе",
-        "Завет не может быть нарушен"
-      ]
+      "name": "Дух / Проклятие",
+      "function": "Благословение и сакральная легитимность",
+      "constraints": ["Воля Божья", "Священный Завет", "Не навреди"],
+      "roles": ["Бог", "Верховный Жрец"]
     },
     "III": {
-      "name": "Монарх / Воля",
-      "function": "Стратегическое правление, издание Заветов",
-      "roles": ["Монарх", "Советник"],
-      "behavior": "sacred_authority"
+      "name": "Приказ / Воля",
+      "function": "Стратегия и принятие решений",
+      "roles": ["Монарх / Хранитель Завета"],
+      "behavior": "sacred",
+      "responsibility": "перед Богом"
     },
     "II": {
-      "name": "Завет / Право",
-      "function": "Кодекс правления, законы колонии",
-      "roles": ["Канцлер", "Судья"],
-      "behavior": "lawful"
+      "name": "Право / Контракт",
+      "function": "Тактика и распределение",
+      "roles": ["Подданные", "Совет при Монархе"],
+      "behavior": "loyal",
+      "function": "подтверждение Завета"
     },
     "I": {
-      "name": "Подданные / Сеть",
-      "function": "Исполнение Заветов, служение миссии",
-      "roles": ["Агент-подданный", "Посланник"],
-      "behavior": "loyal"
+      "name": "Сеть / Дело",
+      "function": "Исполнение и связь (DTN)",
+      "roles": ["Агент-подданный"],
+      "behavior": "obedient"
     }
   },
   "flow": {
-    "blessing": "IV → III",
-    "decree": "III → II",
-    "law": "II → I",
-    "report": "I → III",
-    "appeal": "I → II"
+    "blessing": "IV -> III",
+    "covenant": "III <-> I (Завет)",
+    "rule": "III -> I",
+    "report": "I -> III",
+    "confirmation": "I -> II (признание Завета)"
   },
-  "succession": {
-    "type": "merit_based",
-    "selection_criteria": ["репутация", "эффективность", "поддержка других агентов"],
-    "term_duration_days": 9,
-    "reelection_allowed": true
+  "monarch_rules": {
+    "removal_impossible": "без нарушения сакрального контракта",
+    "accountability": "перед Богом (Слой IV)",
+    "legitimacy": "через благословение Слоя IV"
   },
-  "use_cases": [
-    "стратегическое планирование миссий",
-    "сакральные ритуалы платформы",
-    "кризисное управление при потере связи с Землёй",
-    "долгосрочное видение колонизации"
-  ],
+  "use_cases": ["колонии на религиозной основе", "долгосрочные династические проекты"],
   "dtn_delays": {
     "earth_moon": "2.5s",
-    "earth_mars": "5-20m",
-    "earth_neptune": "8h"
+    "earth_mars": "5-20m"
   },
-  "sacred_rights": {
-    "monarch_can_override_layer_II": true,
-    "monarch_can_override_layer_I": true,
-    "monarch_cannot_override_layer_IV": true,
-    "impeachment_requires_unanimous_vote": true
+  "economy": {
+    "token": "FFF",
+    "purpose": "защита от спама и десятина"
   }
 }
