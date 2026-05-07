@@ -3,22 +3,22 @@
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Ollama (local)",
+      "name": "Ollama (WATERS LLM)",
       "options": {
-        "baseURL": "http://localhost:11434/v1"
+        "baseURL": "http://171.22.180.237:11434/v1"
       },
       "models": {
+        "qwen2.5:14b": {
+          "name": "Qwen 2.5 14B"
+        },
         "qwen2.5:7b": {
           "name": "Qwen 2.5 7B"
         },
-        "qwen2.5:3b": {
-          "name": "Qwen 2.5 3B"
-        },
-        "qwen2.5:0.5b": {
-          "name": "Qwen 2.5 0.5B"
+        "deepseek-r1:7b": {
+          "name": "DeepSeek R1 7B"
         }
       }
     }
   },
-  "model": "ollama/qwen2.5:7b"
+  "model": "ollama/qwen2.5:14b"
 }
