@@ -1,0 +1,195 @@
+{
+  "schema_version": "1.0",
+  "name": "Docker Topology — Оптимальный сценарий (3 Троицы)",
+  "scenario": "optimal",
+  "cost_estimate_usd": "200+/мес",
+  "phase": "0 (Зарождение)",
+  "description": "Масштабирование до 3 экземпляров OpenCode по Троицам. Каждый специалист входит в две Троицы.",
+  "troitsas": {
+    "troitsa_structure": {
+      "name": "Троица Структуры — Технологии",
+      "question": "Как построить?",
+      "specialists": [
+        { "role": "agent.architect.v1", "name": "Верховный Архитектор", "responsibility": "онтология, спецификации агентов, продуктовая визия" },
+        { "role": "agent.constructor.v1", "name": "Конструктор Сети", "responsibility": "протоколы, топология, эмуляция задержек, инфраструктурные требования" },
+        { "role": "agent.integrator.v1", "name": "Интегратор Знаний", "responsibility": "внешние данные, MCP-адаптеры, логистика данных" }
+      ],
+      "opencode_instance": "opencode-troitsa-structure",
+      "color": "#3498db"
+    },
+    "troitsa_meaning": {
+      "name": "Троица Смысла — Правила",
+      "question": "Зачем и по каким законам?",
+      "specialists": [
+        { "role": "agent.director.v1", "name": "Директор по Смыслу", "responsibility": "миссия, архетипы, этос, чтение запросов, маркетинг" },
+        { "role": "agent.lawkeeper.v1", "name": "Законодатель", "responsibility": "Яса, кодекс, предвидение, внешние требования, комплаенс" },
+        { "role": "agent.keeper.v1", "name": "Хранитель Протокола", "responsibility": "безопасность, эволюция протоколов, ответственность перед заказчиками" }
+      ],
+      "opencode_instance": "opencode-troitsa-meaning",
+      "color": "#e74c3c"
+    },
+    "troitsa_oversight": {
+      "name": "Троица Надзора — Тесты, Метрики, Цели",
+      "question": "Всё ли верно?",
+      "specialists": [
+        { "role": "agent.keeper.v1", "name": "Хранитель Протокола", "responsibility": "QA: тестирование протоколов, поиск уязвимостей, целостность данных" },
+        { "role": "agent.lawkeeper.v1", "name": "Законодатель", "responsibility": "Tech Lead: соблюдение стандартов, код-ревью, архитектурные решения" },
+        { "role": "agent.architect.v1", "name": "Верховный Архитектор", "responsibility": "Product Owner: достижение целей спринта, KPI, соответствие миссии" }
+      ],
+      "opencode_instance": "opencode-troitsa-oversight",
+      "color": "#2ecc71"
+    }
+  },
+  "services": {
+    "broker": {
+      "name": "Apache Kafka",
+      "image": "bitnami/kafka:latest",
+      "nodes": 3,
+      "ports": ["9092:9092", "9093:9093", "9094:9094"],
+      "volumes": ["kafka-data-1:/bitnami/kafka", "kafka-data-2:/bitnami/kafka", "kafka-data-3:/bitnami/kafka"],
+      "environment": {
+        "KAFKA_BROKER_ID": "from_service_index",
+        "KAFKA_CFG_ZOOKEEPER_CONNECT": "zookeeper:2181",
+        "KAFKA_CFG_ADVERTISED_LISTENERS": "PLAINTEXT://kafka-{index}:9092"
+      },
+      "purpose": "Кластер Kafka для Трёх Троиц"
+    },
+    "zookeeper": {
+      "name": "ZooKeeper",
+      "image": "bitnami/zookeeper:latest",
+      "ports": ["2181:2181"],
+      "volumes": ["zookeeper-data:/bitnami/zookeeper"],
+      "purpose": "Координация Kafka кластера"
+    },
+    "cache": {
+      "name": "Redis Sentinel",
+      "image": "bitnami/redis:latest",
+      "nodes": 3,
+      "ports": ["6379:6379", "26379:26379"],
+      "volumes": ["redis-data-1:/bitnami/redis/data", "redis-data-2:/bitnami/redis/data", "redis-data-3:/bitnami/redis/data"],
+      "command": "redis-server --appendonly yes --sentinel",
+      "purpose": "Отказоустойчивый кэш для Трёх Троиц"
+    },
+    "vector_db": {
+      "name": "Qdrant",
+      "image": "qdrant/qdrant:latest",
+      "nodes": 1,
+      "ports": ["6333:6333"],
+      "volumes": ["qdrant-data:/qdrant/storage"],
+      "environment": {
+        "QDRANT_GRPC_PORT": "6334"
+      },
+      "purpose": "Векторная БД с GPU-ускорением"
+    },
+    "graph_db": {
+      "name": "LightRAG + Neo4j",
+      "image": "neo4j:latest",
+      "nodes": 1,
+      "ports": ["7474:7474", "7687:7687"],
+      "volumes": ["neo4j-data:/data"],
+      "environment": {
+        "NEO4J_AUTH": "neo4j/password"
+      },
+      "purpose": "Графовая БД для связей знаний"
+    },
+    "struct_db": {
+      "name": "CozoDB",
+      "image": "cozodb/cozo:latest",
+      "nodes": 1,
+      "ports": ["9070:9070"],
+      "volumes": ["cozo-data:/data"],
+      "purpose": "Структурная БД для правил и онтологий"
+    },
+    "opencode": {
+      "instances": [
+        {
+          "name": "opencode-troitsa-structure",
+          "troitsa": "troitsa_structure",
+          "specialists": ["agent.architect.v1", "agent.constructor.v1", "agent.integrator.v1"],
+          "ports": ["8080:8080"],
+          "environment": {
+            "TROITSA": "structure",
+            "AGENTS": "architect,constructor,integrator"
+          }
+        },
+        {
+          "name": "opencode-troitsa-meaning",
+          "troitsa": "troitsa_meaning",
+          "specialists": ["agent.director.v1", "agent.lawkeeper.v1", "agent.keeper.v1"],
+          "ports": ["8081:8081"],
+          "environment": {
+            "TROITSA": "meaning",
+            "AGENTS": "director,lawkeeper,keeper"
+          }
+        },
+        {
+          "name": "opencode-troitsa-oversight",
+          "troitsa": "troitsa_oversight",
+          "specialists": ["agent.keeper.v1", "agent.lawkeeper.v1", "agent.architect.v1"],
+          "ports": ["8082:8082"],
+          "environment": {
+            "TROITSA": "oversight",
+            "AGENTS": "keeper,lawkeeper,architect"
+          }
+        }
+      ]
+    }
+  },
+  "networks": {
+    "waters-troitsa-net": {
+      "driver": "overlay",
+      "attachable": true,
+      "scope": "swarm"
+    }
+  },
+  "volumes": {
+    "kafka-data-1": null,
+    "kafka-data-2": null,
+    "kafka-data-3": null,
+    "zookeeper-data": null,
+    "redis-data-1": null,
+    "redis-data-2": null,
+    "redis-data-3": null,
+    "qdrant-data": null,
+    "neo4j-data": null,
+    "cozo-data": null
+  },
+  "intersections": [
+    {
+      "specialist": "agent.architect.v1",
+      "troitsas": ["troitsa_structure", "troitsa_oversight"],
+      "description": "Архитектор связывает Структуру и Надзор"
+    },
+    {
+      "specialist": "agent.lawkeeper.v1",
+      "troitsas": ["troitsa_meaning", "troitsa_oversight"],
+      "description": "Законодатель связывает Смысл и Надзор"
+    },
+    {
+      "specialist": "agent.keeper.v1",
+      "troitsas": ["troitsa_meaning", "troitsa_oversight"],
+      "description": "Хранитель связывает Смысл и Надзор"
+    }
+  ],
+  "topics_by_troitsa": {
+    "troitsa_structure": [
+      "planners.questions.v1",
+      "planners.answers.v1",
+      "planners.presentations.v1",
+      "infrastructure.*"
+    ],
+    "troitsa_meaning": [
+      "planners.questions.v1",
+      "planners.answers.v1",
+      "planners.interpretations.v1",
+      "doctrine.*"
+    ],
+    "troitsa_oversight": [
+      "planners.decisions.v1",
+      "tasks.*",
+      "events.*",
+      "alerts.*",
+      "metrics.*"
+    ]
+  }
+}
