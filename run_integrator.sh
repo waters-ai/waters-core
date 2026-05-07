@@ -1,17 +1,26 @@
-#!/usr/bin/env bash
-# Запуск агента: Интегратор Знаний v1.0
-set -euo pipefail
+#!/bin/bash
+#
+# run_integrator.sh — Запуск Интегратора Знаний в отдельной сессии OpenCode
+#
+# Terminal 3:
+#   ./run_integrator.sh
+#
 
-AGENT="integrator"
-AGENT_FILE="agents/${AGENT}_AGENTS.md"
+set -e
 
-if [ ! -f "$AGENT_FILE" ]; then
-    echo "❌ Файл $AGENT_FILE не найден"
-    exit 1
-fi
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "🔬 Запуск Интегратора Знаний v1.0..."
-echo "   AGENTS.md ← $AGENT_FILE"
+echo "=== Интегратор Знаний v1.0 ==="
+echo "Роль: Мост с внешними API и MCP-адаптеры"
+echo "Троица: Структуры (Архитектор, Конструктор, Интегратор)"
+echo ""
 
-cp "$AGENT_FILE" AGENTS.md
-opencode
+# Копируем AGENTS.md Интегратора в корень для OpenCode
+cp "$REPO_DIR/agents/integrator_AGENTS.md" "$REPO_DIR/AGENTS.md"
+
+echo "AGENTS.md → agents/integrator_AGENTS.md"
+echo "Запуск OpenCode..."
+echo ""
+
+# Запуск OpenCode
+cd "$REPO_DIR" && opencode
