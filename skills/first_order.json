@@ -1,0 +1,135 @@
+{
+  "order": "first_order",
+  "title": "Заказ на первые навыки WATERS / First Skills Order / 首批技能订单",
+  "version": "1.0",
+  "date": "2026-05-08",
+  "author": "Верховный Архитектор v1.0",
+  "status": "утверждён / approved / 已批准",
+
+  "skills": [
+    {
+      "id": "mission-control-basic",
+      "name": "Базовое управление миссией / Basic Mission Control / 基本任务控制",
+      "role": "constructor",
+      "priority": "P0",
+      "description": "Управление сессиями OpenCode, SSH-туннели, Docker, Kafka-топики, мониторинг инфраструктуры",
+      "inputs": ["opencode.json", "docker-compose.yml", "Kafka topics"],
+      "outputs": ["run_*.sh", "топология сети", "healthcheck-отчёты"],
+      "depends_on": []
+    },
+    {
+      "id": "ontology-designer",
+      "name": "Проектировщик онтологий / Ontology Designer / 本体设计器",
+      "role": "architect",
+      "priority": "P0",
+      "description": "Создание JSON-LD онтологий, спецификаций агентов, схем HiveMind, дорожных карт",
+      "inputs": ["требования миссии", "существующие доктрины"],
+      "outputs": ["ontology/*.jsonld", "agents/*.json", "missions/*.json", "product/roadmap.json"],
+      "depends_on": []
+    },
+    {
+      "id": "knowledge-integrator",
+      "name": "Интегратор знаний / Knowledge Integrator / 知识集成师",
+      "role": "integrator",
+      "priority": "P0",
+      "description": "Публикация статей в ChromaDB, LightRAG, Kafka; синхронизация знаний между БД",
+      "inputs": ["knowledge_articles/*.json", "ChromaDB", "LightRAG"],
+      "outputs": ["ChromaDB collections", "LightRAG graph", "knowledge.*.v1"],
+      "depends_on": ["mission-control-basic"]
+    },
+    {
+      "id": "spice-navigator",
+      "name": "SPICE-навигатор / SPICE Navigator / SPICE 导航器",
+      "role": "architect",
+      "priority": "P1",
+      "description": "Интеграция NASA SPICE: загрузка ядер, расчёт эфемерид, орбитальная механика, окна запуска",
+      "inputs": ["SPICE kernels (de440, lunar, earth)", "Orekit/GMAT"],
+      "outputs": ["orbits.calculated.v1", "траектории", "окна запуска"],
+      "depends_on": ["knowledge-integrator"]
+    },
+    {
+      "id": "telemetry-pipeline",
+      "name": "Конвейер телеметрии / Telemetry Pipeline / 遥测管道",
+      "role": "constructor",
+      "priority": "P1",
+      "description": "Приём сырой телеметрии из Kafka, запись в TimescaleDB, аггрегация, алерты",
+      "inputs": ["Kafka topic telemetry.raw.v1", "TimescaleDB"],
+      "outputs": ["telemetry.processed.v1", "telemetry.alerts.v1", "TimescaleDB hypertables"],
+      "depends_on": ["mission-control-basic"]
+    },
+    {
+      "id": "dtn-simulator",
+      "name": "Эмулятор DTN / DTN Simulator / DTN 模拟器",
+      "role": "constructor",
+      "priority": "P1",
+      "description": "Эмуляция космических задержек связи (Земля-Луна 2.5с, Земля-Марс 5-20мин), тестирование HiveMind-протоколов",
+      "inputs": ["конфигурация задержек", "HiveMind-сообщения"],
+      "outputs": ["симулированные задержки", "логи DTN", "метрики"],
+      "depends_on": ["mission-control-basic"]
+    },
+    {
+      "id": "geological-analyst",
+      "name": "Геологический аналитик / Geological Analyst / 地质分析师",
+      "role": "architect",
+      "priority": "P2",
+      "description": "Анализ геологических карт USGS, спектральных библиотек RELAB/ECOSTRESS, классификация минералов",
+      "inputs": ["USGS maps", "RELAB spectra", "ECOSTRESS"],
+      "outputs": ["geology.samples.v1", "минералогические карты", "отчёты"],
+      "depends_on": ["knowledge-integrator"]
+    },
+    {
+      "id": "hivemind-schema-generator",
+      "name": "Генератор схем HiveMind / HiveMind Schema Generator / HiveMind 模式生成器",
+      "role": "constructor",
+      "priority": "P1",
+      "description": "Генерация 6 JSON-схем HiveMind (военная, корпоративная, научная, демократическая, монархическая, экстренная)",
+      "inputs": ["HiveMind spec", "модели взаимодействия"],
+      "outputs": ["schemas/hivemind_*.json"],
+      "depends_on": ["mission-control-basic"]
+    },
+    {
+      "id": "docker-topology-builder",
+      "name": "Построитель Docker-топологии / Docker Topology Builder / Docker 拓扑构建器",
+      "role": "constructor",
+      "priority": "P1",
+      "description": "Построение docker-compose.yml для трёх сценариев (Базовый, Оптимальный, Опережающий)",
+      "inputs": ["инфраструктурная матрица", "opencode.json"],
+      "outputs": ["infrastructure/docker/*.yml", "топология"],
+      "depends_on": ["mission-control-basic"]
+    },
+    {
+      "id": "lunar-mission-ontologist",
+      "name": "Онтолог лунной миссии / Lunar Mission Ontologist / 月球任务本体学家",
+      "role": "architect",
+      "priority": "P2",
+      "description": "Создание онтологии лунной колонизации: сущности, отношения, правила, миссии",
+      "inputs": ["NASA SPICE", "CNSA SpaceMind", "геологические данные"],
+      "outputs": ["ontology/lunar_mission.jsonld", "agents/*.json"],
+      "depends_on": ["ontology-designer", "spice-navigator"]
+    }
+  ],
+
+  "roadmap": {
+    "sprint_1": {
+      "title": "Фаза 0: Рождение платформы",
+      "skills": ["mission-control-basic", "ontology-designer", "knowledge-integrator"],
+      "deadline": "2026-05-15"
+    },
+    "sprint_2": {
+      "title": "Фаза 0: Инфраструктура миссий",
+      "skills": ["spice-navigator", "telemetry-pipeline", "hivemind-schema-generator", "docker-topology-builder"],
+      "deadline": "2026-05-22"
+    },
+    "sprint_3": {
+      "title": "Фаза 0: Первая миссия",
+      "skills": ["dtn-simulator", "geological-analyst", "lunar-mission-ontologist"],
+      "deadline": "2026-06-01"
+    }
+  },
+
+  "notes": {
+    "ru": "Первая партия навыков покрывает базовые потребности платформы: управление инфраструктурой, онтологии, интеграция знаний. P0 — критически необходимо для старта. P1 — необходимо для первой миссии. P2 — enhancement для второй волны.",
+    "en": "First batch of skills covers basic platform needs: infrastructure management, ontologies, knowledge integration. P0 — critical for launch. P1 — required for first mission. P2 — enhancement for second wave.",
+    "zh": "首批技能涵盖平台基本需求：基础设施管理、本体论、知识集成。P0 — 启动关键。P1 — 首次任务必需。P2 — 第二波增强。"
+  }
+}

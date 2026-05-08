@@ -1,0 +1,123 @@
+{
+  "mission_id": "deima_search_water_v0.1",
+  "name": "Deima — Поиск воды на Луне / Lunar Water Search / 月球寻水",
+  "version": "0.1",
+  "status": "planning",
+  "phase": "0",
+  "priority": "P0",
+
+  "objective": {
+    "primary": "Обнаружение водяного льда в постоянно затенённых кратерах (PSR) южного полюса Луны",
+    "secondary": [
+      "Картографирование минерального состава реголита",
+      "Оценка доступности водных ресурсов для колонии",
+      "Тестирование протоколов HiveMind в условиях задержки связи"
+    ],
+    "success_criteria": [
+      "water_ice_concentration > 1% в 3+ образцах",
+      "mineral_map_polar_region > 10 km²",
+      "telemetry_coverage > 95%",
+      "all_agents_returned_safely"
+    ]
+  },
+
+  "location": {
+    "body": "Moon",
+    "region": "South Pole",
+    "target_craters": ["Shackleton", "Shoemaker", "Faustini"],
+    "coordinates": {
+      "latitude_range": [-90, -85],
+      "longitude_range": [-180, 180]
+    },
+    "illumination": "PSR (permanently shadowed)"
+  },
+
+  "agents": [
+    {
+      "id": "navigator-v1",
+      "role": "orbital_mechanics",
+      "spec": "../agents/lunar_navigator_v0.1.json"
+    },
+    {
+      "id": "geologist-v1",
+      "role": "soil_analysis",
+      "spec": "../agents/lunar_geologist_v0.1.json"
+    },
+    {
+      "id": "drone-operator-v1",
+      "role": "telemetry_flight",
+      "spec": "../agents/lunar_drone_operator_v0.1.json"
+    },
+    {
+      "id": "spectroscopist-v1",
+      "role": "spectral_analysis",
+      "spec": "../agents/lunar_spectroscopist_v0.1.json"
+    }
+  ],
+
+  "timeline": {
+    "phase_1_preparation": {
+      "duration_days": 14,
+      "tasks": [
+        "Развёртывание SPICE-ядер (de440, lunar)",
+        "Загрузка геологических карт USGS",
+        "Калибровка спектрометров",
+        "Тест DTN-связи"
+      ]
+    },
+    "phase_2_transit": {
+      "duration_days": 3,
+      "description": "Перелёт и выход на полярную орбиту",
+      "dtn_delay_seconds": 2.5
+    },
+    "phase_3_survey": {
+      "duration_days": 7,
+      "tasks": [
+        "Орбитальное картографирование PSR",
+        "Выбор 5+ перспективных точек",
+        "Запуск геологоразведочных дронов"
+      ]
+    },
+    "phase_4_analysis": {
+      "duration_days": 10,
+      "tasks": [
+        "Сбор 10+ образцов реголита",
+        "Спектральный анализ in-situ",
+        "Бурение до 1м глубины",
+        "Отчёт по водяному льду"
+      ]
+    },
+    "phase_5_return": {
+      "duration_days": 2,
+      "description": "Возврат образцов, синхронизация данных с MCC"
+    }
+  },
+
+  "data_sources": [
+    {
+      "source": "NASA SPICE",
+      "kernels": ["de440.bsp", "lunar.bsp", "earth_000101_250104.bpc"],
+      "update": "daily"
+    },
+    {
+      "source": "LRO NAC",
+      "resolution": "0.5m/pixel",
+      "coverage": "polar > 85°"
+    },
+    {
+      "source": "CNSA Chang'e-7",
+      "data_types": ["orbital_radar", "spectral_imaging"],
+      "status": "pending_access"
+    }
+  ],
+
+  "hivemind_model": "scientific",
+  "fallback_model": "military",
+
+  "risk_assessment": [
+    {"risk": "loss_of_communication", "probability": "medium", "impact": "critical", "mitigation": "dtn_buffering + auto_return"},
+    {"risk": "drone_crash", "probability": "medium", "impact": "high", "mitigation": "redundant_drones + terrain_avoidance"},
+    {"risk": "instrument_failure", "probability": "low", "impact": "medium", "mitigation": "backup_instruments + remote_recalibration"},
+    {"risk": "data_corruption", "probability": "low", "impact": "high", "mitigation": "checksum + kafka_replication"}
+  ]
+}

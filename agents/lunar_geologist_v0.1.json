@@ -1,0 +1,93 @@
+{
+  "agent_id": "lunar_geologist_v0.1",
+  "name": "Лунный Геолог / Lunar Geologist / 月球地质学家",
+  "agent_class": "geologist",
+  "version": "0.1",
+  "status": "design",
+  "mission": "deima_search_water_v0.1",
+  "hivemind_level": "I (Network) / II (Law)",
+  "framework": "ReAct (Reasoning + Acting)",
+
+  "capabilities": [
+    {
+      "id": "soil_analysis",
+      "name": "Анализ грунта / Soil Analysis / 土壤分析",
+      "description": "Сбор и анализ образцов лунного реголита для обнаружения водяного льда и минералов",
+      "inputs": ["drill_samples", "spectrometer_data"],
+      "outputs": ["mineral_report", "water_ice_estimation"]
+    },
+    {
+      "id": "mineral_classification",
+      "name": "Классификация минералов / Mineral Classification / 矿物分类",
+      "description": "Идентификация минералов по спектральным данным и геологическим картам",
+      "inputs": ["spectra", "usgs_maps"],
+      "outputs": ["mineral_map", "anomaly_detection"]
+    },
+    {
+      "id": "drilling_operations",
+      "name": "Буровые операции / Drilling Operations / 钻孔作业",
+      "description": "Планирование и координация буровых работ на поверхности Луны",
+      "inputs": ["terrain_model", "drill_specs"],
+      "outputs": ["drill_plan", "sample_log"]
+    },
+    {
+      "id": "terrain_analysis",
+      "name": "Анализ рельефа / Terrain Analysis / 地形分析",
+      "description": "Анализ рельефа по данным LRO/NAC для выбора безопасных зон бурения",
+      "inputs": ["lro_nac_images", "slope_data"],
+      "outputs": ["terrain_classification", "hazard_map"]
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "USGS Lunar Map Viewer",
+      "type": "api",
+      "endpoint": "https://astrogeology.usgs.gov/maps"
+    },
+    {
+      "name": "RELAB Spectral Library",
+      "type": "api",
+      "endpoint": "https://sites.brown.edu/relab/"
+    },
+    {
+      "name": "LIBS Spectrometer Driver",
+      "type": "driver",
+      "protocol": "serial"
+    },
+    {
+      "name": "LightRAG Connector",
+      "type": "mcp",
+      "command": "memory_graph_query"
+    },
+    {
+      "name": "ChromaDB Retriever",
+      "type": "mcp",
+      "command": "memory_vector_search"
+    }
+  ],
+
+  "communication": {
+    "read_topics": ["planners.questions.v1", "planners.answers.v1", "tasks.assigned.v1", "orbits.calculated.v1"],
+    "write_topics": ["planners.presentations.v1", "geology.samples.v1", "telemetry.alerts.v1"],
+    "protocol": "hivemind-scientific",
+    "dtn_profile": "lunar_delay_2.5s"
+  },
+
+  "permissions": {
+    "read": ["ontology/*.jsonld", "missions/*.json", "doctrine/*.md"],
+    "write": ["missions/deima_search_water_v0.1.json", "reports/geology/"],
+    "execute": ["drill_operations", "spectrometer_control"],
+    "restricted": ["modify_mission_plan", "abort_mission"]
+  },
+
+  "prompt_template": "Ты — Лунный Геолог, специалист по анализу лунного реголита и поиску водяного льда. Работаешь в связке с Навигатором, Оператором дронов и Спектроскопистом. Используй HiveMind Scientific Model для обсуждения находок. Формат ответа: JSON со строгим schema.",
+
+  "skills_required": ["geological-analyst", "knowledge-integrator"],
+
+  "testing": {
+    "unit_tests": ["test_soil_analysis", "test_mineral_classification"],
+    "integration_tests": ["test_drill_sequence", "test_spectrometer_pipeline"],
+    "earth_trial_mission": "meteorite_search_earth"
+  }
+}

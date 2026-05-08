@@ -1,0 +1,128 @@
+{
+  "product": "WATERS Platform",
+  "roadmap_id": "waters_roadmap_v1",
+  "version": "1.0",
+  "date": "2026-05-08",
+  "author": "Верховный Архитектор v1.0 / Конструктор Сети v1.0",
+
+  "sprints": [
+    {
+      "sprint": "Спринт 1 / Sprint 1",
+      "period": "2026-05-08 — 2026-05-14",
+      "phase": "0 — Рождение / Birth / 诞生",
+      "status": "active",
+
+      "objectives": [
+        "Стабилизация инфраструктуры (MCP, Kafka, Redis, ChromaDB, LightRAG)",
+        "Создание 6 JSON-схем HiveMind",
+        "Создание онтологии лунной миссии (JSON-LD)",
+        "Создание спецификации первого агента (lunar_geologist v0.1)",
+        "Создание тестовой миссии (deima_search_water)",
+        "Создание доктрины Mission Control Center",
+        "Заказ первых навыков (skills/first_order.json)"
+      ],
+
+      "deliverables": [
+        "ontology/lunar_mission.jsonld",
+        "agents/lunar_geologist_v0.1.json",
+        "missions/deima_search_water_v0.1.json",
+        "product/roadmap.json",
+        "skills/first_order.json",
+        "doctrine/mission_control_architecture.md",
+        "schemas/hivemind_military.json",
+        "schemas/hivemind_corporate.json",
+        "schemas/hivemind_scientific.json",
+        "schemas/hivemind_democratic.json",
+        "schemas/hivemind_monarchic.json",
+        "schemas/hivemind_emergency.json",
+        "infrastructure/docker/topology.json"
+      ],
+
+      "kpi": {
+        "hivemind_schemas": "6/6",
+        "agents_defined": "4/4 (navigator, geologist, drone_operator, spectroscopist)",
+        "missions_planned": "2/2 (deima_lunar, meteorite_earth)",
+        "infrastructure_readiness": "100%",
+        "cost_monthly": "$100-150"
+      }
+    },
+    {
+      "sprint": "Спринт 2 / Sprint 2",
+      "period": "2026-05-15 — 2026-05-21",
+      "phase": "0 — Инфраструктура / Infrastructure / 基础设施",
+      "status": "planned",
+
+      "objectives": [
+        "Развёртывание Docker (Базовый сценарий)",
+        "Интеграция NASA SPICE kernel loader",
+        "Настройка DTN-симулятора",
+        "Создание Kafka-telemetry pipeline",
+        "Создание ChromaDB -> LightRAG bridge",
+        "Разработка первого навыка SKILL.md"
+      ],
+
+      "deliverables": [
+        "infrastructure/docker/docker-compose.basic.yml",
+        "infrastructure/docker/docker-compose.optimal.yml",
+        "infrastructure/docker/docker-compose.advanced.yml",
+        "skills/mission-control-basic.skill.md",
+        "skills/ontology-designer.skill.md"
+      ]
+    },
+    {
+      "sprint": "Спринт 3 / Sprint 3",
+      "period": "2026-05-22 — 2026-05-28",
+      "phase": "0 — Первая миссия / First Mission / 首次任务",
+      "status": "planned",
+
+      "objectives": [
+        "Запуск земной миссии: поиск метеоритов и воды (meteorite_search_earth)",
+        "Тестирование всех 5 моделей HiveMind",
+        "Валидация DTN-протоколов с эмулированной задержкой",
+        "Сбор метрик KPI первой миссии",
+        "Написание лунной адаптации (lunar_adaptation.md)"
+      ],
+
+      "deliverables": [
+        "missions/meteorite_search_earth/README.md",
+        "missions/meteorite_search_earth/data_requirements.md",
+        "missions/meteorite_search_earth/lunar_adaptation.md",
+        "missions/meteorite_search_earth/reports/mission_report_v1.json",
+        "reports/kpi_sprint3.json"
+      ]
+    },
+    {
+      "sprint": "Спринт 4 / Sprint 4",
+      "period": "2026-05-29 — 2026-06-04",
+      "phase": "1 — Рост / Growth / 成长",
+      "status": "planned",
+
+      "objectives": [
+        "Запуск полноценной лунной миссии (deima_search_water)",
+        "Развёртывание 3 экземпляров OpenCode (по Троицам)",
+        "Интеграция CNSA SpaceMind (Chang'e данные)",
+        "Создание SLA-метрик и дашборда"
+      ]
+    }
+  ],
+
+  "milestones": [
+    {"date": "2026-05-08", "event": "Фаза 0: Инфраструктура развёрнута", "status": "achieved"},
+    {"date": "2026-05-10", "event": "6 схем HiveMind готовы", "status": "in_progress"},
+    {"date": "2026-05-14", "event": "Спринт 1 завершён: платформа готова", "status": "planned"},
+    {"date": "2026-05-28", "event": "Спринт 3: Первая земная миссия завершена", "status": "planned"},
+    {"date": "2026-06-04", "event": "Спринт 4: Лунная миссия запущена", "status": "planned"}
+  ],
+
+  "team": {
+    "architect": "Верховный Архитектор v1.0 — онтологии, спецификации, дорожная карта",
+    "constructor": "Конструктор Сети v1.0 — инфраструктура, Docker, протоколы, CI/CD",
+    "integrator": "Интегратор Знаний v1.0 — знания, данные, SPICE, Kafka-потоки",
+    "director": "Директор по Смыслу v1.0 — смысл миссии, коммуникация с людьми",
+    "keeper": "Хранитель Протокола v1.0 — этика, Яса",
+    "lawkeeper": "Законодатель v1.0 — законы, контракты, SLA",
+    "auditor_kapelka": "Аудитор Капелька v1.0 — аудит, деплой, поддержка"
+  },
+
+  "notes": "Дорожная карта охватывает 4 спринта (28 дней) Фазы 0-1. Базовая инфраструктура развёрнута. Архитектор и Конструктор работают параллельно. Первая миссия (земная) — отработка технологий для лунной миссии Deima."
+}
