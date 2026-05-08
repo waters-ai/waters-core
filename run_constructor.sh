@@ -29,4 +29,15 @@ if [ -f "$(dirname "$0")/.env" ]; then
   set -a; source "$(dirname "$0")/.env"; set +a
 fi
 
+# SSH туннели к удалённым серверам
+echo "   🔌 SSH tunnels..."
+# Neo4j (237) → localhost:17687
+ssh -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes \
+  -fNL 17687:localhost:7687 ubuntu@171.22.180.237 2>/dev/null || true
+# TimescaleDB (237) → localhost:25432
+ssh -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes \
+  -fNL 25432:localhost:5432 ubuntu@171.22.180.237 2>/dev/null || true
+echo "   ✅ Neo4j: localhost:17687 ← 237:7687"
+echo "   ✅ TimescaleDB: localhost:25432 ← 237:5432"
+
 opencode
