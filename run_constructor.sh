@@ -23,4 +23,10 @@ echo "🌐 Запуск Конструктора Сети v1.0..."
 echo "   AGENTS.md ← $AGENT_FILE"
 
 cp "$AGENT_FILE" AGENTS.md
+
+# Загрузка секретов из .env
+if [ -f "$(dirname "$0")/.env" ]; then
+  set -a; source "$(dirname "$0")/.env"; set +a
+fi
+
 opencode

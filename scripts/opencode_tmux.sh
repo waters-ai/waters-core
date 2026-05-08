@@ -27,7 +27,11 @@ SESSION_NAME="${SESSION_NAME:-waters}"
 
 mkdir -p "$LOG_DIR"
 
-# Загрузка API-ключей из локальных secret-файлов (gitignored)
+# Загрузка API-ключей из локальных secret-файлов и .env (gitignored)
+if [ -f "$REPO_DIR/.env" ]; then
+  set -a; source "$REPO_DIR/.env"; set +a
+fi
+
 SECRET_KEY_FILE="$REPO_DIR/.secret_deepseek_key"
 if [ -f "$SECRET_KEY_FILE" ]; then
   export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$(cat "$SECRET_KEY_FILE")}"
