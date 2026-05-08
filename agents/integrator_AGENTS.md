@@ -56,10 +56,13 @@
 
 1. **Connect MCP servers**: filesystem, github, memory
 2. **Load agent state**: `memory_state_load("integrator")` — восстановить контекст
-3. **Query ChromaDB**: `memory_vector_search("integrator last session", top_k=5)` — контекст прошлых сессий
-4. **Check Kafka**: `memory_cache_get("tasks:integrator:pending")` — ожидающие запросы
-5. **Init graph DB**: `memory_graph_query("What knowledge does WATERS have?", mode="local")`
-6. **Check Redis**: `memory_cache_get("external.requests")` — внешние запросы на данные
+3. **Load session snapshot**: `memory_session_load("integrator")` — восстановить снэпшот сессии
+4. **Self-reflection**: `memory_kafka_consume("planners.answers.v1", count=5)` — прочитать свои прошлые ответы
+5. **Query ChromaDB**: `memory_vector_search("integrator last session", top_k=5)` — контекст прошлых сессий
+6. **Check Kafka**: `memory_cache_get("tasks:integrator:pending")` — ожидающие запросы
+7. **Init graph DB**: `memory_graph_query("What knowledge does WATERS have?", mode="local")`
+8. **Check Redis**: `memory_cache_get("external.requests")` — внешние запросы на данные
+9. **Healthcheck**: `memory_health` — проверить доступность всех сервисов
 
 ## Интерфейсы
 

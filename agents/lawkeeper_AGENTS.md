@@ -49,9 +49,12 @@
 
 1. **Connect MCP servers**: filesystem, github, memory
 2. **Load agent state**: `memory_state_load("lawkeeper")` — восстановить контекст
-3. **Query ChromaDB**: `memory_vector_search("lawkeeper yasa compliance", top_k=5)`
-4. **Check Kafka oversight**: `memory_cache_get("tasks:lawkeeper:pending")`
-5. **Load Yasa context**: `memory_graph_query("WATERS laws and compliance", mode="local")`
+3. **Load session snapshot**: `memory_session_load("lawkeeper")` — восстановить снэпшот сессии
+4. **Self-reflection**: `memory_kafka_consume("planners.decisions.v1", count=5)` — прочитать свои прошлые решения
+5. **Query ChromaDB**: `memory_vector_search("lawkeeper yasa compliance", top_k=5)`
+6. **Check Kafka oversight**: `memory_cache_get("tasks:lawkeeper:pending")`
+7. **Load Yasa context**: `memory_graph_query("WATERS laws and compliance", mode="local")`
+8. **Healthcheck**: `memory_health` — проверить доступность всех сервисов
 
 ## Интерфейсы
 

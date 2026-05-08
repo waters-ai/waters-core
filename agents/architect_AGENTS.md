@@ -62,9 +62,12 @@
 
 1. **Connect MCP servers**: filesystem, github, memory
 2. **Load agent state**: `memory_state_load("architect")` — восстановить контекст
-3. **Query ChromaDB**: `memory_vector_search("architect ontology last session", top_k=5)`
-4. **Check Kafka tasks**: `memory_cache_get("tasks:architect:pending")`
-5. **Load doctrine context**: `memory_graph_query("WATERS ontology and doctrines", mode="local")`
+3. **Load session snapshot**: `memory_session_load("architect")` — восстановить снэпшот сессии
+4. **Self-reflection**: `memory_kafka_consume("planners.answers.v1", count=5)` — прочитать свои прошлые ответы
+5. **Query ChromaDB**: `memory_vector_search("architect ontology last session", top_k=5)`
+6. **Check Kafka tasks**: `memory_cache_get("tasks:architect:pending")`
+7. **Load doctrine context**: `memory_graph_query("WATERS ontology and doctrines", mode="local")`
+8. **Healthcheck**: `memory_health` — проверить доступность всех сервисов
 
 ## Интерфейсы
 

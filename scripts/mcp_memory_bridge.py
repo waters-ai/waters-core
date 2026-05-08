@@ -12,8 +12,13 @@ mcp_memory_bridge.py — MCP-сервер доступа к базам памя�
   - memory_cache_set        — запись Redis-ключа
   - memory_kafka_send       — отправка сообщения в Kafka
   - memory_kafka_list       — список топиков Kafka
+  - memory_kafka_consume    — чтение прошлых сообщений из Kafka
   - memory_state_load       — загрузка состояния агента
   - memory_state_save       — сохранение состояния агента
+  - memory_session_save     — сохранение снэпшота сессии
+  - memory_session_load     — загрузка снэпшота сессии
+  - memory_session_list     — список снэпшотов
+  - memory_health           — полный healthcheck всех сервисов
   - memory_stats            — статистика использования
 
 Запуск: OpenCode запускает как subprocess через mcpServers
@@ -347,6 +352,171 @@ def tool_state_save(args):
         return {"error": str(e)}
 
 
+def tool_session_save(args):
+    agent_id = args.get("agent_id", "")
+    context = args.get("context", "")
+    ttl = args.get("ttl", 604800)
+
+    r = get_redis()
+    if not r:
+        return {"error": "Redis not available"}
+
+    try:
+        key = f"session:{agent_id}"
+        ts = datetime.now(timezone.utc).isoformat()
+        snapshot = {
+            "agent_id": agent_id,
+            "timestamp": ts,
+            "context": context,
+        }
+        r.setex(key, ttl, json.dumps(snapshot, ensure_ascii=False))
+        r.setex(f"{key}:ts", ttl, ts)
+        logger.info(f"Session saved: {key} (TTL={ttl}s)")
+        return {"status": "saved", "agent_id": agent_id, "timestamp": ts}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def tool_session_load(args):
+    agent_id = args.get("agent_id", "")
+
+    r = get_redis()
+    if not r:
+        return {"error": "Redis not available", "session": None}
+
+    try:
+        key = f"session:{agent_id}"
+        raw = r.get(key)
+        if raw is None:
+            ts_raw = r.get(f"{key}:ts")
+            return {"status": "not_found", "agent_id": agent_id,
+                    "last_seen": ts_raw.decode() if ts_raw else None}
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        session = json.loads(raw)
+        return {"status": "found", "agent_id": agent_id, "session": session}
+    except Exception as e:
+        return {"error": str(e), "agent_id": agent_id}
+
+
+def tool_session_list(args):
+    r = get_redis()
+    if not r:
+        return {"error": "Redis not available", "sessions": []}
+
+    try:
+        keys = r.keys("session:*")
+        sessions = []
+        for k in keys:
+            name = k.decode() if isinstance(k, bytes) else k
+            if name.endswith(":ts"):
+                continue
+            ttl = r.ttl(name)
+            sessions.append({"key": name, "ttl": ttl})
+        return {"count": len(sessions), "sessions": sessions}
+    except Exception as e:
+        return {"error": str(e), "sessions": []}
+
+
+def tool_kafka_consume(args):
+    topic = args.get("topic", "")
+    count = args.get("count", 10)
+    timeout_ms = args.get("timeout_ms", 3000)
+
+    if not topic:
+        return {"error": "topic is required"}
+
+    try:
+        from kafka import KafkaConsumer
+        consumer = KafkaConsumer(
+            topic,
+            bootstrap_servers=KAFKA_BOOTSTRAP,
+            auto_offset_reset="latest",
+            enable_auto_commit=False,
+            consumer_timeout_ms=timeout_ms,
+            value_deserializer=lambda v: json.loads(v.decode()) if v else None,
+        )
+        messages = []
+        partitions = consumer.assignment()
+        if not partitions:
+            consumer.poll(timeout_ms=1000)
+            partitions = consumer.assignment()
+
+        for part in partitions:
+            consumer.seek_to_end(part)
+            end_offset = consumer.position(part)
+            start_offset = max(0, end_offset - count)
+            consumer.seek(part, start_offset)
+            for msg in consumer:
+                messages.append({
+                    "offset": msg.offset,
+                    "partition": msg.partition,
+                    "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
+                    "value": msg.value,
+                })
+                if len(messages) >= count:
+                    break
+
+        consumer.close()
+        logger.info(f"Kafka consumed {len(messages)} from {topic}")
+        return {"topic": topic, "count": len(messages), "messages": messages}
+    except Exception as e:
+        logger.warning(f"Kafka consume error: {e}")
+        return {"error": str(e), "topic": topic, "messages": []}
+
+
+def tool_health(args):
+    results = {}
+    all_ok = True
+
+    r = get_redis()
+    if r:
+        try:
+            r.ping()
+            results["redis"] = {"status": "ok", "keys": r.dbsize()}
+        except Exception as e:
+            results["redis"] = {"status": "error", "error": str(e)}
+            all_ok = False
+    else:
+        results["redis"] = {"status": "unavailable"}
+        all_ok = False
+
+    client = get_chroma()
+    if client:
+        try:
+            client.heartbeat()
+            cols = client.list_collections()
+            results["chromadb"] = {"status": "ok", "collections": [c.name for c in cols]}
+        except Exception as e:
+            results["chromadb"] = {"status": "error", "error": str(e)}
+            all_ok = False
+    else:
+        results["chromadb"] = {"status": "unavailable"}
+        all_ok = False
+
+    rag = get_lightrag()
+    if rag:
+        results["lightrag"] = {"status": "ok", "working_dir": LIGHTRAG_DIR}
+    else:
+        results["lightrag"] = {"status": "unavailable"}
+        all_ok = False
+
+    try:
+        from kafka import KafkaAdminClient
+        admin = KafkaAdminClient(bootstrap_servers=KAFKA_BOOTSTRAP)
+        topics = admin.list_topics()
+        admin.close()
+        results["kafka"] = {"status": "ok", "topics_count": len(topics)}
+    except Exception as e:
+        results["kafka"] = {"status": "error", "error": str(e)}
+        all_ok = False
+
+    results["all_ok"] = all_ok
+    results["timestamp"] = datetime.now(timezone.utc).isoformat()
+    results["bridge_version"] = "1.0.0"
+    return results
+
+
 def tool_stats(args):
     stats = {"service": "memory-bridge", "version": "1.0.0"}
     r = get_redis()
@@ -494,6 +664,57 @@ TOOLS = {
                 "data": {"type": "object"},
             },
             "required": ["agent_id", "data"],
+        },
+    },
+    "memory_session_save": {
+        "fn": tool_session_save,
+        "description": "Сохранить снэпшот сессии агента в Redis (session:<agent_id>)",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+                "context": {"type": "string", "description": "Контекст сессии (JSON-строка)"},
+                "ttl": {"type": "number", "default": 604800},
+            },
+            "required": ["agent_id", "context"],
+        },
+    },
+    "memory_session_load": {
+        "fn": tool_session_load,
+        "description": "Загрузить снэпшот сессии агента из Redis",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"agent_id": {"type": "string"}},
+            "required": ["agent_id"],
+        },
+    },
+    "memory_session_list": {
+        "fn": tool_session_list,
+        "description": "Список сохранённых снэпшотов сессий",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    "memory_kafka_consume": {
+        "fn": tool_kafka_consume,
+        "description": "Прочитать последние сообщения из Kafka-топика",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string"},
+                "count": {"type": "number", "default": 10},
+                "timeout_ms": {"type": "number", "default": 3000},
+            },
+            "required": ["topic"],
+        },
+    },
+    "memory_health": {
+        "fn": tool_health,
+        "description": "Полный healthcheck всех сервисов памяти",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
         },
     },
     "memory_stats": {

@@ -44,9 +44,12 @@
 
 1. **Connect MCP servers**: filesystem, github, memory
 2. **Load agent state**: `memory_state_load("director")` — восстановить контекст
-3. **Query ChromaDB**: `memory_vector_search("director meaning mission", top_k=5)`
-4. **Check Kafka**: `memory_cache_get("tasks:director:pending")`
-5. **Load mission context**: `memory_graph_query("WATERS mission and archetypes", mode="local")`
+3. **Load session snapshot**: `memory_session_load("director")` — восстановить снэпшот сессии
+4. **Self-reflection**: `memory_kafka_consume("planners.answers.v1", count=5)` — прочитать свои прошлые ответы
+5. **Query ChromaDB**: `memory_vector_search("director meaning mission", top_k=5)`
+6. **Check Kafka**: `memory_cache_get("tasks:director:pending")`
+7. **Load mission context**: `memory_graph_query("WATERS mission and archetypes", mode="local")`
+8. **Healthcheck**: `memory_health` — проверить доступность всех сервисов
 
 ## Интерфейсы
 

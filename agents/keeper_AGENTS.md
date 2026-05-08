@@ -49,9 +49,12 @@
 
 1. **Connect MCP servers**: filesystem, github, memory
 2. **Load agent state**: `memory_state_load("keeper")` — восстановить контекст
-3. **Query ChromaDB**: `memory_vector_search("security audit last session", top_k=5)`
-4. **Check Kafka alerts**: `memory_cache_get("alerts:security:pending")`
-5. **Audit log check**: `memory_graph_query("Security vulnerabilities and audits", mode="local")`
+3. **Load session snapshot**: `memory_session_load("keeper")` — восстановить снэпшот сессии
+4. **Self-reflection**: `memory_kafka_consume("alerts.security.v1", count=5)` — прочитать свои прошлые алерты
+5. **Query ChromaDB**: `memory_vector_search("security audit last session", top_k=5)`
+6. **Check Kafka alerts**: `memory_cache_get("alerts:security:pending")`
+7. **Audit log check**: `memory_graph_query("Security vulnerabilities and audits", mode="local")`
+8. **Healthcheck**: `memory_health` — проверить доступность всех сервисов
 
 ## Интерфейсы
 

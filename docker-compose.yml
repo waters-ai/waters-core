@@ -87,9 +87,9 @@ services:
       - waters-internal
       - waters-dmz
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000 && echo -e 'GET /api/v2/heartbeat HTTP/1.0\r\n\r\n' >&3 && timeout 3 cat <&3 | grep -qi nanosecond"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
 
   # ═══════════════════════════════════════════
@@ -229,9 +229,9 @@ services:
       - ALLOW_RESET=false
       - IS_PERSISTENT=true
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000 && echo -e 'GET /api/v2/heartbeat HTTP/1.0\r\n\r\n' >&3 && timeout 3 cat <&3 | grep -qi nanosecond"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
 
 networks:

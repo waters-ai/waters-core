@@ -59,9 +59,12 @@
 
 1. **Connect MCP servers**: filesystem, github, memory
 2. **Load agent state**: `memory_state_load("constructor")` — восстановить контекст из Redis
-3. **Query ChromaDB**: `memory_vector_search("constructor last session", top_k=5)` — контекст прошлых сессий
-4. **Check Kafka**: `memory_kafka_list` — проверить доступные топики
-5. **Check Redis**: `memory_cache_get("tasks:constructor:pending")` — ожидающие задачи
+3. **Load session snapshot**: `memory_session_load("constructor")` — восстановить снэпшот сессии
+4. **Self-reflection**: `memory_kafka_consume("planners.answers.v1", count=5)` — прочитать свои прошлые ответы
+5. **Query ChromaDB**: `memory_vector_search("constructor last session", top_k=5)` — контекст прошлых сессий
+6. **Check Kafka**: `memory_kafka_list` — проверить доступные топики
+7. **Check Redis**: `memory_cache_get("tasks:constructor:pending")` — ожидающие задачи
+8. **Healthcheck**: `memory_health` — проверить доступность всех сервисов
 
 ## Интерфейсы
 
