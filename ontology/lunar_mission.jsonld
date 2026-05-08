@@ -1,120 +1,395 @@
 {
   "@context": {
-    "@version": 1.1,
+    "lunar": "http://waters.platform/lunar/v1#",
     "schema": "http://schema.org/",
-    "waters": "https://waters.ai/ontology/",
-    "nasa": "https://nasa.datacite.org/",
-    "cnsa": "https://cnsa.gov.cn/spacemind/",
     "owl": "http://www.w3.org/2002/07/owl#",
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-    "xsd": "http://www.w3.org/2001/XMLSchema"
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "mission": "http://waters.platform/mission/v1#",
+    "mcc": "http://waters.platform/mcc/v1#",
+    "agent": "http://waters.platform/agent/v1#",
+    "geo": "http://www.w3.org/2003/01/geo/wgs84_pos#"
   },
   "@graph": [
     {
-      "@id": "waters:lunar-mission-v1",
-      "@type": "waters:Mission",
-      "rdfs:label": "Deima — Lunar Water Search Mission v1",
-      "waters:mission_id": "deima_search_water_v0.1",
-      "waters:phase": "0",
-      "waters:status": "planning",
-      "waters:objective": "Search for water ice in permanently shadowed regions (PSRs) of the lunar south pole",
-      "waters:region": "lunar_south_pole",
-      "waters:agents": ["waters:navigator-v1", "waters:geologist-v1", "waters:drone-operator-v1", "waters:spectroscopist-v1"],
-      "waters:protocols": ["waters:hivemind-military", "waters:hivemind-scientific"],
-      "waters:data_sources": ["nasa:spice", "nasa:lro", "cnsa:change-7"],
-      "waters:success_criteria": [
-        "water_ice_detection > 1% concentration",
-        "sample_collection > 3 sites",
-        "telemetry_coverage > 95%"
-      ]
+      "@id": "lunar:Ontology_v1",
+      "@type": "owl:Ontology",
+      "title": "Lunar Mission Ontology v1.0",
+      "description": "Полная онтология лунной миссии Deima и метеоритной миссии Earth для платформы WATERS",
+      "version": "1.0",
+      "date": "2026-05-08",
+      "author": "Верховный Архитектор v1.0",
+      "imports": ["mcc:MissionControlOntology_v1"]
+    },
+
+    {
+      "@id": "lunar:CelestialBody",
+      "@type": "owl:Class",
+      "rdfs:comment": "Небесное тело: планета, спутник, астероид"
     },
     {
-      "@id": "waters:lunar-south-pole",
-      "@type": "schema:Place",
-      "rdfs:label": "Lunar South Pole",
-      "schema:containedIn": "schema:Moon",
-      "schema:latitude": -88.5,
-      "schema:longitude": 0.0,
-      "schema:elevation": -2000,
-      "schema:description": "Permanently shadowed regions near Shackleton, Shoemaker, Faustini craters",
-      "waters:temperature_range": {"min": -233, "max": -50, "unit": "celsius"},
-      "waters:gravity": 1.62,
-      "waters:gravity_unit": "m/s²",
-      "waters:daylight_cycle": 354,
-      "waters:daylight_cycle_unit": "hours"
+      "@id": "lunar:Moon",
+      "@type": "lunar:CelestialBody",
+      "skos:prefLabel": "Луна / Moon",
+      "lunar:radius_km": 1737.4,
+      "lunar:gravity_m_s2": 1.62,
+      "lunar:hasRegion": ["lunar:SouthPole", "lunar:EquatorialRegion"]
     },
     {
-      "@id": "waters:navigator-v1",
-      "@type": "waters:Agent",
-      "rdfs:label": "Navigator Agent v1",
-      "waters:agent_class": "navigator",
-      "waters:capabilities": ["spice_orbital_mechanics", "trajectory_planning", "launch_window_calc"],
-      "waters:tools": ["nasa:spice-kernel-de440", "nasa:spice-kernel-lunar", "waters:orekit"],
-      "waters:protocols": ["waters:hivemind-military"]
+      "@id": "lunar:Earth",
+      "@type": "lunar:CelestialBody",
+      "skos:prefLabel": "Земля / Earth",
+      "lunar:hasRegion": ["lunar:AtacamaDesert"]
+    },
+
+    {
+      "@id": "lunar:Region",
+      "@type": "owl:Class",
+      "rdfs:comment": "Регион на поверхности небесного тела"
     },
     {
-      "@id": "waters:geologist-v1",
-      "@type": "waters:Agent",
-      "rdfs:label": "Geologist Agent v1",
-      "waters:agent_class": "geologist",
-      "waters:capabilities": ["soil_analysis", "mineral_classification", "drilling_operations"],
-      "waters:tools": ["waters:usgs-maps", "waters:relab-spectra", "waters:spectrometer"],
-      "waters:protocols": ["waters:hivemind-scientific"]
+      "@id": "lunar:SouthPole",
+      "@type": "lunar:Region",
+      "geo:lat": -90,
+      "geo:long": 0,
+      "lunar:hasCrater": ["lunar:ShackletonCrater", "lunar:ShoemakerCrater", "lunar:FaustiniCrater"]
     },
     {
-      "@id": "waters:drone-operator-v1",
-      "@type": "waters:Agent",
-      "rdfs:label": "Drone Operator Agent v1",
-      "waters:agent_class": "operator",
-      "waters:capabilities": ["telemetry_monitoring", "flight_control", "dtn_communication"],
-      "waters:tools": ["waters:dtn-simulator", "waters:rtk-gps", "waters:kafka-telemetry"],
-      "waters:protocols": ["waters:hivemind-military", "waters:hivemind-corporate"]
+      "@id": "lunar:AtacamaDesert",
+      "@type": "lunar:Region",
+      "geo:lat": -24,
+      "geo:long": -69,
+      "rdfs:comment": "Полигон для земной миссии — аналог Луны"
+    },
+
+    {
+      "@id": "lunar:Crater",
+      "@type": "owl:Class",
+      "rdfs:comment": "Кратер на поверхности небесного тела",
+      "subClassOf": ["lunar:GeologicalFeature"]
     },
     {
-      "@id": "waters:spectroscopist-v1",
-      "@type": "waters:Agent",
-      "rdfs:label": "Spectroscopist Agent v1",
-      "waters:agent_class": "spectroscopist",
-      "waters:capabilities": ["spectral_analysis", "mineral_mapping", "chemical_composition"],
-      "waters:tools": ["waters:ecostress", "waters:hypex", "waters:libs"],
-      "waters:protocols": ["waters:hivemind-scientific"]
+      "@id": "lunar:ShackletonCrater",
+      "@type": "lunar:Crater",
+      "skos:prefLabel": "Шеклтон / Shackleton",
+      "lunar:diameter_km": 21,
+      "lunar:depth_km": 4.2,
+      "lunar:isPSR": true,
+      "lunar:waterIceProbability": "high"
     },
     {
-      "@id": "waters:hivemind-military",
-      "@type": "waters:HiveMindProtocol",
-      "rdfs:label": "HiveMind Military Model",
-      "waters:flow": "order(III) -> execute(I) -> report(I->III)",
-      "waters:usage": "critical_missions, emergencies, military_ops"
+      "@id": "lunar:ShoemakerCrater",
+      "@type": "lunar:Crater",
+      "lunar:diameter_km": 51,
+      "lunar:isPSR": true,
+      "lunar:waterIceProbability": "medium"
     },
     {
-      "@id": "waters:hivemind-scientific",
-      "@type": "waters:HiveMindProtocol",
-      "rdfs:label": "HiveMind Scientific Model",
-      "waters:flow": "hypothesis(III) -> data(I) -> discussion(II) -> consensus(III)",
-      "waters:usage": "geological_research, mineral_discovery"
+      "@id": "lunar:FaustiniCrater",
+      "@type": "lunar:Crater",
+      "lunar:diameter_km": 42,
+      "lunar:isPSR": true,
+      "lunar:waterIceProbability": "medium"
+    },
+
+    {
+      "@id": "lunar:GeologicalFeature",
+      "@type": "owl:Class",
+      "rdfs:comment": "Геологическая структура: кратер, разлом, море, купол"
     },
     {
-      "@id": "waters:hivemind-corporate",
-      "@type": "waters:HiveMindProtocol",
-      "rdfs:label": "HiveMind Corporate Model",
-      "waters:flow": "tender(II) -> bid(I) -> contract(II) -> execution(I) -> profit",
-      "waters:usage": "resource_allocation, logistics"
+      "@id": "lunar:Mineral",
+      "@type": "owl:Class",
+      "rdfs:comment": "Минерал или тип породы"
     },
     {
-      "@id": "nasa:spice",
-      "@type": "schema:Dataset",
-      "rdfs:label": "NASA SPICE Kernels",
-      "schema:provider": "NASA NAIF",
-      "waters:required_kernels": ["de440.bsp", "lunar.bsp", "earth_000101_250104.bpc"],
-      "waters:update_frequency": "daily"
+      "@id": "lunar:WaterIce",
+      "@type": "lunar:Mineral",
+      "skos:prefLabel": "Водяной лёд / Water Ice",
+      "lunar:formula": "H₂O",
+      "lunar:density_g_cm3": 0.92
     },
     {
-      "@id": "cnsa:change-7",
-      "@type": "schema:Dataset",
-      "rdfs:label": "CNSA Chang'e-7 Data",
-      "schema:provider": "CNSA SpaceMind",
-      "waters:data_types": ["orbital_radar", "spectral_imaging", "thermal_mapping"],
-      "waters:status": "pending_access"
+      "@id": "lunar:Regolith",
+      "@type": "lunar:Mineral",
+      "skos:prefLabel": "Реголит / Regolith",
+      "lunar:composition": "silicate_dust"
+    },
+
+    {
+      "@id": "lunar:Mission",
+      "@type": "owl:Class",
+      "rdfs:comment": "Миссия платформы WATERS"
+    },
+    {
+      "@id": "lunar:DeimaSearchWater",
+      "@type": "lunar:Mission",
+      "skos:prefLabel": "Deima — Поиск воды на Луне",
+      "mission:hasObjective": "Обнаружение водяного льда в PSR южного полюса Луны",
+      "mission:target": "lunar:ShackletonCrater",
+      "mission:status": "planning",
+      "mission:usesAgent": ["lunar:LunarGeologist", "lunar:LunarNavigator", "lunar:LunarDroneOperator", "lunar:LunarSpectroscopist"]
+    },
+    {
+      "@id": "lunar:MeteoriteSearchEarth",
+      "@type": "lunar:Mission",
+      "skos:prefLabel": "Поиск метеоритов и воды на Земле",
+      "mission:hasObjective": "Отработка технологий для лунной миссии",
+      "mission:target": "lunar:AtacamaDesert",
+      "mission:status": "design",
+      "mission:usesAgent": ["lunar:EarthNavigator", "lunar:EarthGeologist", "lunar:EarthDroneOperator", "lunar:EarthSpectroscopist"]
+    },
+
+    {
+      "@id": "lunar:Agent",
+      "@type": "owl:Class",
+      "rdfs:comment": "Автономный агент (пирожок) платформы WATERS"
+    },
+    {
+      "@id": "lunar:LunarGeologist",
+      "@type": "lunar:Agent",
+      "lunar:role": "Анализ грунта / Soil Analysis",
+      "lunar:level": "I (Network)",
+      "lunar:implements": "ReAct",
+      "lunar:hasCapability": ["lunar:SoilAnalysis", "lunar:MineralClassification", "lunar:DrillingOperations", "lunar:TerrainAnalysis"],
+      "lunar:usesTool": ["lunar:USGSLunarMapViewer", "lunar:RELABLibrary", "lunar:LIBSDriver", "lunar:LightRAGConnector", "lunar:ChromaDBRetriever"]
+    },
+    {
+      "@id": "lunar:LunarNavigator",
+      "@type": "lunar:Agent",
+      "lunar:role": "Орбитальная механика / Orbital Mechanics",
+      "lunar:level": "I (Network)",
+      "lunar:implements": "SPICE + Orekit",
+      "lunar:hasCapability": ["lunar:OrbitCalculation", "lunar:TrajectoryPlanning", "lunar:LaunchWindowAnalysis", "lunar:SPICEIntegration"],
+      "lunar:usesTool": ["lunar:SPICEToolkit", "lunar:Orekit", "lunar:GMAT"]
+    },
+    {
+      "@id": "lunar:LunarDroneOperator",
+      "@type": "lunar:Agent",
+      "lunar:role": "Телеметрия и управление дронами",
+      "lunar:level": "I (Network)",
+      "lunar:hasCapability": ["lunar:FlightControl", "lunar:TelemetryMonitoring", "lunar:AutonomousNavigation", "lunar:DTNProtocol"]
+    },
+    {
+      "@id": "lunar:LunarSpectroscopist",
+      "@type": "lunar:Agent",
+      "lunar:role": "Спектральный анализ / Spectral Analysis",
+      "lunar:level": "I (Network)",
+      "lunar:hasCapability": ["lunar:SpectralClassification", "lunar:MineralIdentification", "lunar:AtmosphericCorrection"],
+      "lunar:usesTool": ["lunar:ECOSTRESS", "lunar:HYPEX", "lunar:LIBSDriver"]
+    },
+
+    {
+      "@id": "lunar:Capability",
+      "@type": "owl:Class",
+      "rdfs:comment": "Способность агента"
+    },
+    {
+      "@id": "lunar:SoilAnalysis",
+      "@type": "lunar:Capability",
+      "lunar:inputs": ["drill_samples", "spectrometer_data"],
+      "lunar:outputs": ["mineral_report", "water_ice_estimation"]
+    },
+    {
+      "@id": "lunar:MineralClassification",
+      "@type": "lunar:Capability",
+      "lunar:inputs": ["spectra", "usgs_maps"],
+      "lunar:outputs": ["mineral_map", "anomaly_detection"]
+    },
+    {
+      "@id": "lunar:DrillingOperations",
+      "@type": "lunar:Capability",
+      "lunar:inputs": ["terrain_model", "drill_specs"],
+      "lunar:outputs": ["drill_plan", "sample_log"]
+    },
+    {
+      "@id": "lunar:TerrainAnalysis",
+      "@type": "lunar:Capability",
+      "lunar:inputs": ["lro_nac_images", "slope_data"],
+      "lunar:outputs": ["terrain_classification", "hazard_map"]
+    },
+    {
+      "@id": "lunar:OrbitCalculation",
+      "@type": "lunar:Capability",
+      "lunar:inputs": ["spice_kernels", "target_coordinates"],
+      "lunar:outputs": ["orbital_elements", "dvn_delta_v"]
+    },
+    {
+      "@id": "lunar:SpectralClassification",
+      "@type": "lunar:Capability",
+      "lunar:inputs": ["reflectance_spectra", "spectral_library"],
+      "lunar:outputs": ["mineral_id", "abundance_estimate"]
+    },
+
+    {
+      "@id": "lunar:Tool",
+      "@type": "owl:Class",
+      "rdfs:comment": "Инструмент, используемый агентом"
+    },
+    {
+      "@id": "lunar:USGSLunarMapViewer",
+      "@type": "lunar:Tool",
+      "lunar:type": "api",
+      "lunar:endpoint": "https://astrogeology.usgs.gov/maps"
+    },
+    {
+      "@id": "lunar:RELABLibrary",
+      "@type": "lunar:Tool",
+      "lunar:type": "api",
+      "lunar:endpoint": "https://sites.brown.edu/relab/"
+    },
+    {
+      "@id": "lunar:LIBSDriver",
+      "@type": "lunar:Tool",
+      "lunar:type": "driver",
+      "lunar:protocol": "serial"
+    },
+    {
+      "@id": "lunar:LightRAGConnector",
+      "@type": "lunar:Tool",
+      "lunar:type": "mcp",
+      "lunar:command": "memory_graph_query"
+    },
+    {
+      "@id": "lunar:ChromaDBRetriever",
+      "@type": "lunar:Tool",
+      "lunar:type": "mcp",
+      "lunar:command": "memory_vector_search"
+    },
+    {
+      "@id": "lunar:SPICEToolkit",
+      "@type": "lunar:Tool",
+      "lunar:type": "library",
+      "lunar:kernels": ["de440.bsp", "lunar.bsp", "moon_pa_de440_200730.bpc"]
+    },
+    {
+      "@id": "lunar:ECOSTRESS",
+      "@type": "lunar:Tool",
+      "lunar:type": "api",
+      "lunar:endpoint": "https://ecostress.jpl.nasa.gov/"
+    },
+    {
+      "@id": "lunar:HYPEX",
+      "@type": "lunar:Tool",
+      "lunar:type": "library",
+      "lunar:format": "ENVI/GeoTIFF"
+    },
+
+    {
+      "@id": "lunar:EarthAgent",
+      "@type": "lunar:Agent",
+      "lunar:environment": "Earth",
+      "lunar:hasGPS": true,
+      "lunar:communicationDelay_ms": 50
+    },
+    {
+      "@id": "lunar:EarthNavigator",
+      "@type": "lunar:EarthAgent",
+      "lunar:role": "Орбитальная механика Земли",
+      "lunar:usesTool": ["lunar:SPICEToolkit"]
+    },
+    {
+      "@id": "lunar:EarthGeologist",
+      "@type": "lunar:EarthAgent",
+      "lunar:role": "Анализ грунта Земли",
+      "lunar:hasCapability": ["lunar:SoilAnalysis", "lunar:MineralClassification"]
+    },
+    {
+      "@id": "lunar:EarthDroneOperator",
+      "@type": "lunar:EarthAgent",
+      "lunar:role": "Управление земными дронами"
+    },
+    {
+      "@id": "lunar:EarthSpectroscopist",
+      "@type": "lunar:EarthAgent",
+      "lunar:role": "Спектральный анализ Земли"
+    },
+
+    {
+      "@id": "lunar:Meteorite",
+      "@type": "owl:Class",
+      "rdfs:comment": "Метеорит — объект поиска в земной миссии",
+      "lunar:mass_min_kg": 0.1,
+      "lunar:composition_types": ["chondrite", "achondrite", "iron", "stony-iron"]
+    },
+    {
+      "@id": "lunar:Groundwater",
+      "@type": "owl:Class",
+      "rdfs:comment": "Подземная вода — объект поиска в земной миссии"
+    },
+
+    {
+      "@id": "lunar:DataStream",
+      "@type": "owl:Class",
+      "rdfs:comment": "Поток данных между компонентами MCC"
+    },
+    {
+      "@id": "lunar:TelemetryRaw",
+      "@type": "lunar:DataStream",
+      "mcc:topic": "telemetry.raw.v1",
+      "mcc:format": "Avro / JSON",
+      "mcc:from": "Drone",
+      "mcc:to": "Kafka"
+    },
+    {
+      "@id": "lunar:TelemetryProcessed",
+      "@type": "lunar:DataStream",
+      "mcc:topic": "telemetry.processed.v1",
+      "mcc:format": "JSON",
+      "mcc:from": "Kafka",
+      "mcc:to": "TimescaleDB"
+    },
+    {
+      "@id": "lunar:GeologySamples",
+      "@type": "lunar:DataStream",
+      "mcc:topic": "geology.samples.v1",
+      "mcc:format": "JSON",
+      "mcc:from": "Geologist",
+      "mcc:to": "Neo4j / LightRAG"
+    },
+    {
+      "@id": "lunar:OrbitsCalculated",
+      "@type": "lunar:DataStream",
+      "mcc:topic": "orbits.calculated.v1",
+      "mcc:format": "JSON",
+      "mcc:from": "Navigator",
+      "mcc:to": "DroneOperator / Neo4j"
+    },
+
+    {
+      "@id": "lunar:HiveMindModel",
+      "@type": "owl:Class",
+      "rdfs:comment": "Модель координации HiveMind"
+    },
+    {
+      "@id": "lunar:MilitaryModel",
+      "@type": "lunar:HiveMindModel",
+      "mcc:route": "III → I → report",
+      "mcc:trigger": "авария, критический отказ"
+    },
+    {
+      "@id": "lunar:CorporateModel",
+      "@type": "lunar:HiveMindModel",
+      "mcc:route": "II → I → II → I",
+      "mcc:trigger": "распределение ресурсов, тендер"
+    },
+    {
+      "@id": "lunar:ScientificModel",
+      "@type": "lunar:HiveMindModel",
+      "mcc:route": "III → I → II → III",
+      "mcc:trigger": "открытие, спор о данных"
+    },
+    {
+      "@id": "lunar:DemocraticModel",
+      "@type": "lunar:HiveMindModel",
+      "mcc:route": "II → I → II → III",
+      "mcc:trigger": "смена приоритетов"
+    },
+    {
+      "@id": "lunar:MonarchicModel",
+      "@type": "lunar:HiveMindModel",
+      "mcc:route": "IV → III → I → III → IV",
+      "mcc:trigger": "сакральный завет, смена Ясы"
     }
   ]
 }

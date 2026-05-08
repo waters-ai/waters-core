@@ -42,11 +42,6 @@
     "hostname": "0.0.0.0",
     "mdns": true
   },
-  "skills": {
-    "paths": [
-      "./skills"
-    ]
-  },
   "permission": {
     "edit": "allow",
     "bash": "allow",
@@ -60,21 +55,12 @@
   "mcp": {
     "filesystem": {
       "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/home/ubuntu/WATERS/repos/waters-core"
-      ],
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/ubuntu/WATERS/repos/waters-core"],
       "enabled": true
     },
     "github": {
       "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "@modelcontextprotocol/server-github"
-      ],
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
       "enabled": true,
       "environment": {
         "GITHUB_TOKEN": "{env:GITHUB_TOKEN}"
@@ -82,18 +68,12 @@
     },
     "memory": {
       "type": "local",
-      "command": [
-        "python3",
-        "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_memory_bridge.py"
-      ],
+      "command": ["python3", "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_memory_bridge.py"],
       "enabled": true
     },
     "space": {
       "type": "local",
-      "command": [
-        "python3",
-        "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_space_bridge.py"
-      ],
+      "command": ["python3", "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_space_bridge.py"],
       "enabled": true,
       "timeout": 60000
     }
@@ -102,7 +82,7 @@
     "architect": {
       "description": "Верховный Архитектор WATERS — онтологии, спецификации агентов, роадмапы",
       "mode": "subagent",
-      "prompt": "{file:./architect_system.ptxt}",
+      "prompt": "{file:./prompts/architect_system.md}",
       "color": "#3498db",
       "permission": {
         "edit": "allow",
@@ -117,7 +97,7 @@
     "constructor": {
       "description": "Конструктор Сети WATERS — Docker, Kafka, Redis, инфраструктура, DTN",
       "mode": "subagent",
-      "prompt": "{file:./constructor_system.ptxt}",
+      "prompt": "{file:./prompts/constructor_system.md}",
       "color": "#2ecc71",
       "permission": {
         "edit": "allow",
@@ -132,7 +112,7 @@
     "integrator": {
       "description": "Интегратор Знаний WATERS — внешние данные, MCP-адаптеры, Brave Search",
       "mode": "subagent",
-      "prompt": "{file:./integrator_system.ptxt}",
+      "prompt": "{file:./prompts/integrator_system.md}",
       "color": "#e67e22",
       "permission": {
         "edit": "allow",
@@ -147,7 +127,7 @@
     "director": {
       "description": "Директор по Смыслу WATERS — миссия, архетипы, интерпретация запросов",
       "mode": "subagent",
-      "prompt": "{file:./meaning_director.ptxt}",
+      "prompt": "{file:./prompts/meaning_director.md}",
       "color": "#e74c3c",
       "permission": {
         "edit": "deny",
@@ -162,7 +142,7 @@
     "keeper": {
       "description": "Хранитель Протокола WATERS — безопасность, аудит, эволюция протоколов",
       "mode": "subagent",
-      "prompt": "{file:./protocol_keeper.ptxt}",
+      "prompt": "{file:./prompts/protocol_keeper.md}",
       "color": "#9b59b6",
       "permission": {
         "edit": "ask",
@@ -192,7 +172,7 @@
     "lawkeeper": {
       "description": "Законодатель WATERS — Яса, кодекс, комплаенс, предвидение",
       "mode": "subagent",
-      "prompt": "{file:./lawkeeper.ptxt}",
+      "prompt": "{file:./prompts/lawkeeper.md}",
       "color": "#1abc9c",
       "permission": {
         "edit": "deny",
