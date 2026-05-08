@@ -46,6 +46,9 @@ CHROMA_PORT = int(os.environ.get("CHROMA_PORT", "8000"))
 KAFKA_BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP", "localhost:9092")
 LIGHTRAG_DIR = os.environ.get("LIGHTRAG_DIR", "/data/lightrag")
 
+# LightRAG queue (Redis)
+LIGHTRAG_QUEUE_KEY = "lightrag:queue"
+
 # ── Клиенты (lazy init) ────────────────────────
 
 _chroma = None
@@ -98,8 +101,7 @@ def get_lightrag():
                 llm_model_kwargs={},
                 embedding_func=ollama_embed,
             )
-            asyncio.run(_lightrag.initialize_storages())
-            logger.info(f"LightRAG initialized: {LIGHTRAG_DIR}")
+            logger.info(f"LightRAG instance created: {LIGHTRAG_DIR}")
         except Exception as e:
             logger.warning(f"LightRAG unavailable: {e}")
             _lightrag = None
@@ -221,17 +223,35 @@ def tool_graph_insert(args):
     text = args.get("text", "")
     source = args.get("source", "agent")
 
-    rag = get_lightrag()
-    if not rag:
-        return {"error": "LightRAG not available"}
+    r = get_redis()
+    if not r:
+        return {"error": "Redis not available — cannot queue LightRAG insert"}
 
     try:
-        rag.insert(text)
-        logger.info(f"Inserted into LightRAG ({len(text)} chars from {source})")
-        return {"status": "inserted", "chars": len(text)}
+        entry = {
+            "text": text,
+            "source": source,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+        r.rpush(LIGHTRAG_QUEUE_KEY, json.dumps(entry, ensure_ascii=False))
+        qlen = r.llen(LIGHTRAG_QUEUE_KEY)
+        logger.info(f"Queued for LightRAG ({len(text)} chars from {source}), queue={qlen}")
+        return {"status": "queued", "chars": len(text), "queue_size": qlen}
     except Exception as e:
-        logger.error(f"LightRAG insert error: {e}")
+        logger.error(f"LightRAG queue error: {e}")
         return {"error": str(e)}
+
+
+def tool_graph_queue_status(args):
+    r = get_redis()
+    if not r:
+        return {"error": "Redis not available", "queue_size": 0}
+
+    try:
+        qlen = r.llen(LIGHTRAG_QUEUE_KEY)
+        return {"queue_size": qlen, "queue_key": LIGHTRAG_QUEUE_KEY}
+    except Exception as e:
+        return {"error": str(e), "queue_size": 0}
 
 
 def tool_cache_get(args):
@@ -606,7 +626,7 @@ TOOLS = {
     },
     "memory_graph_insert": {
         "fn": tool_graph_insert,
-        "description": "Вставить текст в графовую БД LightRAG",
+        "description": "Поставить текст в очередь на запись в LightRAG (фоновый writer обработает)",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -614,6 +634,14 @@ TOOLS = {
                 "source": {"type": "string", "default": "agent"},
             },
             "required": ["text"],
+        },
+    },
+    "memory_graph_queue_status": {
+        "fn": tool_graph_queue_status,
+        "description": "Статус очереди на запись в LightRAG",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
         },
     },
     "memory_cache_get": {
@@ -830,7 +858,7 @@ def main():
     logger.info(f"ChromaDB: {CHROMA_HOST}:{CHROMA_PORT}")
     logger.info(f"Kafka: {KAFKA_BOOTSTRAP}")
     logger.info(f"LightRAG: {LIGHTRAG_DIR}")
-    logger.info(f"Tools loaded: {len(TOOLS)}")
+    logger.info(f"Tools loaded: {len(TOOLS)} (LightRAG writes queued via Redis, sync by lightrag_writer)")
     logger.info("Ready on stdin/stdout (MCP stdio protocol)")
 
     for line in sys.stdin:
