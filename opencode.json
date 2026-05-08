@@ -19,16 +19,22 @@
         "chunkTimeout": 120000
       },
       "models": {
-        "qwen2.5:14b": {
-          "name": "Qwen 2.5 14B"
+        "qwen2.5:3b": {
+          "name": "Qwen 2.5 3B"
         },
         "qwen2.5:7b": {
-          "name": "Qwen 2.5 7B"
+          "name": "Qwen 2.5 7B (CPU)",
+          "options": {
+            "keep_alive": "10m"
+          }
+        },
+        "qwen2.5:14b": {
+          "name": "Qwen 2.5 14B"
         }
       }
     }
   },
-  "model": "ollama/qwen2.5:14b",
+  "model": "ollama/qwen2.5:3b",
   "formatter": {
     "prettier": {
       "disabled": false

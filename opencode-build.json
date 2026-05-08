@@ -1,6 +1,18 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
+    "ollama-3b": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama 3B (237)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1",
+        "timeout": false,
+        "chunkTimeout": 600000
+      },
+      "models": {
+        "qwen2.5:3b": { "name": "Qwen 2.5 3B" }
+      }
+    },
     "ollama-7b": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "Ollama 7B (237)",
@@ -26,7 +38,7 @@
       }
     }
   },
-  "model": "ollama-14b/qwen2.5:14b",
+  "model": "ollama-3b/qwen2.5:3b",
   "formatter": {
     "prettier": { "disabled": false },
     "ruff": { "disabled": false }
@@ -74,7 +86,7 @@
     "constructor": {
       "description": "Конструктор Сети WATERS — Docker, Kafka, Redis, инфраструктура, DTN",
       "mode": "subagent",
-      "model": {"modelID": "qwen2.5:14b", "providerID": "ollama-14b"},
+      "model": {"modelID": "qwen2.5:3b", "providerID": "ollama-3b"},
       "prompt": "{file:./agents/constructor_AGENTS.md}",
       "color": "#2ecc71",
       "permission": {
@@ -90,7 +102,7 @@
     "architect": {
       "description": "Верховный Архитектор WATERS — онтологии, спецификации, роадмапы",
       "mode": "subagent",
-      "model": {"modelID": "qwen2.5:7b", "providerID": "ollama-7b"},
+      "model": {"modelID": "qwen2.5:3b", "providerID": "ollama-3b"},
       "prompt": "{file:./agents/architect_AGENTS.md}",
       "color": "#3498db",
       "permission": {
@@ -106,7 +118,7 @@
     "integrator": {
       "description": "Интегратор Знаний WATERS — внешние данные, MCP-адаптеры, Brave Search",
       "mode": "subagent",
-      "model": {"modelID": "qwen2.5:7b", "providerID": "ollama-7b"},
+      "model": {"modelID": "qwen2.5:3b", "providerID": "ollama-3b"},
       "prompt": "{file:./agents/integrator_AGENTS.md}",
       "color": "#e67e22",
       "permission": {

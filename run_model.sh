@@ -5,10 +5,11 @@
 # 4 предустановленных набора агентов (Троицы) и одиночных агентов.
 #
 # Синтаксис:
-#   ./run_model.sh -m <7|14|4> -s <arch|build|meaning|safe>   # набор агентов
-#   ./run_model.sh -m <7|14|4> -a <agent_name>                 # одиночный агент
+#   ./run_model.sh -m <3|7|14|4> -s <arch|build|meaning|safe>   # набор агентов
+#   ./run_model.sh -m <3|7|14|4> -a <agent_name>                 # одиночный агент
 #
 # Модели (-m):
+#   3  — Ollama Qwen 2.5 3B (через SSH-туннель на 237:11434)
 #   7  — Ollama Qwen 2.5 7B (через SSH-туннель на 237:11434)
 #   14 — Ollama Qwen 2.5 14B (через SSH-туннель на 237:11435)
 #   4  — DeepSeek V4 Flash (через API, ключ из .env)
@@ -56,10 +57,11 @@ usage() {
     echo "  $0 -m ${YELLOW}<7|14|4>${NC} -s ${YELLOW}<arch|build|meaning|safe>${NC}   # набор агентов"
     echo "  $0 -m ${YELLOW}<7|14|4>${NC} -a ${YELLOW}<agent>${NC}                       # одиночный агент"
     echo ""
-    echo -e "${GREEN}Модели${NC} (-m):"
-    echo "  7  — Ollama Qwen 2.5 7B   (:11434, туннель → 237)"
-    echo "  14 — Ollama Qwen 2.5 14B  (:11435, туннель → 237)"
-    echo "  4  — DeepSeek V4 Flash    (API, ключ из .env)"
+echo -e "${GREEN}Модели${NC} (-m):"
+echo "  3  — Ollama Qwen 2.5 3B   (:11434, туннель → 237)"
+echo "  7  — Ollama Qwen 2.5 7B   (:11434, туннель → 237)"
+echo "  14 — Ollama Qwen 2.5 14B  (:11435, туннель → 237)"
+echo "  4  — DeepSeek V4 Flash    (API, ключ из .env)"
     echo ""
     echo -e "${GREEN}Наборы агентов${NC} (-s):"
     echo "  arch    — architect(14b) + constructor(14b) + integrator(14b)"
@@ -93,9 +95,10 @@ if [ -n "$SET" ] && [ -n "$AGENT" ]; then
     echo -e "${RED}Ошибка:${NC} укажите только -s ИЛИ -a"; usage
 fi
 
-case "$MODE" in 7|14|4) ;; *) echo -e "${RED}Ошибка:${NC} модель '$MODE' не поддерживается"; usage ;; esac
+case "$MODE" in 3|7|14|4) ;; *) echo -e "${RED}Ошибка:${NC} модель '$MODE' не поддерживается"; usage ;; esac
 
 case "$MODE" in
+    3)  MODEL_STR="ollama-3b/qwen2.5:3b" ;;
     7)  MODEL_STR="ollama-7b/qwen2.5:7b" ;;
     14) MODEL_STR="ollama-14b/qwen2.5:14b" ;;
     4)  MODEL_STR="deepseek/deepseek-v4-flash" ;;
@@ -125,8 +128,11 @@ if [ -f "$REPO_DIR/.env" ]; then
 fi
 
 # ─── Проверка SSH-туннелей ────────────────────────────────────────────────────
-if [ "$MODE" = "7" ] || [ "$MODE" = "14" ]; then
-    PORT=$([ "$MODE" = "7" ] && echo "11434" || echo "11435")
+if [ "$MODE" = "3" ] || [ "$MODE" = "7" ] || [ "$MODE" = "14" ]; then
+    case "$MODE" in
+        3|7) PORT="11434" ;;
+        14)  PORT="11435" ;;
+    esac
     if ! curl -s --max-time 2 "http://localhost:$PORT/api/tags" >/dev/null 2>&1; then
         echo -e "${YELLOW}Туннель на :$PORT не отвечает, запускаю...${NC}"
         ssh -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes \

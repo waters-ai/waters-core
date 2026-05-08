@@ -1,20 +1,26 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
-    "ollama-14b": {
+    "ollama-3b": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Ollama 14B (237)",
-      "options": { "baseURL": "http://localhost:11435/v1", "timeout": false, "chunkTimeout": 600000 },
-      "models": { "qwen2.5:14b": { "name": "Qwen 2.5 14B" } }
+      "name": "Ollama 3B (237)",
+      "options": { "baseURL": "http://localhost:11434/v1", "timeout": false, "chunkTimeout": 600000 },
+      "models": { "qwen2.5:3b": { "name": "Qwen 2.5 3B" } }
     },
     "ollama-7b": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "Ollama 7B (237)",
       "options": { "baseURL": "http://localhost:11434/v1", "timeout": false, "chunkTimeout": 600000 },
       "models": { "qwen2.5:7b": { "name": "Qwen 2.5 7B" } }
+    },
+    "ollama-14b": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama 14B (237)",
+      "options": { "baseURL": "http://localhost:11435/v1", "timeout": false, "chunkTimeout": 600000 },
+      "models": { "qwen2.5:14b": { "name": "Qwen 2.5 14B" } }
     }
   },
-  "model": "ollama-14b/qwen2.5:14b",
+  "model": "ollama-3b/qwen2.5:3b",
   "formatter": {
     "prettier": { "disabled": false },
     "ruff": { "disabled": false }

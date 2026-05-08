@@ -1,6 +1,18 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
+    "ollama-3b": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama 3B (237)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1",
+        "timeout": false,
+        "chunkTimeout": 600000
+      },
+      "models": {
+        "qwen2.5:3b": { "name": "Qwen 2.5 3B" }
+      }
+    },
     "ollama-7b": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "Ollama 7B (237)",
@@ -26,7 +38,7 @@
       }
     }
   },
-  "model": "ollama-14b/qwen2.5:14b",
+  "model": "ollama-3b/qwen2.5:3b",
   "formatter": {
     "prettier": { "disabled": false },
     "ruff": { "disabled": false }
@@ -74,7 +86,7 @@
     "lawkeeper": {
       "description": "Законодатель WATERS — Яса, кодекс, комплаенс, предвидение",
       "mode": "subagent",
-      "model": {"modelID": "qwen2.5:14b", "providerID": "ollama-14b"},
+      "model": {"modelID": "qwen2.5:3b", "providerID": "ollama-3b"},
       "prompt": "{file:./agents/lawkeeper_AGENTS.md}",
       "color": "#1abc9c",
       "permission": {
@@ -90,7 +102,7 @@
     "director": {
       "description": "Директор по Смыслу WATERS — миссия, архетипы, интерпретация запросов",
       "mode": "subagent",
-      "model": {"modelID": "qwen2.5:7b", "providerID": "ollama-7b"},
+      "model": {"modelID": "qwen2.5:3b", "providerID": "ollama-3b"},
       "prompt": "{file:./agents/director_AGENTS.md}",
       "color": "#e74c3c",
       "permission": {
@@ -106,7 +118,7 @@
     "keeper": {
       "description": "Хранитель Протокола WATERS — безопасность, аудит, эволюция протоколов",
       "mode": "subagent",
-      "model": {"modelID": "qwen2.5:7b", "providerID": "ollama-7b"},
+      "model": {"modelID": "qwen2.5:3b", "providerID": "ollama-3b"},
       "prompt": "{file:./agents/keeper_AGENTS.md}",
       "color": "#9b59b6",
       "permission": {
