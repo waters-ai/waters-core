@@ -222,12 +222,37 @@ tmux kill-session -t waters
 
 Для полной автоматизации и удалённого управления без TUI.
 
-### Запуск
+### Скрипт запуска: `scripts/opencode_serve.sh`
+
+Запускает `opencode serve` в tmux-сессии с автогенерацией пароля.
 
 ```bash
-# Headless-сервер на порту 4096
-opencode serve --port 4096 --hostname 0.0.0.0
+# Запуск сервера
+./scripts/opencode_serve.sh start
+
+# Статус
+./scripts/opencode_serve.sh status
+
+# Остановка
+./scripts/opencode_serve.sh stop
+
+# Получить пароль
+./scripts/opencode_serve.sh password
+
+# Получить URL с паролем
+./scripts/opencode_serve.sh url
 ```
+
+**Параметры** (через переменные окружения):
+
+| Переменная | По умолч. | Назначение |
+|------------|-----------|------------|
+| `OPENCODE_SERVE_PORT` | `4096` | Порт сервера |
+| `OPENCODE_SERVE_HOST` | `0.0.0.0` | Хост |
+| `OPENCODE_SERVER_PASSWORD` | автогенерация | Пароль basic auth |
+| `LOG_DIR` | `logs/` | Директория логов |
+
+При первом запуске пароль генерируется через `openssl rand` и сохраняется в `.serve_password` (chmod 600).
 
 ### REST API
 
@@ -237,58 +262,87 @@ OpenCode serve открывает HTTP API (OpenAPI 3.1 spec: `http://host:4096/
 |-------|------|------------|
 | `GET` | `/session` | Список сессий |
 | `POST` | `/session` | Создать сессию |
+| `POST` | `/session/:id/init` | Инициализировать (AGENTS.md) |
 | `POST` | `/session/:id/message` | Отправить сообщение (синхронно) |
 | `POST` | `/session/:id/prompt_async` | Отправить сообщение (асинхронно) |
 | `GET` | `/session/:id` | Статус сессии |
+| `GET` | `/session/:id/message` | Сообщения сессии |
 | `POST` | `/session/:id/abort` | Прервать сессию |
 
-### Пример: CEO отвечает агенту через curl
+### CEO CLI: `scripts/ceo.sh`
+
+Удобная обёртка над REST API для ежедневного использования:
+
+```bash
+# Быстрый старт
+./scripts/opencode_serve.sh start
+export OPENCODE_SERVER=http://opencode:$(./scripts/opencode_serve.sh password)@localhost:4096
+
+# Список сессий
+./scripts/ceo.sh sessions
+
+# Создать сессию для агента
+./scripts/ceo.sh create constructor
+
+# Инициализировать (создать AGENTS.md в контексте проекта)
+./scripts/ceo.sh init <session-id>
+
+# Отправить запрос агенту (синхронно — ждать ответ)
+./scripts/ceo.sh msg <session-id> "Проанализируй текущую топологию Docker"
+
+# Отправить запрос агенту (асинхронно — не ждать)
+./scripts/ceo.sh tell <session-id> "Продолжай без меня, напиши отчёт"
+
+# Статус сессии
+./scripts/ceo.sh status <session-id>
+
+# Последние сообщения
+./scripts/ceo.sh log <session-id>
+
+# Прервать выполнение
+./scripts/ceo.sh abort <session-id>
+```
+
+**Подключение с удалённой машины:**
+
+```bash
+# На сервере: узнать URL
+URL=$(ssh root@server './scripts/opencode_serve.sh url')
+
+# На своей машине: установить переменную
+export OPENCODE_SERVER="$URL"
+
+# Использовать те же команды
+./scripts/ceo.sh sessions
+./scripts/ceo.sh msg <id> "Продолжай"
+```
+
+### Без ceo.sh: чистый curl
 
 ```bash
 # 1. Получить список сессий
-SESSIONS=$(curl -s http://localhost:4096/session)
+SESSIONS=$(curl -s -u "opencode:$(cat .serve_password)" http://localhost:4096/session)
 SESSION_ID=$(echo "$SESSIONS" | jq -r '.[0].id')
 
-# 2. Отправить ответ агенту
-curl -s -X POST "http://localhost:4096/session/$SESSION_ID/message" \
+# 2. Отправить ответ агенту (синхронно)
+curl -s -u "opencode:$(cat .serve_password)" \
+  -X POST "http://localhost:4096/session/$SESSION_ID/message" \
   -H "Content-Type: application/json" \
   -d '{
     "parts": [
       { "type": "text", "text": "Используй qwen2.5:14b для этой задачи" }
     ]
   }'
-```
 
-### Асинхронный режим
-
-CEO отправляет сообщение и отключается — агент обрабатывает в фоне:
-
-```bash
-# Отправка без ожидания ответа
-curl -s -X POST "http://localhost:4096/session/$SESSION_ID/prompt_async" \
+# 3. Асинхронный режим — не ждать ответа
+curl -s -u "opencode:$(cat .serve_password)" \
+  -X POST "http://localhost:4096/session/$SESSION_ID/prompt_async" \
   -H "Content-Type: application/json" \
   -d '{ "parts": [{ "type": "text", "text": "Продолжай без меня" }] }'
 
-# Позже проверить статус
-curl -s "http://localhost:4096/session/$SESSION_ID" | jq '.status'
-```
-
-### Защита
-
-```bash
-# Добавить basic auth
-OPENCODE_SERVER_PASSWORD="your-password" opencode serve --port 4096 --hostname 0.0.0.0
-
-# В каждом запросе:
-curl -u "opencode:your-password" http://localhost:4096/session
-```
-
-### Интеграция с tmux
-
-```bash
-# Запуск serve-сервера в tmux (24/7)
-tmux new-session -d -s waters-serve -n serve \
-  "cd /root/waters-core && OPENCODE_SERVER_PASSWORD='...' opencode serve --port 4096 --hostname 0.0.0.0 2>&1 | tee logs/serve.log"
+# 4. Позже проверить статус
+curl -s -u "opencode:$(cat .serve_password)" \
+  "http://localhost:4096/session/$SESSION_ID" | jq '.status'
 ```
 
 ---
@@ -298,7 +352,10 @@ tmux new-session -d -s waters-serve -n serve \
 | Файл | Изменение |
 |------|-----------|
 | `opencode.json` | Добавлены `timeout` и `chunkTimeout` для Ollama |
-| `scripts/opencode_tmux.sh` | **Новый** — универсальный запуск агентов в tmux |
+| `scripts/opencode_tmux.sh` | **Новый** — универсальный запуск агентов в tmux (Фаза 1) |
+| `scripts/opencode_serve.sh` | **Новый** — headless serve-сервер в tmux (Фаза 2) |
+| `scripts/ceo.sh` | **Новый** — CEO CLI для REST API (Фаза 2) |
+| `.env.carousel` | Добавлены `OPENCODE_SERVE_*` переменные |
 | `run_constructor.sh` | Добавлен флаг `--tmux` |
 | `documents/opencode_24_7_setup.md` | **Новый** — данный документ |
 
@@ -311,5 +368,10 @@ tmux new-session -d -s waters-serve -n serve \
 - [ ] `tmux attach` — CEO видит интерфейс агента
 - [ ] `Ctrl+B, D` — CEO отключается, агент продолжает работу
 - [ ] Повторный `tmux attach` — CEO снова видит актуальное состояние
-- [ ] `opencode serve` (Фаза 2) — curl-запросы обрабатываются
-- [ ] `prompt_async` — асинхронные сообщения работают
+- [ ] `scripts/opencode_serve.sh start` — сервер запускается в tmux
+- [ ] `scripts/opencode_serve.sh status` — показывает RUNNING
+- [ ] `scripts/ceo.sh sessions` — возвращает список сессий
+- [ ] `scripts/ceo.sh msg <id> "тест"` — синхронный ответ получен
+- [ ] `scripts/ceo.sh tell <id> "тест"` — асинхронное сообщение отправлено
+- [ ] `curl -u "opencode:pass" http://host:4096/session` — базовый curl работает
+- [ ] `OPENCODE_SERVER` с удалённой машины — CEO работает извне
