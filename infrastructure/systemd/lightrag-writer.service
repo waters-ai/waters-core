@@ -1,0 +1,24 @@
+[Unit]
+Description=WATERS LightRAG Writer — async queue consumer for graph memory
+Documentation=https://github.com/waters-ai/waters-core
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/WATERS/repos/waters-core
+ExecStart=/usr/bin/python3 /home/ubuntu/WATERS/repos/waters-core/scripts/lightrag_writer.py --daemon --interval 15 --batch 3
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ubuntu/WATERS/repos/waters-core/logs/lightrag_writer.log
+StandardError=append:/home/ubuntu/WATERS/repos/waters-core/logs/lightrag_writer.log
+
+Environment=REDIS_HOST=localhost
+Environment=REDIS_PORT=6379
+Environment=LIGHTRAG_DIR=/data/lightrag
+Environment=OLLAMA_HOST=localhost:11434
+
+[Install]
+WantedBy=multi-user.target
