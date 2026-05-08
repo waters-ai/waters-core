@@ -5,49 +5,43 @@
       "name": "DeepSeek (WATERS Primary)",
       "apiKey": "{env:DEEPSEEK_API_KEY}",
       "models": {
-        "deepseek-v4-flash": {
-          "name": "DeepSeek V4 Flash"
-        }
+        "deepseek-v4-flash": { "name": "DeepSeek V4 Flash" }
       }
     },
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Ollama (локальные модели WATERS)",
+      "name": "Ollama (237 via SSH Tunnel)",
       "options": {
         "baseURL": "http://localhost:11434/v1",
         "timeout": false,
         "chunkTimeout": 120000
       },
       "models": {
-        "qwen2.5:14b": {
-          "name": "Qwen 2.5 14B"
-        },
-        "qwen2.5:7b": {
-          "name": "Qwen 2.5 7B"
-        },
-        "deepseek-r1:7b": {
-          "name": "DeepSeek R1 7B"
-        }
+        "qwen2.5:14b": { "name": "Qwen 2.5 14B" },
+        "qwen2.5:7b": { "name": "Qwen 2.5 7B" }
       }
     }
   },
-  "model": "Qwen 2.5 14B",
-  "mcpServers": {
+  "model": "ollama/qwen2.5:14b",
+  "mcp": {
+    "filesystem": {
+      "type": "local",
+      "enabled": true,
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/ubuntu/WATERS/repos/waters-core"]
+    },
     "github": {
+      "type": "local",
+      "enabled": true,
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_TOKEN": "{env:GITHUB_TOKEN}"
-      }
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem",
-               "/home/ubuntu/WATERS/repos/waters-core"]
+      "env": { "GITHUB_TOKEN": "{env:GITHUB_TOKEN}" }
     },
     "memory": {
+      "type": "local",
+      "enabled": true,
       "command": "python3",
-      "args": ["scripts/mcp_memory_bridge.py"]
+      "args": ["/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_memory_bridge.py"]
     }
   }
 }

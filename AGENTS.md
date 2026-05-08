@@ -47,7 +47,7 @@
 
 | Компонент | Базовый ($100-150/мес) | Оптимальный ($200+/мес) | Опережающий ($350+/мес) |
 |-----------|------------------------|------------------------|--------------------------|
-| **Брокер** | Redpanda (1 узел) | Apache Kafka (3 узла) | Kafka Cluster (5+) |
+| **Брокер** | Apache Kafka (1 узел) | Apache Kafka (3 узла) | Kafka Cluster (5+) |
 | **Кэш** | Redis (1 экз.) | Redis Sentinel (3 экз.) | Redis Cluster (6 экз.) |
 | **Векторная БД** | ChromaDB (1 экз.) | Qdrant (1 экз., GPU) | Qdrant Cluster |
 | **Графовая БД** | LightRAG (встр.) | LightRAG + Neo4j | LightRAG + Neo4j Cluster |

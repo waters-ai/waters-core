@@ -87,7 +87,18 @@ def get_lightrag():
     if _lightrag is None:
         try:
             from lightrag import LightRAG as LR
-            _lightrag = LR(working_dir=LIGHTRAG_DIR)
+            from lightrag.llm.ollama import ollama_embed, ollama_model_complete
+
+            ollama_embed.embedding_dim = 768
+            ollama_embed.model_name = "nomic-embed-text"
+
+            _lightrag = LR(
+                working_dir=LIGHTRAG_DIR,
+                llm_model_func=ollama_model_complete,
+                llm_model_name="qwen2.5:7b",
+                llm_model_kwargs={"host": "localhost", "port": 11434},
+                embedding_func=ollama_embed,
+            )
             logger.info(f"LightRAG initialized: {LIGHTRAG_DIR}")
         except Exception as e:
             logger.warning(f"LightRAG unavailable: {e}")

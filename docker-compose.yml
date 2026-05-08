@@ -45,6 +45,7 @@ services:
       CLUSTER_ID: "waters-kafka-cluster"
     networks:
       - waters-internal
+      - waters-dmz
     healthcheck:
       test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 10s
