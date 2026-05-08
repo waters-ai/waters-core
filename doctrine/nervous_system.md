@@ -10,7 +10,7 @@
 
 ## Концепция
 
-Нервная система WATERS — это Event-Driven Architecture, построенная на Kafka (Redpanda) и Redis. Она обеспечивает: планёрки (обсуждения Гексады с повесткой, вопросами, ответами и решениями), события (всё, что происходит в платформе: рождение агента, завершение миссии, сбой), оповещения (мгновенные уведомления через Redis Pub/Sub) и конвейер решений (путь от обсуждения до задачи и контроля выполнения).
+Нервная система WATERS — это Event-Driven Architecture, построенная на Apache Kafka и Redis. Она обеспечивает: планёрки (обсуждения Гексады с повесткой, вопросами, ответами и решениями), события (всё, что происходит в платформе: рождение агента, завершение миссии, сбой), оповещения (мгновенные уведомления через Redis Pub/Sub) и конвейер решений (путь от обсуждения до задачи и контроля выполнения).
 
 ---
 
@@ -75,43 +75,41 @@ Redis используется для мгновенных уведомлени�
 
 ```bash
 # Локальный сервер
-docker exec waters-redpanda rpk topic create \
-  planners.meeting.v1 \
-  planners.questions.v1 \
-  planners.answers.v1 \
-  planners.proscons.v1 \
-  planners.presentations.v1 \
-  planners.decisions.v1 \
-  planners.interpretations.v1 \
-  tasks.assigned.v1 \
-  tasks.completed.v1 \
-  tasks.overdue.v1 \
-  events.system.v1 \
-  events.agent.v1 \
-  alerts.security.v1 \
-  alerts.mission.v1 \
-  external.requests.v1 \
-  external.responses.v1 \
-  knowledge.articles.v1 \
-  knowledge.graph.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic planners.meeting.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic planners.questions.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic planners.answers.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic planners.proscons.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic planners.presentations.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic planners.decisions.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic planners.interpretations.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic tasks.assigned.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic tasks.completed.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic tasks.overdue.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic events.system.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic events.agent.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic alerts.security.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic alerts.mission.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic external.requests.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic external.responses.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic knowledge.articles.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic knowledge.graph.v1
 
 # Новые топики (v1.0.1)
-docker exec waters-redpanda rpk topic create \
-  orders.constructor.v1 \
-  secrets.requests.v1 \
-  secrets.responses.v1 \
-  skills.proposed.v1 \
-  skills.approved.v1 \
-  skills.rejected.v1 \
-  skills.incident.v1 \
-  metrics.raw.v1 \
-  metrics.kpi.v1 \
-  security.audit.v1 \
-  oversight.compliance.v1 \
-  oversight.reports.v1 \
-  future_scans.v1 \
-  future_scans.proposals.v1 \
-  events.external_ai.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic orders.constructor.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic secrets.requests.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic secrets.responses.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic skills.proposed.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic skills.approved.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic skills.rejected.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic skills.incident.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic metrics.raw.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic metrics.kpi.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic security.audit.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic oversight.compliance.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic oversight.reports.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic future_scans.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic future_scans.proposals.v1
+docker exec waters-kafka kafka-topics.sh --bootstrap-server localhost:9092 --create --topic events.external_ai.v1
 
 Нервная система — это то, что превращает набор специалистов в единый организм.
 -

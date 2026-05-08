@@ -6,16 +6,21 @@
   "phase": "0 (Зарождение)",
   "services": {
     "broker": {
-      "name": "Redpanda",
-      "image": "redpandadata/redpanda:latest",
+      "name": "Apache Kafka (KRaft)",
+      "image": "apache/kafka:latest",
       "nodes": 1,
       "ports": ["9092:9092"],
-      "volumes": ["redpanda-data:/var/lib/redpanda/data"],
+      "volumes": ["kafka-data:/var/lib/kafka/data"],
       "environment": {
-        "REDPANDA_BROKER_ID": "0",
-        "REDPANDA_ADVERTISED_KAFKA_API_ADDRESSES": "localhost:9092"
+        "KAFKA_PROCESS_ROLES": "broker,controller",
+        "KAFKA_NODE_ID": "1",
+        "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@localhost:9093",
+        "KAFKA_LISTENERS": "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093",
+        "KAFKA_ADVERTISED_LISTENERS": "PLAINTEXT://localhost:9092",
+        "KAFKA_AUTO_CREATE_TOPICS_ENABLE": "true",
+        "CLUSTER_ID": "waters-kafka-cluster"
       },
-      "purpose": "Основной брокер сообщений HiveMind"
+      "purpose": "Основной брокер сообщений HiveMind (KRaft, без ZooKeeper)"
     },
     "cache": {
       "name": "Redis",
@@ -71,7 +76,7 @@
     }
   },
   "volumes": {
-    "redpanda-data": null,
+    "kafka-data": null,
     "redis-data": null,
     "chroma-data": null,
     "cozo-data": null

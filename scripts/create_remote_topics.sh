@@ -36,7 +36,7 @@ set -euo pipefail
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_rsa}"
 REMOTE_HOST="${REMOTE_HOST:-171.22.180.238}"
 REMOTE_USER="${REMOTE_USER:-root}"
-KAFKA_CONTAINER="${KAFKA_CONTAINER:-waters-redpanda}"
+KAFKA_CONTAINER="${KAFKA_CONTAINER:-waters-kafka}"
 BOOTSTRAP="${BOOTSTRAP:-localhost:9092}"
 
 PARTITIONS=1

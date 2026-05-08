@@ -12,7 +12,7 @@
     },
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Ollama (237 via SSH Tunnel)",
+      "name": "Ollama (локальные модели WATERS)",
       "options": {
         "baseURL": "http://localhost:11434/v1",
         "timeout": false,
@@ -31,5 +31,23 @@
       }
     }
   },
-  "model": "Qwen 2.5 14B"
+  "model": "Qwen 2.5 14B",
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "{env:GITHUB_TOKEN}"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem",
+               "/home/ubuntu/WATERS/repos/waters-core"]
+    },
+    "memory": {
+      "command": "python3",
+      "args": ["scripts/mcp_memory_bridge.py"]
+    }
+  }
 }

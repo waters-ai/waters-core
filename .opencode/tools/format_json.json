@@ -1,0 +1,6 @@
+{
+  "name": "format_json",
+  "description": "Форматирование JSON-файлов через Prettier",
+  "command": "prettier",
+  "args": ["--write", "--parser", "json", "${filepath}"]
+}

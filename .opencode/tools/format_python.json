@@ -1,0 +1,6 @@
+{
+  "name": "format_python",
+  "description": "Форматирование Python-файлов через Black",
+  "command": "black",
+  "args": ["${filepath}"]
+}

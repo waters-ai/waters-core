@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-REDPANDA_CONTAINER="waters-redpanda"
+KAFKA_CONTAINER="waters-kafka"
 BOOTSTRAP="localhost:9092"
 TOPIC="planners.questions.v1"
 MESSAGE_ID="$(uuidgen 2>/dev/null || date +%s | md5sum | head -c 32)"

@@ -23,26 +23,32 @@
 
 services:
   # ═══════════════════════════════════════════
-  # БРОКЕР СООБЩЕНИЙ (Kafka/Redpanda)
+  # БРОКЕР СООБЩЕНИЙ (Apache Kafka в режиме KRaft)
   # ═══════════════════════════════════════════
-  redpanda:
-    image: redpandadata/redpanda:latest
-    container_name: waters-redpanda
+  kafka:
+    image: apache/kafka:latest
+    container_name: waters-kafka
     ports:
       - "9092:9092"
     volumes:
-      - redpanda-data:/var/lib/redpanda/data
+      - kafka-data:/var/lib/kafka/data
     environment:
-      REDPANDA_BROKER_ID: "0"
-      REDPANDA_ADVERTISED_KAFKA_API_ADDRESSES: "localhost:9092"
-      # REMOTE_KAFKA_BOOTSTRAP — если задан, агенты используют удалённый брокер
-      REMOTE_KAFKA_BOOTSTRAP: "${REMOTE_KAFKA_BOOTSTRAP:-}"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "1"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      CLUSTER_ID: "waters-kafka-cluster"
     networks:
       - waters-internal
     healthcheck:
-      test: ["CMD", "rpk", "cluster", "info"]
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
 
   # ═══════════════════════════════════════════
@@ -115,7 +121,7 @@ services:
       REDIS_PORT: "6379"
       CHROMA_HOST: waters-chroma
       CHROMA_PORT: "8000"
-      KAFKA_BOOTSTRAP: waters-redpanda:9092
+      KAFKA_BOOTSTRAP: waters-kafka:9092
       REMOTE_KAFKA_BOOTSTRAP: "${REMOTE_KAFKA_BOOTSTRAP:-}"
       REMOTE_REDIS_HOST: "${REMOTE_REDIS_HOST:-}"
       REMOTE_REDIS_PORT: "${REMOTE_REDIS_PORT:-6379}"
@@ -171,7 +177,7 @@ services:
       - REDIS_PORT=6380
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
-      - KAFKA_BROKER=waters-redpanda:9092
+      - KAFKA_BROKER=waters-kafka:9092
       - REMOTE_KAFKA_BOOTSTRAP=${REMOTE_KAFKA_BOOTSTRAP:-}
       - REMOTE_REDIS_HOST=${REMOTE_REDIS_HOST:-}
       - REMOTE_REDIS_PORT=${REMOTE_REDIS_PORT:-6379}
@@ -179,7 +185,7 @@ services:
       - ./scripts:/app/scripts
     depends_on:
       - mcp-proxy
-      - redpanda
+      - kafka
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 10s
@@ -243,7 +249,7 @@ networks:
         - subnet: 172.21.0.0/16
 
 volumes:
-  redpanda-data:
+  kafka-data:
   redis-data:
   chroma-data:
   redis-dmz-data:

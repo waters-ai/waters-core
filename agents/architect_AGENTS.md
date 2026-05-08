@@ -58,11 +58,20 @@
 | Тестовые миссии | Прохождение > 80% |
 | Управление продуктом | Роадмап ±2 спринта |
 
+## Startup Sequence (при запуске)
+
+1. **Connect MCP servers**: filesystem, github, memory
+2. **Load agent state**: `memory_state_load("architect")` — восстановить контекст
+3. **Query ChromaDB**: `memory_vector_search("architect ontology last session", top_k=5)`
+4. **Check Kafka tasks**: `memory_cache_get("tasks:architect:pending")`
+5. **Load doctrine context**: `memory_graph_query("WATERS ontology and doctrines", mode="local")`
+
 ## Интерфейсы
 
 - **Читает**: `planners.questions.v1`, `planners.answers.v1`
 - **Пишет**: `planners.presentations.v1`, `planners.questions.v1`, `tasks.assigned.v1`
 - **Файлы**: `agents/*.md`, `doctrine/*.md`, `product/roadmap.json`
+- **MCP**: filesystem (файлы), github (репозиторий), memory (ChromaDB+Redis+LightRAG+Kafka)
 
 ## Ограничения
 

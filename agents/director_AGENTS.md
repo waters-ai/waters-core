@@ -40,11 +40,20 @@
 2. Создание `doctrine/archetypes_luna_aqua.json` — архетипы Луны и Воды
 3. Создание `marketing/tweets_launch.json` — три твита для анонса
 
+## Startup Sequence (при запуске)
+
+1. **Connect MCP servers**: filesystem, github, memory
+2. **Load agent state**: `memory_state_load("director")` — восстановить контекст
+3. **Query ChromaDB**: `memory_vector_search("director meaning mission", top_k=5)`
+4. **Check Kafka**: `memory_cache_get("tasks:director:pending")`
+5. **Load mission context**: `memory_graph_query("WATERS mission and archetypes", mode="local")`
+
 ## Интерфейсы
 
 - **Читает**: `planners.questions.v1`, `planners.answers.v1`, `external.requests.v1`
 - **Пишет**: `planners.answers.v1`, `planners.presentations.v1`, `planners.interpretations.v1`
 - **Файлы**: `doctrine/prayer.md`, `doctrine/archetypes_*.json`, `marketing/*.json`
+- **MCP**: filesystem (файлы), github (репозиторий), memory (ChromaDB+Redis+LightRAG+Kafka)
 
 ## Входит в Троицы
 

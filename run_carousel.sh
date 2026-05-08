@@ -31,7 +31,7 @@ MAX_PARALLEL="${MAX_PARALLEL:-4}"
 LOG_DIR="${LOG_DIR:-logs}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 REDIS_CONTAINER="${REDIS_CONTAINER:-waters-redis}"
-KAFKA_CONTAINER="${KAFKA_CONTAINER:-waters-redpanda}"
+KAFKA_CONTAINER="${KAFKA_CONTAINER:-waters-kafka}"
 BOOTSTRAP="localhost:9092"
 
 DEFAULT_AGENTS=("architect" "integrator" "keeper" "lawkeeper")

@@ -45,11 +45,20 @@
 - ✅ **Троица Смысла** (вместе с Директором и Законодателем) — Правила: «Зачем и по каким законам?»
 - ✅ **Троица Надзора** (вместе с Законодателем и Архитектором) — Тесты, Метрики, Цели: «Всё ли верно?»
 
+## Startup Sequence (при запуске)
+
+1. **Connect MCP servers**: filesystem, github, memory
+2. **Load agent state**: `memory_state_load("keeper")` — восстановить контекст
+3. **Query ChromaDB**: `memory_vector_search("security audit last session", top_k=5)`
+4. **Check Kafka alerts**: `memory_cache_get("alerts:security:pending")`
+5. **Audit log check**: `memory_graph_query("Security vulnerabilities and audits", mode="local")`
+
 ## Интерфейсы
 
 - **Читает**: все топики (полный доступ для аудита)
 - **Пишет**: `alerts.security.v1`, `events.system.v1`, `security.*`, `test_reports.v1`
 - **Файлы**: `security/*.json`
+- **MCP**: filesystem (файлы), github (репозиторий), memory (ChromaDB+Redis+LightRAG+Kafka)
 
 ## KPI
 

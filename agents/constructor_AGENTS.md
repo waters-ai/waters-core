@@ -47,7 +47,7 @@
 
 | Компонент | Базовый ($100-150/мес) | Оптимальный ($200+/мес) | Опережающий ($350+/мес) |
 |-----------|------------------------|------------------------|--------------------------|
-| **Брокер** | Redpanda (1 узел) | Apache Kafka (3 узла) | Kafka Cluster (5+) |
+| **Брокер** | Apache Kafka (1 узел) | Apache Kafka (3 узла) | Kafka Cluster (5+) |
 | **Кэш** | Redis (1 экз.) | Redis Sentinel (3 экз.) | Redis Cluster (6 экз.) |
 | **Векторная БД** | ChromaDB (1 экз.) | Qdrant (1 экз., GPU) | Qdrant Cluster |
 | **Графовая БД** | LightRAG (встр.) | LightRAG + Neo4j | LightRAG + Neo4j Cluster |
@@ -55,11 +55,20 @@
 | **Мультимодальная** | CLIP (CPU) | SigLIP (CPU) | ImageBind (GPU) |
 | **OpenCode** | 1 экз. | 3 экз. (по Троицам) | 6 экз. (каждый агент) |
 
+## Startup Sequence (при запуске)
+
+1. **Connect MCP servers**: filesystem, github, memory
+2. **Load agent state**: `memory_state_load("constructor")` — восстановить контекст из Redis
+3. **Query ChromaDB**: `memory_vector_search("constructor last session", top_k=5)` — контекст прошлых сессий
+4. **Check Kafka**: `memory_kafka_list` — проверить доступные топики
+5. **Check Redis**: `memory_cache_get("tasks:constructor:pending")` — ожидающие задачи
+
 ## Интерфейсы
 
 - **Читает**: `planners.questions.v1`, `planners.answers.v1`, `planners.meeting.v1`
 - **Пишет**: `planners.presentations.v1`, `planners.questions.v1`, `metrics.raw.v1`, `metrics.kpi.v1`
 - **Файлы**: `schemas/*.json`, `infrastructure/docker/*.json`, `infrastructure/dtn/*.json`, `skills/template_SKILL.md`
+- **MCP**: filesystem (файлы), github (репозиторий), memory (ChromaDB+Redis+LightRAG+Kafka)
 
 ## KPI
 

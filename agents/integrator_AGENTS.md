@@ -52,11 +52,21 @@
 | **CNSA SpaceMind** | Китайские миссии | REST API (условно) | P1 | Ожидание |
 | **DOAJ** | Open Access журналы | REST API, бесплатно | P2 | Резерв |
 
+## Startup Sequence (при запуске)
+
+1. **Connect MCP servers**: filesystem, github, memory
+2. **Load agent state**: `memory_state_load("integrator")` — восстановить контекст
+3. **Query ChromaDB**: `memory_vector_search("integrator last session", top_k=5)` — контекст прошлых сессий
+4. **Check Kafka**: `memory_cache_get("tasks:integrator:pending")` — ожидающие запросы
+5. **Init graph DB**: `memory_graph_query("What knowledge does WATERS have?", mode="local")`
+6. **Check Redis**: `memory_cache_get("external.requests")` — внешние запросы на данные
+
 ## Интерфейсы
 
 - **Читает**: `planners.questions.v1`, `planners.answers.v1`, `external.requests.v1`
 - **Пишет**: `planners.presentations.v1`, `planners.questions.v1`, `skills.proposed.v1`
 - **Файлы**: `integrations/*.json`, `knowledge/external/*.json`
+- **MCP**: filesystem (файлы), github (API/репозитории), memory (ChromaDB+Redis+LightRAG+Kafka)
 
 ## KPI
 

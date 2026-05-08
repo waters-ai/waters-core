@@ -114,7 +114,7 @@ print(f"Saved {result['articles_saved']} to ChromaDB")
 | Brave Search API | Источник данных (2000 req/mes бесплатно) | DMZ: external-search:8081 |
 | Redis (DMZ) | Кэширование запросов | DMZ: redis-dmz:6380 |
 | ChromaDB | Векторный поиск | waters-chroma:8000 |
-| Kafka/Redpanda | Публикация событий | waters-redpanda:9092 |
+| Kafka | Публикация событий | waters-kafka:9092 |
 
 ## Интеграция с Нервной системой
 

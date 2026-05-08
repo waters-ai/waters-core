@@ -67,7 +67,7 @@
 2. **Ответ** (Конструктор → Архитектор):
    ```bash
    # В терминале Конструктора
-   echo "Используй образ redpandadata/redpanda:latest" >> planners.answers.v1
+   echo "Используй образ bitnami/kafka:latest" >> planners.answers.v1
    ```
 
 3. **Проверка** (любой агент):

@@ -45,11 +45,20 @@
 - ✅ **Троица Смысла** (вместе с Директором и Хранителем) — Правила: «Зачем и по каким законам?»
 - ✅ **Троица Надзора** (вместе с Хранителем и Архитектором) — Тесты, Метрики, Цели: «Всё ли верно?»
 
+## Startup Sequence (при запуске)
+
+1. **Connect MCP servers**: filesystem, github, memory
+2. **Load agent state**: `memory_state_load("lawkeeper")` — восстановить контекст
+3. **Query ChromaDB**: `memory_vector_search("lawkeeper yasa compliance", top_k=5)`
+4. **Check Kafka oversight**: `memory_cache_get("tasks:lawkeeper:pending")`
+5. **Load Yasa context**: `memory_graph_query("WATERS laws and compliance", mode="local")`
+
 ## Интерфейсы
 
 - **Читает**: все топики (полный доступ для надзора)
 - **Пишет**: `planners.decisions.v1`, `oversight.*`, `doctrine/yasa_*.json`, `future_scans.v1`
 - **Файлы**: `doctrine/yasa_*.json`, `oversight/*.json`, `doctrine/future_*.json`
+- **MCP**: filesystem (файлы), github (репозиторий), memory (ChromaDB+Redis+LightRAG+Kafka)
 
 ## KPI
 

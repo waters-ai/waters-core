@@ -1,0 +1,6 @@
+{
+  "name": "format_markdown",
+  "description": "Форматирование Markdown-файлов через Prettier",
+  "command": "prettier",
+  "args": ["--write", "--parser", "markdown", "${filepath}"]
+}
