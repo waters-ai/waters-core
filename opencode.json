@@ -40,7 +40,10 @@
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
-    "mdns": true
+    "mdns": true,
+  "skills": {
+    "paths": ["./skills"]
+  }
   },
   "skills": {
     "paths": ["./skills"]
