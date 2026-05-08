@@ -1,11 +1,22 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
+    "deepseek": {
+      "name": "DeepSeek (WATERS Primary)",
+      "apiKey": "sk-e9bb0e4fa0194955a8a259ec5cf8fd2d",
+      "models": {
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash"
+        }
+      }
+    },
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Ollama (WATERS LLM)",
+      "name": "Ollama (237 via SSH Tunnel)",
       "options": {
-        "baseURL": "http://171.22.180.237:11434/v1"
+        "baseURL": "http://localhost:11434/v1",
+        "timeout": false,
+        "chunkTimeout": 120000
       },
       "models": {
         "qwen2.5:14b": {
@@ -20,5 +31,5 @@
       }
     }
   },
-  "model": "ollama/qwen2.5:14b"
+  "model": "Qwen 2.5 14B"
 }
