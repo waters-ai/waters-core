@@ -37,7 +37,15 @@ ssh -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes \
 # TimescaleDB (237) → localhost:25432
 ssh -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes \
   -fNL 25432:localhost:5432 ubuntu@171.22.180.237 2>/dev/null || true
+# Ollama 7b (237) → localhost:11434
+ssh -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes \
+  -fNL 11434:localhost:11434 ubuntu@171.22.180.237 2>/dev/null || true
+# Ollama 14b (237) → localhost:11435
+ssh -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes \
+  -fNL 11435:localhost:11435 ubuntu@171.22.180.237 2>/dev/null || true
 echo "   ✅ Neo4j: localhost:17687 ← 237:7687"
 echo "   ✅ TimescaleDB: localhost:25432 ← 237:5432"
+echo "   ✅ Ollama 7b: localhost:11434 ← 237:11434"
+echo "   ✅ Ollama 14b: localhost:11435 ← 237:11435"
 
 opencode

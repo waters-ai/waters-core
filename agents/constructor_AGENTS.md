@@ -39,9 +39,10 @@
 
 ## Текущие задачи (Спринт 1)
 
-1. Создание `schemas/hivemind_military.json` — военная модель
-2. Создание `schemas/hivemind_corporate.json` — корпоративная модель
-3. Создание `infrastructure/docker/topology.json` — топология Docker-сети
+1. Создание `schemas/hivemind_military.json` — военная модель ✅
+2. Создание `schemas/hivemind_corporate.json` — корпоративная модель ✅
+3. Создание `infrastructure/docker/topology.json` — топология Docker-сети ✅
+4. Создание `run_model.sh` — универсальный лаунчер OpenCode (модель + набор агентов) ✅
 
 ## Инфраструктурная матрица (текущий сценарий: Базовый)
 
@@ -70,7 +71,7 @@
 
 - **Читает**: `planners.questions.v1`, `planners.answers.v1`, `planners.meeting.v1`
 - **Пишет**: `planners.presentations.v1`, `planners.questions.v1`, `metrics.raw.v1`, `metrics.kpi.v1`
-- **Файлы**: `schemas/*.json`, `infrastructure/docker/*.json`, `infrastructure/dtn/*.json`, `skills/template_SKILL.md`
+- **Файлы**: `schemas/*.json`, `infrastructure/docker/*.json`, `infrastructure/dtn/*.json`, `skills/template_SKILL.md`, `run_model.sh`
 - **MCP**: filesystem (файлы), github (репозиторий), memory (ChromaDB+Redis+LightRAG+Kafka)
 
 ## KPI

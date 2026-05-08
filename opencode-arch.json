@@ -1,0 +1,126 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama-7b": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama 7B (237)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1",
+        "timeout": false,
+        "chunkTimeout": 600000
+      },
+      "models": {
+        "qwen2.5:7b": {
+          "name": "Qwen 2.5 7B"
+        }
+      }
+    },
+    "ollama-14b": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama 14B (237)",
+      "options": {
+        "baseURL": "http://localhost:11435/v1",
+        "timeout": false,
+        "chunkTimeout": 600000
+      },
+      "models": {
+        "qwen2.5:14b": {
+          "name": "Qwen 2.5 14B"
+        }
+      }
+    }
+  },
+  "model": "ollama-14b/qwen2.5:14b",
+  "formatter": {
+    "prettier": { "disabled": false },
+    "ruff": { "disabled": false }
+  },
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "webfetch": "allow",
+    "task": "allow",
+    "skill": "allow"
+  },
+  "mcp": {
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/ubuntu/WATERS/repos/waters-core"],
+      "enabled": true
+    },
+    "github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "enabled": true,
+      "environment": {
+        "GITHUB_TOKEN": "{env:GITHUB_TOKEN}"
+      }
+    },
+    "memory": {
+      "type": "local",
+      "command": ["python3", "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_memory_bridge.py"],
+      "enabled": true
+    },
+    "space": {
+      "type": "local",
+      "command": ["python3", "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_space_bridge.py"],
+      "enabled": true,
+      "timeout": 120000
+    }
+  },
+  "agent": {
+    "architect": {
+      "description": "Верховный Архитектор WATERS — онтологии, спецификации, роадмапы",
+      "mode": "subagent",
+      "prompt": "{file:./agents/architect_AGENTS.md}",
+      "color": "#3498db",
+      "permission": {
+        "edit": "allow",
+        "bash": "ask",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "constructor": {
+      "description": "Конструктор Сети WATERS — Docker, Kafka, Redis, инфраструктура, DTN",
+      "mode": "subagent",
+      "prompt": "{file:./agents/constructor_AGENTS.md}",
+      "color": "#2ecc71",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "integrator": {
+      "description": "Интегратор Знаний WATERS — внешние данные, MCP-адаптеры, Brave Search",
+      "mode": "subagent",
+      "prompt": "{file:./agents/integrator_AGENTS.md}",
+      "color": "#e67e22",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    }
+  }
+}

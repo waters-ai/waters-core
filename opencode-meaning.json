@@ -1,0 +1,123 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama-7b": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama 7B (237)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1",
+        "timeout": false,
+        "chunkTimeout": 600000
+      },
+      "models": {
+        "qwen2.5:7b": { "name": "Qwen 2.5 7B" }
+      }
+    },
+    "ollama-14b": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama 14B (237)",
+      "options": {
+        "baseURL": "http://localhost:11435/v1",
+        "timeout": false,
+        "chunkTimeout": 600000
+      },
+      "models": {
+        "qwen2.5:14b": { "name": "Qwen 2.5 14B" }
+      }
+    }
+  },
+  "model": "ollama-14b/qwen2.5:14b",
+  "formatter": {
+    "prettier": { "disabled": false },
+    "ruff": { "disabled": false }
+  },
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "webfetch": "allow",
+    "task": "allow",
+    "skill": "allow"
+  },
+  "mcp": {
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/ubuntu/WATERS/repos/waters-core"],
+      "enabled": true
+    },
+    "github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "enabled": true,
+      "environment": { "GITHUB_TOKEN": "{env:GITHUB_TOKEN}" }
+    },
+    "memory": {
+      "type": "local",
+      "command": ["python3", "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_memory_bridge.py"],
+      "enabled": true
+    },
+    "space": {
+      "type": "local",
+      "command": ["python3", "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_space_bridge.py"],
+      "enabled": true,
+      "timeout": 120000
+    }
+  },
+  "agent": {
+    "lawkeeper": {
+      "description": "Законодатель WATERS — Яса, кодекс, комплаенс, предвидение",
+      "mode": "subagent",
+      "model": {"modelID": "qwen2.5:14b", "providerID": "ollama-14b"},
+      "prompt": "{file:./agents/lawkeeper_AGENTS.md}",
+      "color": "#1abc9c",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "director": {
+      "description": "Директор по Смыслу WATERS — миссия, архетипы, интерпретация запросов",
+      "mode": "subagent",
+      "model": {"modelID": "qwen2.5:7b", "providerID": "ollama-7b"},
+      "prompt": "{file:./agents/director_AGENTS.md}",
+      "color": "#e74c3c",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "keeper": {
+      "description": "Хранитель Протокола WATERS — безопасность, аудит, эволюция протоколов",
+      "mode": "subagent",
+      "model": {"modelID": "qwen2.5:7b", "providerID": "ollama-7b"},
+      "prompt": "{file:./agents/keeper_AGENTS.md}",
+      "color": "#9b59b6",
+      "permission": {
+        "edit": "ask",
+        "bash": "ask",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    }
+  }
+}
