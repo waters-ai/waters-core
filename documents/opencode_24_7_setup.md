@@ -347,15 +347,35 @@ curl -s -u "opencode:$(cat .serve_password)" \
 
 ---
 
+## Управление секретами
+
+**Никакие секреты CEO не должны попадать в GitHub.**
+
+| Файл | Git | Назначение |
+|------|-----|------------|
+| `.secret_deepseek_key` | игнорируется | DeepSeek API key (опционально, можно через env) |
+| `.serve_password` | игнорируется | Пароль от serve-сервера (автогенерация) |
+| `opencode.json` | в репозитории | Читает `apiKey` из `{env:DEEPSEEK_API_KEY}` |
+
+Настройка на сервере:
+```bash
+# Сохранить DeepSeek API key (файл в .gitignore)
+echo "sk-..." > .secret_deepseek_key
+chmod 600 .secret_deepseek_key
+
+# Или через переменную окружения
+export DEEPSEEK_API_KEY="sk-..."
+```
+
 ## Файлы, изменённые в этом спринте
 
 | Файл | Изменение |
 |------|-----------|
-| `opencode.json` | Добавлены `timeout` и `chunkTimeout` для Ollama |
-| `scripts/opencode_tmux.sh` | **Новый** — универсальный запуск агентов в tmux (Фаза 1) |
-| `scripts/opencode_serve.sh` | **Новый** — headless serve-сервер в tmux (Фаза 2) |
-| `scripts/ceo.sh` | **Новый** — CEO CLI для REST API (Фаза 2) |
-| `.env.carousel` | Добавлены `OPENCODE_SERVE_*` переменные |
+| `opencode.json` | Добавлены `timeout` и `chunkTimeout` для Ollama; `apiKey` через `{env:DEEPSEEK_API_KEY}` |
+| `.gitignore` | Добавлены `.serve_password`, `.secret_*`, `.env*` |
+| `scripts/opencode_tmux.sh` | **Новый** — универсальный запуск агентов в tmux + загрузка секретов |
+| `scripts/opencode_serve.sh` | **Новый** — headless serve + загрузка секретов из `.secret_*` |
+| `scripts/ceo.sh` | **Новый** — CEO CLI для REST API |
 | `run_constructor.sh` | Добавлен флаг `--tmux` |
 | `documents/opencode_24_7_setup.md` | **Новый** — данный документ |
 

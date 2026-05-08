@@ -8,13 +8,18 @@
 #   ./scripts/opencode_serve.sh [start|stop|status|restart|password]
 #
 # Переменные окружения:
-#   OPENCODE_SERVE_PORT     — порт сервера (по умолч. 4096)
-#   OPENCODE_SERVE_HOST     — хост (по умолч. 0.0.0.0)
+#   OPENCODE_SERVE_PORT      — порт сервера (по умолч. 4096)
+#   OPENCODE_SERVE_HOST      — хост (по умолч. 0.0.0.0)
 #   OPENCODE_SERVER_PASSWORD — пароль basic auth (автогенерация если не задан)
-#   LOG_DIR                 — директория логов (по умолч. logs/)
+#   DEEPSEEK_API_KEY         — ключ DeepSeek (если нет файла .secret_deepseek_key)
+#   LOG_DIR                  — директория логов (по умолч. logs/)
+#
+# Хранение секретов (не пушить в GitHub!):
+#   .secret_deepseek_key     — DeepSeek API key (gitignored)
+#   .serve_password          — пароль serve (автогенерация, gitignored)
 #
 # Пример:
-#   OPENCODE_SERVER_PASSWORD=secret ./scripts/opencode_serve.sh start
+#   ./scripts/opencode_serve.sh start
 #   ./scripts/opencode_serve.sh status
 
 set -euo pipefail
@@ -29,6 +34,8 @@ HOST="${OPENCODE_SERVE_HOST:-0.0.0.0}"
 
 PASSWORD_FILE="$REPO_DIR/.serve_password"
 PASSWORD="${OPENCODE_SERVER_PASSWORD:-}"
+
+SECRET_KEY_FILE="$REPO_DIR/.secret_deepseek_key"
 
 mkdir -p "$LOG_DIR"
 
@@ -54,10 +61,18 @@ get_password() {
   fi
 }
 
+# Загрузка API-ключей из локальных secret-файлов (gitignored)
+load_secrets() {
+  if [ -f "$SECRET_KEY_FILE" ]; then
+    export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$(cat "$SECRET_KEY_FILE")}"
+  fi
+}
+
 action="${1:-start}"
 
 case "$action" in
   start)
+    load_secrets
     PASS="$(get_password)"
     echo "Запуск OpenCode serve на $HOST:$PORT ..."
 
@@ -68,8 +83,14 @@ case "$action" in
       exit 0
     fi
 
+    # Формируем окружение для serve: пароль + API-ключи из secret-файлов
+    SERVE_ENV="OPENCODE_SERVER_PASSWORD='$PASS'"
+    if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+      SERVE_ENV="$SERVE_ENV DEEPSEEK_API_KEY='$DEEPSEEK_API_KEY'"
+    fi
+
     tmux new-session -d -s "$SESSION_NAME" -n "$WINDOW_NAME" \
-      "cd '$REPO_DIR' && OPENCODE_SERVER_PASSWORD='$PASS' opencode serve --port '$PORT' --hostname '$HOST' 2>&1 | tee '$LOG_DIR/serve.log'; exec bash"
+      "cd '$REPO_DIR' && $SERVE_ENV opencode serve --port '$PORT' --hostname '$HOST' 2>&1 | tee '$LOG_DIR/serve.log'; exec bash"
 
     echo "✓ OpenCode serve запущен: http://$HOST:$PORT"
     echo "  Сессия tmux:    $SESSION_NAME:$WINDOW_NAME"

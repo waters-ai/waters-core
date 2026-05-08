@@ -3,7 +3,7 @@
   "provider": {
     "deepseek": {
       "name": "DeepSeek (WATERS Primary)",
-      "apiKey": "sk-e9bb0e4fa0194955a8a259ec5cf8fd2d",
+      "apiKey": "{env:DEEPSEEK_API_KEY}",
       "models": {
         "deepseek-v4-flash": {
           "name": "DeepSeek V4 Flash"

@@ -5,6 +5,9 @@
 # CEO подключается:  tmux attach -t waters:<agent>
 # CEO отключается:   Ctrl+B, D (агент продолжает работу)
 #
+# Хранение секретов (не пушить в GitHub!):
+#   .secret_deepseek_key     — DeepSeek API key (gitignored)
+#
 # Использование:
 #   ./scripts/opencode_tmux.sh <agent>          # запустить агента
 #   ./scripts/opencode_tmux.sh <agent> attach   # подключиться к запущенному
@@ -23,6 +26,12 @@ LOG_DIR="${LOG_DIR:-$REPO_DIR/logs}"
 SESSION_NAME="${SESSION_NAME:-waters}"
 
 mkdir -p "$LOG_DIR"
+
+# Загрузка API-ключей из локальных secret-файлов (gitignored)
+SECRET_KEY_FILE="$REPO_DIR/.secret_deepseek_key"
+if [ -f "$SECRET_KEY_FILE" ]; then
+  export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$(cat "$SECRET_KEY_FILE")}"
+fi
 
 agent="${1:-}"
 action="${2:-start}"
@@ -86,16 +95,22 @@ case "$action" in
 
     cp "$agent_file" "$REPO_DIR/AGENTS.md"
 
+    # Передаём API-ключи в окружение tmux-сессии
+    TMUX_ENV=""
+    if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+      TMUX_ENV="DEEPSEEK_API_KEY='$DEEPSEEK_API_KEY'"
+    fi
+
+    CMD="cd '$REPO_DIR' && ${TMUX_ENV} opencode 2>&1 | tee '$LOG_DIR/${agent}.log'; exec bash"
+
     if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-      tmux new-session -d -s "$SESSION_NAME" -n "$window_name" \
-        "cd '$REPO_DIR' && opencode 2>&1 | tee '$LOG_DIR/${agent}.log'; exec bash"
+      tmux new-session -d -s "$SESSION_NAME" -n "$window_name" "$CMD"
     else
       if tmux list-windows -t "$SESSION_NAME" -F '#{window_name}' 2>/dev/null | grep -q "^$window_name$"; then
         echo "Окно $window_name уже существует. Подключитесь: tmux attach -t $SESSION_NAME:$window_name"
         exit 0
       fi
-      tmux new-window -t "$SESSION_NAME" -n "$window_name" \
-        "cd '$REPO_DIR' && opencode 2>&1 | tee '$LOG_DIR/${agent}.log'; exec bash"
+      tmux new-window -t "$SESSION_NAME" -n "$window_name" "$CMD"
     fi
 
     echo "${icon} $title запущен в tmux-сессии $SESSION_NAME:$window_name"

@@ -2,3 +2,12 @@
 .secrets/
 *.enc
 /opt/waters/secrets/
+
+# Secrets
+.serve_password
+.secret_*
+
+# Environment files (CEO credentials, API keys)
+.env
+.env.*
+!.env.example
