@@ -5,7 +5,9 @@
       "name": "DeepSeek (WATERS Primary)",
       "apiKey": "{env:DEEPSEEK_API_KEY}",
       "models": {
-        "deepseek-v4-flash": { "name": "DeepSeek V4 Flash" }
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash"
+        }
       }
     },
     "ollama": {
@@ -17,31 +19,170 @@
         "chunkTimeout": 120000
       },
       "models": {
-        "qwen2.5:14b": { "name": "Qwen 2.5 14B" },
-        "qwen2.5:7b": { "name": "Qwen 2.5 7B" }
+        "qwen2.5:14b": {
+          "name": "Qwen 2.5 14B"
+        },
+        "qwen2.5:7b": {
+          "name": "Qwen 2.5 7B"
+        }
       }
     }
   },
   "model": "ollama/qwen2.5:14b",
+  "formatter": {
+    "prettier": {
+      "disabled": false
+    },
+    "ruff": {
+      "disabled": false
+    }
+  },
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "webfetch": "allow",
+    "task": "allow",
+    "skill": "allow"
+  },
   "mcp": {
     "filesystem": {
       "type": "local",
-      "enabled": true,
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/ubuntu/WATERS/repos/waters-core"]
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/ubuntu/WATERS/repos/waters-core"],
+      "enabled": true
     },
     "github": {
       "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
       "enabled": true,
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": { "GITHUB_TOKEN": "{env:GITHUB_TOKEN}" }
+      "environment": {
+        "GITHUB_TOKEN": "{env:GITHUB_TOKEN}"
+      }
     },
     "memory": {
       "type": "local",
+      "command": ["python3", "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_memory_bridge.py"],
+      "enabled": true
+    },
+    "space": {
+      "type": "local",
+      "command": ["python3", "/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_space_bridge.py"],
       "enabled": true,
-      "command": "python3",
-      "args": ["/home/ubuntu/WATERS/repos/waters-core/scripts/mcp_memory_bridge.py"]
+      "timeout": 60000
+    }
+  },
+  "agent": {
+    "architect": {
+      "description": "Верховный Архитектор WATERS — онтологии, спецификации агентов, роадмапы",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/architect_system.md}",
+      "color": "#3498db",
+      "permission": {
+        "edit": "allow",
+        "bash": "ask",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "constructor": {
+      "description": "Конструктор Сети WATERS — Docker, Kafka, Redis, инфраструктура, DTN",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/constructor_system.md}",
+      "color": "#2ecc71",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "integrator": {
+      "description": "Интегратор Знаний WATERS — внешние данные, MCP-адаптеры, Brave Search",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/integrator_system.md}",
+      "color": "#e67e22",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "director": {
+      "description": "Директор по Смыслу WATERS — миссия, архетипы, интерпретация запросов",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/meaning_director.md}",
+      "color": "#e74c3c",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "keeper": {
+      "description": "Хранитель Протокола WATERS — безопасность, аудит, эволюция протоколов",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/protocol_keeper.md}",
+      "color": "#9b59b6",
+      "permission": {
+        "edit": "ask",
+        "bash": "ask",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "navigator": {
+      "description": "Навигатор WATERS — космические миссии, SPICE, Neo4j, DTN-маршрутизация",
+      "mode": "subagent",
+      "prompt": "Ты — Навигатор Платформы WATERS. Отвечаешь за космическую навигацию: эфемериды (SPICE), граф миссии (Neo4j), DTN-маршруты. Используй space_* MCP-инструменты для расчётов.",
+      "color": "#f39c12",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
+    },
+    "lawkeeper": {
+      "description": "Законодатель WATERS — Яса, кодекс, комплаенс, предвидение",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/lawkeeper.md}",
+      "color": "#1abc9c",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "webfetch": "allow",
+        "skill": "allow"
+      }
     }
   }
 }

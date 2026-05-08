@@ -37,11 +37,44 @@
 | `infrastructure-migrator` | 1.0 | P1 | Миграция Базовый → Оптимальный → Опережающий |
 | `kafka-protocol` | 1.0 | P2 | Работа с топиками Kafka |
 
+## Распределённая инфраструктура WATERS
+
+| Сервер | IP | CPU | RAM | Disk | Сервисы |
+|---|---|---|---|---|---|
+| **LLM + Space** | 171.22.180.237 | 12 | 31 GB | 284 GB | Ollama, Neo4j, SPICE kernels, Python astro-stack |
+| **Нервная система** | 171.22.180.238 | 2 | 3.8 GB | 33 GB | Kafka, ChromaDB, Redis x2, SQLite rules, cron мониторинг |
+| **Разработка** | local | 2 | 3.8 GB | 33 GB | OpenCode, LightRAG, Memory Bridge, Space Bridge |
+| **Тестовый** | 195.208.119.167 | ? | 1 GB | ? | MinIO, тестовые БД (ожидает) |
+
+## MCP-серверы (доступны всем агентам)
+
+| MCP | Инструменты | Куда ведёт |
+|---|---|---|
+| `filesystem` | чтение/запись файлов | локальная ФС |
+| `github` | GitHub API | github.com/waters-ai |
+| `memory` | 16 инструментов: ChromaDB, Redis, Kafka, LightRAG | 238 (через Docker) |
+| `space` | 5 инструментов: Neo4j, SPICE, SQLite, Kafka-feed | 237 (через SSH туннель) |
+
+## Агенты (subagents внутри OpenCode)
+
+| Агент | Описание | Доступ |
+|---|---|---|
+| `@architect` | Онтологии, спецификации, роадмапы | edit+ask, bash+ask |
+| `@constructor` | Инфраструктура, Docker, Kafka, DTN | edit+allow, bash+allow |
+| `@integrator` | Внешние данные, MCP-адаптеры | edit+allow, bash+allow |
+| `@director` | Миссия, архетипы, смысл | edit+deny, bash+deny |
+| `@keeper` | Безопасность, аудит, протоколы | edit+ask, bash+ask |
+| `@navigator` | SPICE, Neo4j, космическая навигация | edit+allow, bash+allow |
+| `@lawkeeper` | Яса, кодекс, комплаенс | edit+deny, bash+deny |
+
 ## Текущие задачи (Спринт 1)
 
-1. Создание `schemas/hivemind_military.json` — военная модель
-2. Создание `schemas/hivemind_corporate.json` — корпоративная модель
-3. Создание `infrastructure/docker/topology.json` — топология Docker-сети
+1. ✅ Создание 6 HiveMind-схем
+2. ✅ Создание 3 Docker-топологий
+3. ✅ Развёртывание Neo4j + SPICE на 237
+4. ✅ SQLite rules + cron мониторинг на 238
+5. ✅ MCP Space Bridge с SPICE/Neo4j/SQLite
+6. ⏳ Развёртывание MinIO + тесты на 167 (1 GB сервер)
 
 ## Инфраструктурная матрица (текущий сценарий: Базовый)
 
@@ -58,13 +91,12 @@
 ## Startup Sequence (при запуске)
 
 1. **Connect MCP servers**: filesystem, github, memory
-2. **Load agent state**: `memory_state_load("constructor")` — восстановить контекст из Redis
-3. **Load session snapshot**: `memory_session_load("constructor")` — восстановить снэпшот сессии
-4. **Self-reflection**: `memory_kafka_consume("planners.answers.v1", count=5)` — прочитать свои прошлые ответы
-5. **Query ChromaDB**: `memory_vector_search("constructor last session", top_k=5)` — контекст прошлых сессий
-6. **Check Kafka**: `memory_kafka_list` — проверить доступные топики
-7. **Check Redis**: `memory_cache_get("tasks:constructor:pending")` — ожидающие задачи
-8. **Healthcheck**: `memory_health` — проверить доступность всех сервисов
+2. **Continue native session**: `opencode -c` — восстановить контекст через штатную сессию OpenCode
+3. **Self-reflection**: `memory_kafka_consume("planners.answers.v1", count=5)` — прочитать свои прошлые ответы
+4. **Query ChromaDB**: `memory_vector_search("constructor last session", top_k=5)` — контекст прошлых сессий
+5. **Check Kafka**: `memory_kafka_list` — проверить доступные топики
+6. **Check Redis**: `memory_cache_get("tasks:constructor:pending")` — ожидающие задачи
+7. **Healthcheck**: `memory_health` — проверить доступность всех сервисов
 
 ## Интерфейсы
 

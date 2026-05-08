@@ -24,6 +24,7 @@ mcp_memory_bridge.py — MCP-сервер доступа к базам памя�
 Запуск: OpenCode запускает как subprocess через mcpServers
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -87,18 +88,17 @@ def get_lightrag():
     if _lightrag is None:
         try:
             from lightrag import LightRAG as LR
+            from lightrag.base import QueryParam
             from lightrag.llm.ollama import ollama_embed, ollama_model_complete
-
-            ollama_embed.embedding_dim = 768
-            ollama_embed.model_name = "nomic-embed-text"
 
             _lightrag = LR(
                 working_dir=LIGHTRAG_DIR,
                 llm_model_func=ollama_model_complete,
                 llm_model_name="qwen2.5:7b",
-                llm_model_kwargs={"host": "localhost", "port": 11434},
+                llm_model_kwargs={},
                 embedding_func=ollama_embed,
             )
+            asyncio.run(_lightrag.initialize_storages())
             logger.info(f"LightRAG initialized: {LIGHTRAG_DIR}")
         except Exception as e:
             logger.warning(f"LightRAG unavailable: {e}")
@@ -208,7 +208,9 @@ def tool_graph_query(args):
         return {"error": "LightRAG not available"}
 
     try:
-        response = rag.query(text, param={"mode": mode})
+        from lightrag.base import QueryParam
+        param = QueryParam(mode=mode)
+        response = rag.query(text, param=param)
         return {"response": response}
     except Exception as e:
         logger.error(f"LightRAG query error: {e}")
@@ -756,7 +758,7 @@ def handle_request(request):
         send_message({
             "jsonrpc": "2.0", "id": req_id,
             "result": {
-                "protocolVersion": "0.1.0",
+                "protocolVersion": "2024-11-05",
                 "capabilities": {
                     "tools": {
                         name: {

@@ -1,0 +1,14 @@
+{
+  "article_id": "a1b2c3d4-0003-4000-8000-000000000003",
+  "title": "Kapelka — полный цикл работ с внешним заказчиком",
+  "content": "Полный цикл обслуживания внешнего заказчика состоит из 4 фаз.\n\nФаза 0 — Подготовка (до получения доступа): создание структуры missions/kapelka/, параметризация агентов (вынос путей в переменные окружения), подготовка deploy-шаблонов (Nginx, CI/CD, Docker), чеклистов аудита, наполнение базы знаний WATERS.\n\nФаза 1 — Аудит и тестирование (3-5 дней). День 1: получение доступа к GitHub, клонирование, изучение стека, получение доступов от заказчика (Reg.ru, домен, RPC, API-ключи), запуск agent_architect для плана аудита. День 2: статический аудит — npm audit, ESLint/TypeScript, secret-scanner, bundle-analyzer, Anchor CLI анализ. День 3: динамический аудит — сборка (npm run build), Lighthouse CI, security headers (curl), SSL/TLS (testssl.sh), интеграционные тесты Solana, a11y-сканер. Агент auditor собирает полный отчёт с оценками A-F.\n\nФаза 2 — Исправление (2-7 дней). Триаж по CVSS: Critical (9-10) Fix NOW, High (7-8.9) Fix TODAY, Medium (4-6.9) Fix THIS WEEK, Low (0-3.9) Fix IF TIME. Порядок: безопасность (удаление ключей, CSP, HSTS, XSS/CSRF, update зависимостей, rate limiting), производительность (code splitting, lazy loading, оптимизация изображений, кэширование), интеграция Solana (IDL-вызовы, обработка ошибок RPC, wallet adapter), deploy-readiness (.env, Nginx, Docker, CI/CD). Верификация: повторный аудит после каждого фикса.\n\nФаза 3 — Деплой на Reg.ru (1-2 дня). Вариант A (VPS, рекомендуется): заказ VPS, установка Node.js/Nginx/Docker/certbot, настройка firewall, клонирование, сборка, Nginx-конфиг (static, SPA-fallback, SSL, security headers, gzip), SSL через Let's Encrypt, CI/CD через GitHub Actions. Вариант Б (обычный хостинг): сборка, загрузка dist/ через FTP/rsync, настройка через панель Reg.ru. DNS: A-запись на IP, www CNAME, SSL auto-renew. Финальная проверка: HTTPS, SPA-роутинг, Solana RPC, Wallet, mobile-friendly, Lighthouse > 80.\n\nФаза 4 — Поддержка (постоянно). Еженедельно: npm audit, Lighthouse тренды, uptime check. Ежемесячно: полный security-скан, SSL, очистка логов, отчёт заказчику. Экстренно (SLA): crash → 1 час, security breach → 30 мин, DDoS → защита, SSL expired → 1 час.",
+  "summary": "4 фазы работ Kapelka: Подготовка → Аудит (3-5 дней) → Исправление (2-7 дней) → Деплой на Reg.ru (1-2 дня) → Поддержка (постоянно). CVSS-триаж, SLA, чек-листы.",
+  "source": "mission",
+  "tags": ["kapelka", "workflow", "audit", "fix", "deploy", "regru", "support", "sla"],
+  "related_nodes": ["kapelka_mission", "kapelka_auditor_skills"],
+  "created_at": "2026-05-07T00:00:00Z",
+  "author": "agent.constructor.v1",
+  "version": "1.0.0",
+  "language": "ru",
+  "confidence": 1.0
+}

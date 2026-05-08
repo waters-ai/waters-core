@@ -1,0 +1,21 @@
+{
+  "update_id": "b1c2d3e4-0001-4000-8000-000000000001",
+  "operation": "add_node",
+  "timestamp": "2026-05-07T00:00:00Z",
+  "author": "agent.constructor.v1",
+  "node": {
+    "node_id": "mission.kapelka",
+    "label": "Миссия Kapelka",
+    "type": "mission",
+    "properties": {
+      "status": "preparation",
+      "phase": "0",
+      "leader": "agent.constructor.v1",
+      "agents": ["agent.architect.kapelka.v1", "agent.constructor.kapelka.v1", "agent.auditor.kapelka.v1"],
+      "services": ["audit", "deploy", "support", "security-review"],
+      "target_hosting": "Reg.ru",
+      "created": "2026-05-07"
+    }
+  },
+  "reason": "Создание миссии Kapelka для коммерческого обслуживания внешних заказчиков"
+}

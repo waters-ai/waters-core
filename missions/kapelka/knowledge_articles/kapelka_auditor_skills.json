@@ -1,0 +1,14 @@
+{
+  "article_id": "a1b2c3d4-0002-4000-8000-000000000002",
+  "title": "5 модулей навыков аудитора Kapelka",
+  "content": "Аудитор Kapelka (agent.auditor.kapelka.v1) содержит 5 модулей навыков для всесторонней проверки фронтенд-сайтов с интеграцией Solana.\n\nМодуль A — Frontend Auditor: lighthouse-runner (Lighthouse CI, метрики FCP/LCP/TBT/CLS/SI), bundle-analyzer (Vite visualizer, размер бандла, sourcemap leak, tree-shaking), a11y-scanner (axe-core, WCAG, ARIA, контрастность), seo-validator (Open Graph, Twitter Cards, sitemap, robots.txt, hreflang), code-quality (ESLint, TypeScript strict, Prettier).\n\nМодуль B — Security Auditor: dependency-scanner (npm audit, Snyk, Dependabot, Trivy, CVE), header-inspector (CSP, HSTS, X-Frame-Options, CORS, Mozilla Observatory), secret-scanner (truffleHog, gitleaks, поиск хардкодных ключей в репозитории), xss-csrf-tester (OWASP ZAP, проверка unsafe dangerouslySetInnerHTML, CSRF-токенов).\n\nМодуль C — Integration Tester (Solana): anchor-connector (Anchor CLI, IDL, signers, PDA), api-response-validator (Vitest/Jest, правильность ответов бека, таймауты), wallet-tester (Phantom/Backpack эмуляция, connect/disconnect/sign), network-tester (curl, solana CLI, devnet/mainnet).\n\nМодуль D — DevOps Engineer: nginx-hardener (testssl.sh, SSLyze, SSL/TLS, rate limiting), ci-cd-pilot (GitHub Actions, approval gates, артефакты), docker-packager (Dockerfile, hadolint, multi-stage, non-root), deployer (rsync, scp, zero-downtime, rollback), ssl-manager (certbot, Let's Encrypt, auto-renew).\n\nМодуль E — Site Reliability Engineer: uptime-watcher (UptimeRobot, Better Uptime, алерты), error-tracker (Sentry, Rollbar, Grafana Faro), performance-watcher (Lighthouse CI тренды), dependency-updater (Renovate, Dependabot, авто-PR).",
+  "summary": "5 модулей навыков аудитора Kapelka: Frontend, Security, Integration (Solana), DevOps, SRE. Инструменты: Lighthouse, npm audit, OWASP ZAP, testssl, GitHub Actions, Sentry и другие.",
+  "source": "mission",
+  "tags": ["kapelka", "skills", "auditor", "frontend", "security", "solana", "devops", "sre"],
+  "related_nodes": ["agent.auditor.kapelka.v1", "auditor_react.skill.md", "auditor_nginx.skill.md"],
+  "created_at": "2026-05-07T00:00:00Z",
+  "author": "agent.constructor.v1",
+  "version": "1.0.0",
+  "language": "ru",
+  "confidence": 1.0
+}
