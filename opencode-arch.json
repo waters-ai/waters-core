@@ -58,7 +58,7 @@
       }
     }
   },
-  "model": "ollama-3b/qwen2.5:3b",
+  "model": "ollama-7b/qwen2.5:7b",
   "formatter": {
     "prettier": { "disabled": false },
     "ruff": { "disabled": false }

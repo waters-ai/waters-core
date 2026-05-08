@@ -102,6 +102,7 @@ case "$MODE" in
     7)  MODEL_STR="ollama-7b/qwen2.5:7b" ;;
     14) MODEL_STR="ollama-14b/qwen2.5:14b" ;;
     4)  MODEL_STR="deepseek/deepseek-v4-flash" ;;
+    *)  echo -e "${RED}Ошибка:${NC} модель '$MODE' не поддерживается"; usage ;;
 esac
 
 if [ -n "$SET" ]; then

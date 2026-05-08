@@ -34,7 +34,7 @@
       }
     }
   },
-  "model": "ollama/qwen2.5:3b",
+  "model": "ollama/qwen2.5:7b",
   "formatter": {
     "prettier": {
       "disabled": false
