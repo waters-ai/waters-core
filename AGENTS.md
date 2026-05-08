@@ -34,6 +34,7 @@
 | `dtn-simulator` | 1.0 | P1 | Эмуляция космических задержек |
 | `sla-designer` | 1.0 | P1 | Проектирование SLA-метрик |
 | `skill-template-builder` | 1.0 | P1 | Шаблон SKILL.md |
+| `async-graph-writer` | 1.0 | P1 | Фоновый LightRAG writer (очередь → граф) |
 | `infrastructure-migrator` | 1.0 | P1 | Миграция Базовый → Оптимальный → Опережающий |
 | `kafka-protocol` | 1.0 | P2 | Работа с топиками Kafka |
 
@@ -43,6 +44,7 @@
 2. Создание `schemas/hivemind_corporate.json` — корпоративная модель ✅
 3. Создание `infrastructure/docker/topology.json` — топология Docker-сети ✅
 4. Создание `run_model.sh` — универсальный лаунчер OpenCode (модель + набор агентов) ✅
+5. Асинхронная запись в LightRAG: очередь Redis + фоновый writer (`scripts/lightrag_writer.py`) + systemd-сервис ✅
 
 ## Инфраструктурная матрица (текущий сценарий: Базовый)
 
@@ -71,8 +73,30 @@
 
 - **Читает**: `planners.questions.v1`, `planners.answers.v1`, `planners.meeting.v1`
 - **Пишет**: `planners.presentations.v1`, `planners.questions.v1`, `metrics.raw.v1`, `metrics.kpi.v1`
-- **Файлы**: `schemas/*.json`, `infrastructure/docker/*.json`, `infrastructure/dtn/*.json`, `skills/template_SKILL.md`, `run_model.sh`
+- **Файлы**: `schemas/*.json`, `infrastructure/docker/*.json`, `infrastructure/systemd/*.json`, `infrastructure/dtn/*.json`, `skills/template_SKILL.md`, `run_model.sh`
+- **Сервисы**: `lightrag-writer.service` (systemd, активен при загрузке)
 - **MCP**: filesystem (файлы), github (репозиторий), memory (ChromaDB+Redis+LightRAG+Kafka)
+
+## Архитектура памяти
+
+```
+┌──────────────┐     memory_graph_insert     ┌──────────────┐     lightrag_writer.py     ┌──────────┐
+│  Агенты (MCP) │ ──────────────────────────→ │  Redis queue │ ─────── (systemd) ──────→ │ LightRAG │
+│  (быстрая     │     (мгновенно, не ждёт)    │ lightrag:q   │     (batch: 3, pause: 15с)  │ (граф)   │
+│  запись)      │                              └──────────────┘                           └──────────┘
+└──────────────┘
+       │
+       │ memory_vector_save
+       ▼
+┌──────────────┐
+│   ChromaDB   │  ← быстрая векторная память (прямая запись)
+└──────────────┘
+```
+
+- `memory_graph_insert` → Redis queue (мгновенно)
+- `memory_graph_query` → LightRAG read-only (запросы)
+- `memory_vector_save` → ChromaDB напрямую (быстрые вектора)
+- `lightrag_writer.py` → фоновый systemd-демон, пишет из очереди в LightRAG с паузой
 
 ## KPI
 
