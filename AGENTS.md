@@ -13,26 +13,72 @@
 
 ## Запуск агентов
 
+### Быстрый запуск (tmux, 24/7, локальные модели)
+
 ```bash
-# Terminal 1: Архитектор
-./run_architect.sh
+# 1. Конструктор Сети (на сервере 238)
+./scripts/opencode_tmux.sh constructor
 
-# Terminal 2: Конструктор Сети
-./run_constructor.sh
+# 2. Остальные агенты (на сервере 238)
+./scripts/opencode_tmux.sh architect
+./scripts/opencode_tmux.sh integrator
+./scripts/opencode_tmux.sh director
+./scripts/opencode_tmux.sh lawkeeper
+./scripts/opencode_tmux.sh keeper
 
-# Terminal 3: Интегратор Знаний
-./run_integrator.sh
+# Подключиться к агенту:
+tmux attach -t waters:constructor
 
-# Terminal 4: Директор по Смыслу
-cp agents/director_AGENTS.md AGENTS.md && opencode
+# Отключиться (агент продолжает работу):
+# Ctrl+B, затем D
+```
 
-# Terminal 5: Хранитель Протокола
-cp agents/keeper_AGENTS.md AGENTS.md && opencode
+### Модели
 
-# Terminal 6: Законодатель
-cp agents/lawkeeper_AGENTS.md AGENTS.md && opencode
+Агенты по умолчанию используют `Qwen 2.5 14B` (Ollama на 237).
+Доступные модели:
 
-# После завершения — восстановить дашборд:
+| Модель | ID для `--model` | Характеристика |
+|--------|-------------------|----------------|
+| Qwen 2.5 14B | `ollama/qwen2.5:14b` | Сбалансированная, по умолчанию |
+| Qwen 2.5 7B | `ollama/qwen2.5:7b` | Быстрая (CPU) |
+| DeepSeek R1 7B | `ollama/deepseek-r1:7b` | R1-рассуждения, CPU |
+| DeepSeek V4 Flash | `deepseek/deepseek-v4-flash` | Внешняя, нужен ключ |
+
+```bash
+# Запуск с конкретной моделью:
+opencode --model ollama/qwen2.5:7b
+opencode --model deepseek/deepseek-v4-flash
+```
+
+### Полный синтаксис запуска
+
+```bash
+# Вариант A: через tmux (рекомендуется — сессия не рвётся)
+./scripts/opencode_tmux.sh <agent> [start|attach|stop]
+# Пример:
+./scripts/opencode_tmux.sh constructor       # запустить
+./scripts/opencode_tmux.sh constructor attach # подключиться
+./scripts/opencode_tmux.sh list              # все запущенные
+
+# Вариант B: через run_*.sh (простой запуск)
+./run_constructor.sh          # обычный
+./run_constructor.sh --tmux   # или в tmux
+
+# Вариант C: прямой opencode (для отладки)
+cp agents/constructor_AGENTS.md AGENTS.md && opencode
+
+# Вариант D: headless serve + CEO API (см. scripts/ceo.sh)
+./scripts/opencode_serve.sh start
+export OPENCODE_SERVER=http://opencode:$(./scripts/opencode_serve.sh password)@localhost:4096
+./scripts/ceo.sh create constructor
+./scripts/ceo.sh msg <id> "задача"
+```
+
+### После завершения
+
+```bash
+# Восстановить дашборд:
 git checkout AGENTS.md
 ```
 
