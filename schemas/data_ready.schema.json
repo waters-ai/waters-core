@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://waters.ai/schemas/data_ready.v1.json",
+  "title": "Data Ready Event",
+  "description": "Уведомление от полевого агента scout.v1 о готовности проверенных данных. Публикуется в топик data.ready.v1 после успешной фильтрации и копирования на 238.",
+  "type": "object",
+  "required": ["type", "agent", "task_id", "path", "summary", "quality_score", "files_count", "timestamp"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["data_ready"],
+      "description": "Тип события"
+    },
+    "agent": {
+      "type": "string",
+      "pattern": "^agent\\.[a-z_]+(\\.v[0-9]+)?$",
+      "description": "Код агента-отправителя (agent.scout.v1)"
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID задания из tasks.assigned.v1"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^/home/ubuntu/WATERS/repos/waters-core/agents/[a-z_]+/data/",
+      "description": "Путь к проверенным данным на 238"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "Краткое описание найденной информации"
+    },
+    "quality_score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Оценка качества после проверки NotebookLM"
+    },
+    "files_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Количество проверенных файлов"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["filename", "size_bytes", "source_url", "checksum_sha256"],
+        "properties": {
+          "filename": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 1 },
+          "source_url": { "type": "string", "format": "uri" },
+          "checksum_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      },
+      "description": "Список проверенных файлов с метаданными"
+    },
+    "raw_path": {
+      "type": "string",
+      "pattern": "^/home/waters-data/raw/",
+      "description": "Путь к сырым данным на 167 (до фильтрации)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Время готовности данных (ISO8601 UTC)"
+    }
+  }
+}
