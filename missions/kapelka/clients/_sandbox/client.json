@@ -1,0 +1,22 @@
+{
+  "name": "_sandbox",
+  "description": "Тестовый проект для проверки агентов Kapelka",
+  "created_at": "2026-05-10",
+  "status": "sandbox",
+  "tech_stack": ["react", "vite", "solana", "anchor"],
+  "url": "https://sandbox.kapelka.waters.ai",
+  "github": null,
+  "credentials": {
+    "regru": null,
+    "domain": null,
+    "rpc": "https://api.devnet.solana.com",
+    "notes": "Devnet only. Реальные данные заказчика — в `real/`"
+  },
+  "audit_plan": null,
+  "reports": [],
+  "deploy": {
+    "status": "none",
+    "hosting": null,
+    "ssl": null
+  }
+}

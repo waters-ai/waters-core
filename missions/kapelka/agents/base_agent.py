@@ -19,6 +19,7 @@ import json
 import os
 import time
 import logging
+import threading
 import uuid
 from typing import Optional, Callable
 from http.client import HTTPConnection
@@ -36,6 +37,7 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "171.22.180.237")
 OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "11434"))
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:14b")
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))
+HEARTBEAT_INTERVAL = int(os.getenv("HEARTBEAT_INTERVAL", "60"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 
@@ -57,6 +59,8 @@ class BaseAgent(ABC):
         # Инициализация
         self._ensure_workspace()
         self._init_kafka()
+        self._heartbeat_count = 0
+        self._heartbeat_thread = None
 
     def _ensure_workspace(self):
         """Создаёт рабочие директории, если их нет."""
@@ -176,8 +180,25 @@ class BaseAgent(ABC):
         """Обработка одного приказа — переопределить в наследнике."""
         ...
 
+    def _heartbeat_loop(self):
+        while True:
+            try:
+                hb_dir = os.path.join(KAPELKA_WORKSPACE, "logs", "heartbeat")
+                os.makedirs(hb_dir, exist_ok=True)
+                hb_path = os.path.join(hb_dir, f"{self.agent_name}.hb")
+                with open(hb_path, "w") as f:
+                    f.write(f"{time.time()}\n")
+                self._heartbeat_count += 1
+                if self._heartbeat_count % 10 == 0:
+                    self.log.debug("Heartbeat OK")
+            except Exception:
+                pass
+            time.sleep(HEARTBEAT_INTERVAL)
+
     def run(self):
         """Основной цикл."""
+        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._heartbeat_thread.start()
         self.log.info("%s (%s) запущен. Режим: %s, Ollama: %s:%s/%s",
                       self.agent_name, self.agent_code, KAPELKA_MODE,
                       OLLAMA_HOST, OLLAMA_PORT, OLLAMA_MODEL)
