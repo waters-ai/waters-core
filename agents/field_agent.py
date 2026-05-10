@@ -1,28 +1,7 @@
 #!/usr/bin/env python3
 """
-Field Agent (Scout) v2.0 — DMZ-based information gathering subagent.
-Подчиняется Integrator. Работает на 167, без MCP-доступа.
-
-Каналы ввода:
-  - Telegram bot (прямые запросы CEO)
-  - Kafka tasks.assigned.v1 (задания от Integrator)
-  - Kafka delivery_ack (подтверждение доставки от Integrator DM)
-
-Поисковые движки:
-  - DuckDuckGo (бесплатно)
-  - YouTube Transcript (бесплатно)
-  - Yandex.XML (опционально, RU-fallback)
-
-Валидация: NotebookLM (бесплатно) → вердикт: годно/мусор + выжимка
-
-Архитектура:
-  167 (Scout): поиск → валидация → file_ready → Kafka
-  238 (Integrator DM): SCP с 167 → agents/{agent}/data/ → delivery_ack
-
-YASA compliance:
-  - Секреты в ~/.secrets/.secret_* (YASA-DUTY-5)
-  - Никаких ключей в коде (YASA-PROH-5)
-  - Комментарии на русском, нейминг на английском (YASA-FMT-5)
+Scout Field Agent v2.0 — DMZ information gatherer.
+Зона: RU. 167 → 238. $0.10/день.
 """
 
 import asyncio
@@ -34,72 +13,40 @@ import re
 import threading
 import time
 import uuid
+from concurrent.futures import TimeoutError
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
 import requests
 
+from agents.config import (AGENT_ID, RAW_BASE, SCOUT_REGION, HEARTBEAT_INTERVAL,
+                            CLEANUP_INTERVAL, TASK_TIMEOUT, CLEANUP_MAX_DAYS,
+                            PRIORITY_MAP, SEARCH_ENGINES, KAFKA_BROKER,
+                            LOG_PATH, SECRET_DIR)
 from agents.scout_state import StateManager
 from agents.scout_ratelimit import RateLimiter
 from agents.scout_cleanup import CleanupScheduler
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("/home/waters-data/logs/field_agent.log")
-    ]
-)
 log = logging.getLogger("field_agent")
-
-AGENT_ID = "agent.scout.v1"
-RAW_BASE = "/home/waters-data/raw"
-SECRET_DIR = Path(os.path.expanduser("~")) / ".secrets"
-KAFKA_BROKER = "171.22.180.238:9092"
-
-HIGH_AUTHORITY_DOMAINS = {
-    "edu", "gov", "mil", "arxiv.org", "nature.com", "science.org",
-    "wikipedia.org", "scholar.google.com", "nih.gov", "nasa.gov",
-    "europa.eu", "who.int", "ieee.org", "acm.org",
-}
-MEDIUM_AUTHORITY_DOMAINS = {
-    "habr.com", "vc.ru", "medium.com", "techcrunch.com", "theverge.com",
-    "github.com", "gitlab.com", "stackoverflow.com", "reddit.com",
-    "news.ycombinator.com", "habr.com", "dtf.ru", "tproger.ru",
-}
+handler = RotatingFileHandler(LOG_PATH, maxBytes=10*1024*1024, backupCount=5)
+handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+log.addHandler(handler)
+log.addHandler(logging.StreamHandler())
 
 
 def _load_secret(name: str) -> Optional[str]:
-    path = SECRET_DIR / f".secret_{name}"
-    if path.exists():
-        return path.read_text().strip()
+    path = os.path.join(SECRET_DIR, f".secret_{name}")
+    if os.path.exists(path):
+        with open(path) as f:
+            return f.read().strip()
     return os.environ.get(f"WATERS_{name.upper()}")
 
 
 def _ensure_dir(path: str):
     Path(path).mkdir(parents=True, exist_ok=True)
-
-
-def _domain_authority(url: str) -> str:
-    if not url:
-        return "unknown"
-    try:
-        from urllib.parse import urlparse
-        domain = urlparse(url).netloc.lower()
-        if domain.startswith("www."):
-            domain = domain[4:]
-        for d in HIGH_AUTHORITY_DOMAINS:
-            if d in domain or domain.endswith("." + d):
-                return "high"
-        for d in MEDIUM_AUTHORITY_DOMAINS:
-            if d in domain:
-                return "medium"
-        return "low"
-    except Exception:
-        return "unknown"
 
 
 def _checksum(text: str, url: str = "", title: str = "") -> str:
@@ -113,55 +60,56 @@ class Task:
     task_id: str
     query: str
     requester: str
-    source_engines: list[str] = field(default_factory=lambda: ["ddg", "youtube"])
+    priority: int = 5
+    source_engines: list[str] = field(default_factory=lambda: SEARCH_ENGINES.get(SCOUT_REGION, ["ddg"]))
     max_results: int = 10
     language: str = "ru"
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 @dataclass
 class SearchResult:
     title: str
     url: str
-    content: str
-    snippet: str = ""
+    snippet: str
+    content: str = ""
     source: str = ""
-    language: str = ""
-    domain_authority: str = "unknown"
+    source_rating: float = 0.5
 
 
-# ─── QueryExpander ────────────────────────────────────────────────
+# ─── YaCy Search ♾️ ──────────────────────────────────────────────
 
-class QueryExpander:
-    EXPANSIONS = {
-        "ru": [
-            lambda q: q,
-            lambda q: q + " 2026",
-            lambda q: f"site:habr.com {q}" if "habr" not in q else q,
-            lambda q: q.replace("новости ", "").replace("последние ", ""),
-        ],
-        "en": [
-            lambda q: q,
-            lambda q: q + " 2026",
-        ],
-    }
+class YaCySearch:
+    PEERS = ["https://yacy.searchlab.eu", "https://yacy.cf"]
 
-    def expand(self, query: str, language: str = "ru") -> list[str]:
+    def __init__(self, ratelimit: RateLimiter):
+        self._ratelimit = ratelimit
+
+    def search(self, query: str, max_results: int = 20) -> list[SearchResult]:
         results = []
-        patterns = self.EXPANSIONS.get(language, self.EXPANSIONS["ru"])
-        for fn in patterns:
-            expanded = fn(query)
-            if expanded and expanded not in results:
-                results.append(expanded)
-        if language == "ru":
-            en_guess = query.replace("новости ", "news ").replace("искусственный интеллект", "AI")
-            en_guess = en_guess.replace("последние ", "latest ").replace("новый", "new")
-            if en_guess != query and en_guess not in results:
-                results.append(en_guess)
-        return results[:4]
+        for peer in self.PEERS:
+            try:
+                self._ratelimit.acquire("yacy")
+                resp = requests.get(f"{peer}/yacysearch.json", params={
+                    "query": query, "maximumRecords": max_results, "resource": "global",
+                }, timeout=15)
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                for item in data.get("channels", [{}])[0].get("items", []):
+                    results.append(SearchResult(
+                        title=item.get("title", ""),
+                        url=item.get("link", ""),
+                        snippet=item.get("snippet", ""),
+                        source="yacy",
+                    ))
+                if results:
+                    break
+            except Exception as e:
+                log.warning("YaCy peer %s failed: %s", peer, e)
+        return results
 
 
-# ─── DuckDuckGo Search ────────────────────────────────────────────
+# ─── DuckDuckGo Search ───────────────────────────────────────────
 
 class DuckDuckGoSearch:
     def __init__(self, ratelimit: RateLimiter):
@@ -170,33 +118,26 @@ class DuckDuckGoSearch:
             from duckduckgo_search import DDGS
             self._ddgs = DDGS
         except ImportError:
-            log.error("duckduckgo-search not installed")
             self._ddgs = None
 
-    def search(self, query: str, max_results: int = 10,
-               timeout: int = 20) -> list[SearchResult]:
+    def search(self, query: str, max_results: int = 10) -> list[SearchResult]:
         if not self._ddgs:
             return []
         results = []
         try:
             self._ratelimit.acquire("duckduckgo")
-            with self._ddgs(timeout=timeout) as ddgs:
+            with self._ddgs(timeout=20) as ddgs:
                 for r in ddgs.text(query, max_results=max_results):
-                    url = r.get("href", "")
                     results.append(SearchResult(
-                        title=r.get("title", ""),
-                        url=url,
-                        snippet=r.get("body", ""),
-                        content="",
-                        source="duckduckgo",
-                        domain_authority=_domain_authority(url),
+                        title=r.get("title", ""), url=r.get("href", ""),
+                        snippet=r.get("body", ""), source="duckduckgo",
                     ))
         except Exception as e:
-            log.warning("DuckDuckGo search failed for '%s': %s", query[:50], e)
+            log.warning("DDG failed: %s", e)
         return results
 
 
-# ─── YouTube Transcript Search ────────────────────────────────────
+# ─── YouTube Search ──────────────────────────────────────────────
 
 class YouTubeTranscriptSearch:
     def __init__(self, ratelimit: RateLimiter):
@@ -205,61 +146,49 @@ class YouTubeTranscriptSearch:
     def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
         results = []
         try:
-            from youtube_transcript_api import YouTubeTranscriptApi
-            from youtube_transcript_api.formatters import TextFormatter
-
             self._ratelimit.acquire("youtube")
-            search_url = f"https://www.youtube.com/results?search_query={requests.utils.quote(query)}"
-            resp = requests.get(search_url, timeout=15)
-            video_ids = re.findall(r'watch\?v=([a-zA-Z0-9_-]{11})', resp.text)
-            video_ids = list(dict.fromkeys(video_ids))[:max_results]
-
-            formatter = TextFormatter()
-            ytt_api = YouTubeTranscriptApi()
-
-            for vid in video_ids:
-                try:
-                    transcript = ytt_api.fetch(vid, languages=["ru", "en"])
-                    text = formatter.format_transcript(transcript)
-                    results.append(SearchResult(
-                        title=f"YouTube: {vid}",
-                        url=f"https://youtube.com/watch?v={vid}",
-                        snippet=text[:300] if text else "",
-                        content=text,
-                        source="youtube",
-                        domain_authority="medium",
-                    ))
-                except Exception:
-                    continue
-        except ImportError:
-            log.error("youtube-transcript-api not installed")
+            resp = requests.get(
+                f"https://www.youtube.com/results?search_query={requests.utils.quote(query)}",
+                timeout=15,
+            )
+            vids = re.findall(r'watch\?v=([a-zA-Z0-9_-]{11})', resp.text)
+            for vid in list(dict.fromkeys(vids))[:max_results]:
+                results.append(SearchResult(
+                    title=f"YouTube: {vid}", url=f"https://youtube.com/watch?v={vid}",
+                    snippet="", source="youtube",
+                ))
         except Exception as e:
-            log.warning("YouTube search failed: %s", e)
+            log.warning("YouTube failed: %s", e)
         return results
 
+    def fetch_transcript(self, video_id: str) -> Optional[str]:
+        try:
+            from youtube_transcript_api import YouTubeTranscriptApi
+            from youtube_transcript_api.formatters import TextFormatter
+            self._ratelimit.acquire("youtube")
+            transcript = YouTubeTranscriptApi().fetch(video_id, languages=["ru", "en"])
+            return TextFormatter().format_transcript(transcript)
+        except Exception as e:
+            log.warning("Transcript failed for %s: %s", video_id, e)
+            return None
 
-# ─── Yandex.XML Search (optional, RU-fallback) ────────────────────
+
+# ─── Yandex.XML Search (optional) ────────────────────────────────
 
 class YandexXMLSearch:
-    API_URL = "https://yandex.com/search/xml"
-
     def __init__(self, ratelimit: RateLimiter):
         self._ratelimit = ratelimit
-        self._api_key = _load_secret("yandex_api_key")
-        self._user = _load_secret("yandex_user")
-        if not self._api_key or not self._user:
-            log.info("Yandex.XML not configured (no keys) — skipping")
+        self._key = _load_secret("yandex_xml_api_key")
+        self._user = _load_secret("yandex_xml_user")
 
     def search(self, query: str, max_results: int = 10) -> list[SearchResult]:
-        if not self._api_key or not self._user:
+        if not self._key:
             return []
         results = []
         try:
-            self._ratelimit.acquire("yandex")
-            resp = requests.get(self._API_URL, params={
-                "user": self._user,
-                "key": self._api_key,
-                "query": query,
+            self._ratelimit.acquire("yandex_xml")
+            resp = requests.get("https://yandex.com/search/xml", params={
+                "user": self._user, "key": self._key, "query": query,
                 "groupby": f"attr=d.mode=flat.groups-on-page={max_results}",
             }, timeout=20)
             if resp.status_code == 200:
@@ -267,124 +196,113 @@ class YandexXMLSearch:
                 root = ElementTree.fromstring(resp.content)
                 ns = {"y": "http://yandex.com/xml"}
                 for doc in root.findall(".//y:doc", ns):
-                    url = doc.findtext("y:url", "", ns)
-                    title = doc.findtext("y:title", "", ns)
-                    snippet = doc.findtext("y:headline", "", ns)
-                    if url:
-                        results.append(SearchResult(
-                            title=title,
-                            url=url,
-                            snippet=snippet,
-                            content="",
-                            source="yandex",
-                            domain_authority=_domain_authority(url),
-                        ))
+                    results.append(SearchResult(
+                        title=doc.findtext("y:title", "", ns),
+                        url=doc.findtext("y:url", "", ns),
+                        snippet=doc.findtext("y:headline", "", ns),
+                        source="yandex",
+                    ))
         except Exception as e:
-            log.warning("Yandex search failed: %s", e)
+            log.warning("Yandex.XML failed: %s", e)
         return results
 
 
-# ─── PageFetcher (full-page text extraction) ──────────────────────
+# ─── Page Fetcher ────────────────────────────────────────────────
 
 class PageFetcher:
     def __init__(self, ratelimit: RateLimiter):
         self._ratelimit = ratelimit
-        self._user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-            "WATERS Scout/1.0 (information gatherer; +https://waters.ai)",
-        ]
 
     def fetch(self, url: str, timeout: int = 15) -> Optional[str]:
         if not url:
             return None
         try:
             self._ratelimit.acquire("page_fetch")
-            ua = self._user_agents[hash(url) % len(self._user_agents)]
-            resp = requests.get(url, headers={"User-Agent": ua},
+            resp = requests.get(url, headers={"User-Agent": "WATERS Scout/2.0"},
                                 timeout=timeout, allow_redirects=True)
             if resp.status_code != 200:
                 return None
             try:
                 import trafilatura
-                text = trafilatura.extract(resp.text, include_comments=False,
-                                            include_tables=False, no_fallback=False)
+                text = trafilatura.extract(resp.text, include_comments=False, include_tables=False)
                 if text and len(text) > 50:
                     return text
             except ImportError:
                 pass
             return resp.text[:10000]
-        except Exception as e:
-            log.debug("Page fetch failed for %s: %s", url[:50], e)
+        except Exception:
             return None
 
 
-# ─── Search Engine (orchestrator) ─────────────────────────────────
+# ─── YandexGPT Client ────────────────────────────────────────────
 
-class SearchEngine:
-    def __init__(self, ratelimit: RateLimiter):
-        self._ddg = DuckDuckGoSearch(ratelimit)
-        self._youtube = YouTubeTranscriptSearch(ratelimit)
-        self._yandex = YandexXMLSearch(ratelimit)
-        self._page_fetcher = PageFetcher(ratelimit)
-        self._query_expander = QueryExpander()
+class YandexGPTClient:
+    API_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
-        self._engines = {
-            "ddg": self._ddg.search,
-            "youtube": self._youtube.search,
-            "yandex": self._yandex.search,
-        }
+    def __init__(self, state: StateManager, ratelimit: RateLimiter):
+        self._state = state
+        self._ratelimit = ratelimit
+        self._api_key = _load_secret("yandexgpt_api_key")
 
-    def search(self, task: Task) -> list[SearchResult]:
-        all_results = []
-        seen_urls = set()
+    def _catalog_id(self) -> Optional[str]:
+        key = self._api_key
+        if key and key.startswith("AQVN"):
+            return "b1g3hv7p7jqk9r8l2m4n"
+        return None
 
-        queries = self._query_expander.expand(task.query, task.language)
-        log.info("Expanded '%s' → %d variants", task.query[:50], len(queries))
+    def _call(self, prompt: str, max_tokens: int = 300) -> Optional[str]:
+        catalog = self._catalog_id()
+        if not catalog or not self._api_key:
+            return None
+        if not self._state.can_use("yandexgpt"):
+            return None
+        try:
+            self._ratelimit.acquire("yandexgpt")
+            resp = requests.post(self.API_URL, json={
+                "modelUri": f"gpt://{catalog}/yandexgpt-lite",
+                "completionOptions": {"stream": False, "maxTokens": max_tokens},
+                "messages": [{"role": "user", "text": prompt}],
+            }, headers={
+                "Authorization": f"Api-Key {self._api_key}",
+                "Content-Type": "application/json",
+            }, timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                usage = data.get("usage", {})
+                cost = (usage.get("inputTextTokens", 0) + usage.get("outputTextTokens", 0)) * 0.00000164
+                self._state.log_usage("yandexgpt", "cost", cost)
+                alt = data.get("alternatives", [])
+                if alt:
+                    return alt[0].get("message", {}).get("text", "")
+        except Exception as e:
+            log.warning("YandexGPT call failed: %s", e)
+        return None
 
-        for engine_name in task.source_engines:
-            engine = self._engines.get(engine_name)
-            if not engine:
-                log.warning("Unknown engine: %s", engine_name)
-                continue
-            for q in queries:
-                try:
-                    log.info("Searching %s: '%s'", engine_name, q[:60])
-                    if engine_name == "youtube":
-                        results = engine(q, min(task.max_results, 5))
-                    else:
-                        results = engine(q, task.max_results)
-                    for r in results:
-                        if r.url and r.url not in seen_urls:
-                            seen_urls.add(r.url)
-                            all_results.append(r)
-                except Exception as e:
-                    log.warning("Engine %s failed for '%s': %s", engine_name, q[:30], e)
+    def expand_query(self, text: str) -> list[str]:
+        prompt = (
+            f"Пользователь написал: '{text}'. Сгенерируй 3 коротких поисковых запроса "
+            f"на русском и английском для поисковика. Верни только запросы, каждый на новой строке."
+        )
+        result = self._call(prompt, 200)
+        if result:
+            lines = [l.strip().strip("-*") for l in result.split("\n") if l.strip()]
+            return lines[:4]
+        return [text]
 
-        if not all_results:
-            log.warning("No results from primary engines, trying RU-fallback (yandex)...")
-            fallback = self._yandex.search(task.query, task.max_results)
-            for r in fallback:
-                if r.url and r.url not in seen_urls:
-                    all_results.append(r)
-
-        log.info("Total unique results: %d", len(all_results))
-        return all_results
-
-    def fetch_full_text(self, results: list[SearchResult]) -> list[SearchResult]:
-        enriched = []
-        for r in results:
-            if r.content:
-                enriched.append(r)
-                continue
-            text = self._page_fetcher.fetch(r.url)
-            if text:
-                r.content = text[:15000]
-            enriched.append(r)
-        return enriched
+    def validate_snippet(self, snippet: str, query: str) -> dict:
+        prompt = (
+            f"Запрос: '{query}'. Сниппет: '{snippet[:500]}'. "
+            f"Этот сниппет годен/мусор? Ответь одним словом и через пробел краткую выжимку."
+        )
+        result = self._call(prompt, 150)
+        if result:
+            verdict = "годно" if result.lower().startswith("годно") else "мусор"
+            summary = result.split(" ", 1)[1] if " " in result else ""
+            return {"verdict": verdict, "summary": summary[:500]}
+        return {"verdict": "мусор", "summary": ""}
 
 
-# ─── NotebookLM Validator ─────────────────────────────────────────
+# ─── NotebookLM Validator ────────────────────────────────────────
 
 class NotebookLMValidator:
     def __init__(self, ratelimit: RateLimiter):
@@ -396,143 +314,103 @@ class NotebookLMValidator:
             try:
                 from notebooklm import NotebookLMClient
                 self._client = await NotebookLMClient.from_storage()
-            except Exception as e:
-                log.error("Failed to init NotebookLM: %s", e)
+            except Exception:
+                pass
         return self._client
 
-    async def validate(self, file_path: str, query: str) -> dict:
-        result = {
-            "verdict": "мусор",
-            "summary": "",
-            "is_valid_source": False,
-            "is_relevant": False,
-            "issues": [],
-        }
+    async def validate(self, snippet: str, query: str) -> dict:
+        result = {"verdict": "мусор", "summary": ""}
         client = await self._get_client()
         if not client:
-            result["summary"] = "NotebookLM unavailable"
             return result
-
         try:
             self._ratelimit.acquire("notebooklm")
-            nb = await client.notebooks.create(f"Validate: {Path(file_path).name}")
-            await client.sources.add_file(nb.id, file_path, wait=True)
-
-            valid_check = await client.chat.ask(
-                nb.id,
-                f"Оцени этот источник. Это научный/авторитетный источник, "
-                f"любительский блог или откровенный фейк? Ответь одним словом: годно/мусор."
-            )
-            relevance_check = await client.chat.ask(
-                nb.id,
-                f"Этот документ релевантен запросу: '{query}'? Ответь: да/нет."
-            )
-            summary_check = await client.chat.ask(
-                nb.id,
-                f"Дай краткую выжимку (3-5 предложений) документа: "
-                f"о чём он, какие ключевые факты, даты, цифры."
-            )
-
-            verdict_raw = (valid_check.answer or "").strip().lower()
-            is_relevant_raw = (relevance_check.answer or "").strip().lower()
-            summary = (summary_check.answer or "").strip()
-
-            result["is_valid_source"] = "годно" in verdict_raw
-            result["is_relevant"] = "да" in is_relevant_raw
-            result["summary"] = summary[:1000]
-            result["verdict"] = "годно" if (result["is_valid_source"] and result["is_relevant"]) else "мусор"
-
-            if result["verdict"] == "мусор":
-                reasons = []
-                if not result["is_valid_source"]:
-                    reasons.append("источник неавторитетный")
-                if not result["is_relevant"]:
-                    reasons.append("нерелевантен запросу")
-                result["issues"] = reasons
-
+            nb = await asyncio.wait_for(client.notebooks.create("V"), timeout=30)
+            await asyncio.wait_for(client.sources.add_text(nb.id, snippet[:3000]), timeout=30)
+            v = await asyncio.wait_for(
+                client.chat.ask(nb.id, f"Сниппет релевантен '{query}'? годно/мусор? Одно слово."),
+                timeout=30)
+            s = await asyncio.wait_for(
+                client.chat.ask(nb.id, "Выжимка сниппета: 1 предложение."), timeout=30)
             await client.notebooks.delete(nb.id)
-
-        except Exception as e:
-            log.error("NotebookLM validation failed for %s: %s", file_path, e)
-            result["issues"].append(str(e))
-
+            vtext = (v.answer or "").strip().lower()
+            result["verdict"] = "годно" if "годно" in vtext else "мусор"
+            result["summary"] = (s.answer or "")[:500]
+        except (TimeoutError, Exception) as e:
+            log.warning("NotebookLM failed: %s", e)
         return result
 
-    async def synthesize_task(self, file_paths: list[str], query: str) -> dict:
-        if not file_paths:
-            return {"summary": "Нет файлов для синтеза", "verdict": "empty"}
-        client = await self._get_client()
-        if not client:
-            return {"summary": "NotebookLM unavailable", "verdict": "error"}
 
-        try:
-            nb = await client.notebooks.create(f"Synthesis: {query[:40]}")
-            for fp in file_paths:
-                try:
-                    await client.sources.add_file(nb.id, fp, wait=True)
-                except Exception:
-                    continue
+# ─── Validator Router ─────────────────────────────────────────────
 
-            synthesis = await client.chat.ask(
-                nb.id,
-                f"У тебя есть несколько документов по запросу '{query}'. "
-                f"Составь общую сводку: какие ключевые факты, "
-                f"есть ли противоречия между источниками, "
-                f"что подтверждено несколькими источниками."
-            )
-            contradictions = await client.chat.ask(
-                nb.id,
-                f"Есть ли противоречия между этими документами? "
-                f"Если есть — перечисли. Если нет — скажи 'противоречий нет'."
-            )
+class ValidatorRouter:
+    def __init__(self, state: StateManager, ratelimit: RateLimiter):
+        self._notebooklm = NotebookLMValidator(ratelimit)
+        self._yandexgpt = YandexGPTClient(state, ratelimit)
+        self._state = state
 
-            result = {
-                "summary": (synthesis.answer or "")[:2000],
-                "contradictions": (contradictions.answer or "")[:1000],
-                "files_count": len(file_paths),
-            }
-            await client.notebooks.delete(nb.id)
+    async def validate(self, snippet: str, query: str) -> dict:
+        if self._state.can_use("notebooklm"):
+            result = await self._notebooklm.validate(snippet, query)
+            self._state.log_usage("notebooklm", "requests")
+            if result["verdict"] != "мусор" or self._state.can_use("notebooklm"):
+                return result
+        if self._state.can_use("yandexgpt"):
+            result = self._yandexgpt.validate_snippet(snippet, query)
             return result
-        except Exception as e:
-            log.error("NotebookLM synthesis failed: %s", e)
-            return {"summary": "Synthesis failed", "verdict": "error"}
+        return {"verdict": "годно", "summary": "Лимит проверок исчерпан"}
 
 
-# ─── CrossSourceVerifier ──────────────────────────────────────────
+# ─── Search Engine ───────────────────────────────────────────────
 
-class CrossSourceVerifier:
-    def verify(self, files: list[dict]) -> dict:
-        if len(files) < 2:
-            return {"verified_claims": [], "contradictions": [], "confidence": "low"}
-
-        summaries = [f.get("notebooklm_summary", "") for f in files if f.get("notebooklm_summary")]
-        sources = [f.get("source", "unknown") for f in files]
-        urls = [f.get("url", "") for f in files]
-
-        domains = set()
-        for url in urls:
-            auth = _domain_authority(url)
-            domains.add(auth)
-
-        unique_sources = len(set(sources))
-        high_authority_count = sum(1 for d in domains if d == "high")
-
-        confidence = "low"
-        if unique_sources >= 3 and high_authority_count >= 1:
-            confidence = "high"
-        elif unique_sources >= 2:
-            confidence = "medium"
-
-        return {
-            "verified_claims": [],
-            "contradictions": [],
-            "confidence": confidence,
-            "unique_sources": unique_sources,
-            "high_authority_count": high_authority_count,
+class SearchEngine:
+    def __init__(self, ratelimit: RateLimiter, state: StateManager):
+        self._yacy = YaCySearch(ratelimit)
+        self._ddg = DuckDuckGoSearch(ratelimit)
+        self._youtube = YouTubeTranscriptSearch(ratelimit)
+        self._yandex = YandexXMLSearch(ratelimit)
+        self._page = PageFetcher(ratelimit)
+        self._state = state
+        self._engines = {
+            "yacy": self._yacy.search,
+            "duckduckgo": self._ddg.search,
+            "youtube": self._youtube.search,
+            "yandex_xml": self._yandex.search,
         }
 
+    def search(self, task: Task) -> list[SearchResult]:
+        all_results = []
+        seen = set()
+        max_total = min(task.max_results * 3, 50)
+        engine_order = [e for e in SEARCH_ENGINES.get(SCOUT_REGION, ["yacy"]) if e in self._engines]
 
-# ─── FileSaver ────────────────────────────────────────────────────
+        for engine_name in engine_order:
+            if len(all_results) >= max_total:
+                break
+            if not self._state.can_use(engine_name):
+                log.info("Skipping %s (limit exhausted)", engine_name)
+                continue
+            try:
+                results = self._engines[engine_name](task.query, task.max_results)
+                for r in results:
+                    if r.url and r.url not in seen:
+                        seen.add(r.url)
+                        r.source_rating = self._state.get_source_rating(r.url)
+                        all_results.append(r)
+                if engine_name in ("yacy", "yandex_xml"):
+                    self._state.log_usage(engine_name, "requests", 1)
+            except Exception as e:
+                log.warning("Engine %s error: %s", engine_name, e)
+        return all_results
+
+    def fetch_full_text(self, result: SearchResult) -> str:
+        if result.content:
+            return result.content
+        text = self._page.fetch(result.url)
+        return text or ""
+
+
+# ─── File Saver ──────────────────────────────────────────────────
 
 class FileSaver:
     def __init__(self):
@@ -543,49 +421,29 @@ class FileSaver:
         save_dir = f"{self._agent_dir}/{date_str}"
         _ensure_dir(save_dir)
         saved = []
-
         for i, r in enumerate(results):
-            cs = _checksum(r.content or r.snippet, r.url, r.title)
-            filename = f"{task.task_id}_{i:03d}_{r.source}_{int(time.time())}.json"
-            filepath = f"{save_dir}/{filename}"
-            content = {
-                "task_id": task.task_id,
-                "query": task.query,
-                "source": r.source,
-                "title": r.title,
-                "url": r.url,
-                "snippet": r.snippet,
-                "content": r.content,
-                "domain_authority": r.domain_authority,
-                "fetched_at": datetime.now(timezone.utc).isoformat(),
-                "checksum_sha256": cs,
-            }
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(content, f, ensure_ascii=False, indent=2)
-            saved.append({
-                "path": filepath,
-                "checksum_sha256": cs,
-                "source": r.source,
-                "url": r.url,
-                "title": r.title,
-                "domain_authority": r.domain_authority,
-            })
-
-        log.info("Saved %d files to %s", len(saved), save_dir)
+            cs = _checksum(r.snippet, r.url, r.title)
+            fpath = f"{save_dir}/{task.task_id}_{i:03d}_{r.source}.json"
+            with open(fpath, "w", encoding="utf-8") as f:
+                json.dump({
+                    "task_id": task.task_id, "query": task.query, "source": r.source,
+                    "title": r.title, "url": r.url, "snippet": r.snippet,
+                    "content": r.content, "source_rating": r.source_rating,
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "checksum_sha256": cs,
+                }, f, ensure_ascii=False, indent=2)
+            saved.append({"path": fpath, "checksum_sha256": cs, "source": r.source,
+                          "url": r.url, "title": r.title, "source_rating": r.source_rating})
         return saved
 
 
-# ─── KafkaManager ─────────────────────────────────────────────────
+# ─── Kafka Manager ───────────────────────────────────────────────
 
 class KafkaManager:
     def __init__(self, state: StateManager):
         self._state = state
         self._producer = None
         self._consumer = None
-        self._task_callback = None
-
-    def set_task_callback(self, callback):
-        self._task_callback = callback
 
     def _get_producer(self):
         if self._producer is None:
@@ -593,12 +451,11 @@ class KafkaManager:
                 from kafka import KafkaProducer
                 self._producer = KafkaProducer(
                     bootstrap_servers=KAFKA_BROKER,
-                    value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
-                    acks="all",
-                    retries=3,
+                    value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode(),
+                    acks="all", retries=3,
                 )
             except Exception as e:
-                log.error("Failed to create Kafka producer: %s", e)
+                log.error("Kafka producer: %s", e)
         return self._producer
 
     def _get_consumer(self):
@@ -606,322 +463,321 @@ class KafkaManager:
             try:
                 from kafka import KafkaConsumer
                 self._consumer = KafkaConsumer(
-                    "tasks.assigned.v1",
-                    "delivery.ack.v1",
+                    "tasks.assigned.v1", "delivery.ack.v1", "ratings.update.v1",
                     bootstrap_servers=KAFKA_BROKER,
                     group_id="field-agent",
-                    value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-                    auto_offset_reset="latest",
-                    enable_auto_commit=True,
+                    value_deserializer=lambda v: json.loads(v.decode()),
+                    auto_offset_reset="latest", enable_auto_commit=True,
                 )
             except Exception as e:
-                log.error("Failed to create Kafka consumer: %s", e)
+                log.error("Kafka consumer: %s", e)
         return self._consumer
 
+    def send(self, topic: str, msg: dict):
+        p = self._get_producer()
+        if p:
+            try:
+                p.send(topic, msg)
+                p.flush()
+            except Exception as e:
+                log.error("Kafka send to %s: %s", topic, e)
+
     def send_file_ready(self, task: Task, file_info: dict, validation: dict):
-        producer = self._get_producer()
-        if not producer:
-            return
-        message = {
-            "type": "file_ready",
-            "agent": "scout",
-            "task_id": task.task_id,
-            "query": task.query,
-            "requester": task.requester,
-            "path": file_info["path"],
-            "source": file_info["source"],
-            "url": file_info["url"],
-            "title": file_info["title"],
-            "domain_authority": file_info["domain_authority"],
+        self.send("planners.answers.v1", {
+            "type": "file_ready", "region": SCOUT_REGION, "agent": "scout",
+            "task_id": task.task_id, "query": task.query, "requester": task.requester,
+            "path": file_info["path"], "source": file_info["source"],
+            "url": file_info["url"], "title": file_info["title"],
             "checksum_sha256": file_info["checksum_sha256"],
+            "source_rating": file_info.get("source_rating", 0.5),
             "verdict": validation.get("verdict", "unknown"),
             "summary": validation.get("summary", ""),
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        try:
-            producer.send("planners.answers.v1", message)
-            producer.flush()
-            log.info("Sent file_ready for %s", file_info["path"])
-        except Exception as e:
-            log.error("Failed to send file_ready: %s", e)
+        })
 
-    def send_task_summary(self, task: Task, synthesis: dict,
-                           valid_count: int, total_count: int):
-        producer = self._get_producer()
-        if not producer:
-            return
-        message = {
-            "type": "task_summary",
-            "agent": "scout",
-            "task_id": task.task_id,
-            "query": task.query,
-            "requester": task.requester,
-            "total_files": total_count,
-            "valid_files": valid_count,
-            "summary": synthesis.get("summary", ""),
-            "contradictions": synthesis.get("contradictions", ""),
+    def send_task_summary(self, task: Task, valid_count: int, total_count: int):
+        self.send("planners.answers.v1", {
+            "type": "task_summary", "region": SCOUT_REGION, "agent": "scout",
+            "task_id": task.task_id, "query": task.query, "requester": task.requester,
+            "total_files": total_count, "valid_files": valid_count,
+        })
+
+    def send_heartbeat(self, stats: dict):
+        self.send("events.system.v1", {
+            "type": "heartbeat", "region": SCOUT_REGION, "agent": AGENT_ID,
+            "status": "alive", "timestamp": datetime.now(timezone.utc).isoformat(),
+            "stats": stats,
+        })
+
+    def send_error(self, message: str, details: dict = None):
+        self.send("events.system.v1", {
+            "type": "scout_error", "region": SCOUT_REGION, "agent": AGENT_ID,
+            "message": message, "details": details or {},
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        try:
-            producer.send("planners.answers.v1", message)
-            producer.flush()
-            log.info("Sent task_summary for %s", task.task_id)
-        except Exception as e:
-            log.error("Failed to send task_summary: %s", e)
+        })
 
-    def listen(self, stop_event: threading.Event):
+    def listen(self, callback, stop_event: threading.Event):
         consumer = self._get_consumer()
         if not consumer:
             return
-        log.info("Listening on tasks.assigned.v1 and delivery.ack.v1...")
-        try:
-            for msg in consumer:
-                if stop_event.is_set():
-                    break
-                try:
-                    data = msg.value
-                    if not isinstance(data, dict):
-                        continue
-                    if msg.topic == "delivery.ack.v1":
-                        self._handle_delivery_ack(data)
-                    elif msg.topic == "tasks.assigned.v1" and self._task_callback:
-                        self._handle_task(data)
-                except Exception as e:
-                    log.error("Error processing Kafka message: %s", e)
-        except Exception as e:
-            log.error("Kafka consumer error: %s", e)
-
-    def _handle_task(self, data: dict):
-        task = Task(
-            task_id=data.get("task_id", str(uuid.uuid4())),
-            query=data.get("query", ""),
-            requester=data.get("requester", "kafka:integrator"),
-            source_engines=data.get("source_engines", ["ddg", "youtube"]),
-            max_results=data.get("max_results", 10),
-        )
-        if task.query:
-            log.info("Received task from Kafka: %s", task.task_id)
-            self._task_callback(task)
-
-    def _handle_delivery_ack(self, data: dict):
-        path = data.get("path", "")
-        if path:
-            self._state.mark_delivered(path)
-            log.info("Delivery confirmed: %s", path)
+        for msg in consumer:
+            if stop_event.is_set():
+                break
+            try:
+                data = msg.value
+                if not isinstance(data, dict):
+                    continue
+                if msg.topic == "delivery.ack.v1":
+                    if data.get("path"):
+                        self._state.mark_delivered(data["path"])
+                elif msg.topic == "ratings.update.v1":
+                    domain = data.get("domain", "")
+                    delta = data.get("delta", 0)
+                    reason = data.get("reason", "")
+                    if domain:
+                        self._state.update_source_rating(domain, delta, reason)
+                elif msg.topic == "tasks.assigned.v1" and data.get("query"):
+                    callback(data)
+            except Exception as e:
+                log.error("Kafka msg error: %s", e)
 
 
-# ─── TelegramBot ──────────────────────────────────────────────────
+# ─── Telegram Bot ────────────────────────────────────────────────
 
 class TelegramBot:
-    def __init__(self, task_callback):
-        self._task_callback = task_callback
+    def __init__(self, callback):
+        self._callback = callback
         self._token = _load_secret("telegram_token")
-        self._allowed_users = set()
+        self._allowed = set()
 
-    def _load_allowed_users(self):
-        users_file = SECRET_DIR / ".secret_telegram_users"
-        if users_file.exists():
-            for line in users_file.read_text().strip().splitlines():
-                if line.strip():
-                    self._allowed_users.add(line.strip())
+    def _load_users(self):
+        p = os.path.join(SECRET_DIR, ".secret_telegram_users")
+        if os.path.exists(p):
+            for line in open(p).read().strip().splitlines():
+                self._allowed.add(line.strip())
 
-    def start(self, stop_event: threading.Event):
+    def start(self, stop: threading.Event):
         if not self._token:
-            log.warning("TELEGRAM_BOT_TOKEN not set — Telegram bot disabled")
             return
-        self._load_allowed_users()
+        self._load_users()
         try:
             from telegram.ext import Application, CommandHandler, MessageHandler, filters
-
             app = Application.builder().token(self._token).build()
 
-            async def start_cmd(update, context):
-                uid = str(update.effective_user.id)
-                if self._allowed_users and uid not in self._allowed_users:
-                    await update.message.reply_text("Доступ запрещён.")
+            async def start_cmd(upd, ctx):
+                uid = str(upd.effective_user.id)
+                if self._allowed and uid not in self._allowed:
+                    await upd.message.reply_text("Доступ запрещён.")
                     return
-                await update.message.reply_text(
-                    "Scout Agent v2.0 ready.\n"
-                    "Формат: search: <запрос>\n"
-                    "Пример: search: последние новости ИИ 2026"
-                )
+                await upd.message.reply_text("Scout RU. search: <текст> | !<текст> (без разбора) | video: <URL>")
 
-            async def handle_message(update, context):
-                uid = str(update.effective_user.id)
-                if self._allowed_users and uid not in self._allowed_users:
+            async def handle_msg(upd, ctx):
+                uid = str(upd.effective_user.id)
+                if self._allowed and uid not in self._allowed:
                     return
-                text = update.message.text or ""
+                text = (upd.message.text or "").strip()
                 if text.lower().startswith("search:"):
-                    query = text[7:].strip()
-                    if query:
-                        task = Task(
-                            task_id=str(uuid.uuid4()),
-                            query=query,
-                            requester=f"telegram:{uid}",
-                        )
-                        log.info("Received task from Telegram: %s", task.task_id)
-                        self._task_callback(task)
-                        await update.message.reply_text(f"Задача принята: {task.task_id}")
-                    else:
-                        await update.message.reply_text("Пустой запрос.")
-                else:
-                    await update.message.reply_text("Используй формат: search: <запрос>")
+                    q = text[7:].strip()
+                    if q:
+                        no_expand = q.startswith("!")
+                        query = q[1:] if no_expand else q
+                        task = Task(task_id=str(uuid.uuid4()), query=query,
+                                    requester=f"telegram:{uid}", priority=10)
+                        self._callback(task, no_expand)
+                        await upd.message.reply_text(f"Задача {task.task_id} принята.")
+                elif text.lower().startswith("video:"):
+                    url = text[6:].strip()
+                    vid = self._extract_video_id(url)
+                    if vid:
+                        task = Task(task_id=str(uuid.uuid4()), query=f"video:{vid}",
+                                    requester=f"telegram:{uid}", priority=10)
+                        self._callback(task, no_expand=True)
+                        await upd.message.reply_text(f"Видео {task.task_id} принято.")
 
             app.add_handler(CommandHandler("start", start_cmd))
-            app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-            log.info("Telegram bot started")
+            app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
             app.run_polling(stop_signals=[], close_loop=False)
-
-        except ImportError:
-            log.error("python-telegram-bot not installed")
         except Exception as e:
-            log.error("Telegram bot error: %s", e)
+            log.error("Telegram: %s", e)
+
+    @staticmethod
+    def _extract_video_id(url: str) -> Optional[str]:
+        m = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', url)
+        return m.group(1) if m else None
 
 
-# ─── Field Agent (orchestrator) ───────────────────────────────────
+# ─── Healthcheck ─────────────────────────────────────────────────
+
+class Healthcheck:
+    @staticmethod
+    def run() -> bool:
+        ok = True
+        checks = []
+
+        try:
+            requests.get("https://yacy.searchlab.eu/yacysearch.json?query=test&maximumRecords=1", timeout=10)
+            checks.append(("YaCy", True))
+        except Exception:
+            checks.append(("YaCy", False))
+
+        try:
+            with open("/home/waters-data/scout_state.db"):
+                checks.append(("SQLite", True))
+        except Exception:
+            checks.append(("SQLite", False))
+
+        st = os.statvfs("/home/waters-data")
+        free_gb = st.f_frsize * st.f_bavail / (1024**3)
+        checks.append(("Disk", free_gb > 0.5))
+
+        try:
+            from kafka import KafkaProducer
+            p = KafkaProducer(bootstrap_servers=KAFKA_BROKER)
+            p.close()
+            checks.append(("Kafka", True))
+        except Exception:
+            checks.append(("Kafka", False))
+
+        for name, status in checks:
+            if not status:
+                log.error("Healthcheck FAIL: %s", name)
+                ok = False
+            else:
+                log.info("Healthcheck OK: %s", name)
+        return ok
+
+
+# ─── Field Agent ─────────────────────────────────────────────────
 
 class FieldAgent:
     def __init__(self):
         self._state = StateManager()
         self._ratelimit = RateLimiter()
-        self._cleanup = CleanupScheduler(self._state)
-        self._engine = SearchEngine(self._ratelimit)
-        self._validator = NotebookLMValidator(self._ratelimit)
-        self._verifier = CrossSourceVerifier()
+        self._engine = SearchEngine(self._ratelimit, self._state)
+        self._yandexgpt = YandexGPTClient(self._state, self._ratelimit)
+        self._validator = ValidatorRouter(self._state, self._ratelimit)
         self._saver = FileSaver()
         self._kafka = KafkaManager(self._state)
-        self._stop_event = threading.Event()
+        self._cleanup = CleanupScheduler(self._state)
+        self._stop = threading.Event()
+        self._youtube = YouTubeTranscriptSearch(self._ratelimit)
 
-    def _process_task(self, task: Task):
-        log.info("=" * 60)
-        log.info("Processing task %s: %s", task.task_id, task.query)
-        log.info("=" * 60)
+    def _run_heartbeat(self):
+        while not self._stop.wait(HEARTBEAT_INTERVAL):
+            try:
+                stats = self._state.get_stats()
+                self._kafka.send_heartbeat(stats)
+            except Exception as e:
+                log.error("Heartbeat: %s", e)
 
-        self._state.create_task(task.task_id, task.query, task.requester, task.source_engines)
+    def _report_error(self, msg: str, details: dict = None):
+        self._kafka.send_error(msg, details)
+        log.error("ERROR: %s %s", msg, details or "")
+
+    def _process_task(self, data: dict, no_expand: bool = False):
+        requester = data.get("requester", "unknown") if isinstance(data, dict) else data
+        query = data.get("query", "") if isinstance(data, dict) else data
+        task_id = data.get("task_id", str(uuid.uuid4())) if isinstance(data, dict) else str(uuid.uuid4())
+        priority = PRIORITY_MAP.get(requester, PRIORITY_MAP.get("default", 5))
+
+        task = Task(task_id=task_id, query=query, requester=requester, priority=priority)
+        self._state.create_task(task.task_id, task.query, task.requester, task.priority)
         self._state.update_task_status(task.task_id, "processing")
 
         try:
-            raw_results = self._engine.search(task)
-            if not raw_results:
-                log.warning("No results for task %s", task.task_id)
+            final_query = query
+            expanded = False
+            if not no_expand:
+                expanded_queries = self._yandexgpt.expand_query(query)
+                if expanded_queries:
+                    final_query = " ".join(expanded_queries[:3])
+                    expanded = True
+
+            results = self._engine.search(Task(
+                task_id=task_id, query=final_query, requester=requester,
+                priority=priority,
+            ))
+            if not results:
                 self._state.update_task_status(task.task_id, "done")
+                log.info("No results for %s", task_id)
                 return
 
-            enriched = self._engine.fetch_full_text(raw_results)
-            saved_files = self._saver.save(task, enriched)
-
+            saved = self._saver.save(task, results)
             valid_files = []
-            all_file_paths = []
 
-            for sf in saved_files:
+            for sf in saved:
                 cs = sf["checksum_sha256"]
                 if self._state.is_duplicate(cs):
-                    log.info("Dedup: %s already exists, skipping", cs[:12])
                     try:
                         os.remove(sf["path"])
                     except OSError:
                         pass
                     continue
 
-                self._state.add_file(
-                    task_id=task.task_id,
-                    path=sf["path"],
-                    checksum_sha256=cs,
-                    source=sf["source"],
-                    url=sf["url"],
-                    title=sf["title"],
-                    domain_authority=sf["domain_authority"],
-                )
+                snippet = ""
+                try:
+                    with open(sf["path"]) as f:
+                        data = json.load(f)
+                        snippet = data.get("snippet", "") or data.get("content", "")[:500]
+                except Exception:
+                    pass
 
-                validation = asyncio.run(self._validator.validate(sf["path"], task.query))
-                self._state.update_notebooklm_result(
-                    sf["path"], validation["verdict"],
-                    validation.get("summary", ""),
-                )
+                rating = sf.get("source_rating", 0.5)
+                self._state.add_file(task_id, sf["path"], cs, sf["source"],
+                                      sf["url"], sf["title"], rating)
+
+                if rating >= 0.80:
+                    validation = {"verdict": "годно", "summary": "Доверенный источник"}
+                else:
+                    validation = asyncio.run(self._validator.validate(snippet, query))
+
+                self._state.update_notebooklm_result(sf["path"], validation.get("verdict", "мусор"),
+                                                      validation.get("summary", ""))
 
                 if validation.get("verdict") == "годно":
                     self._kafka.send_file_ready(task, sf, validation)
                     valid_files.append(sf)
-                    all_file_paths.append(sf["path"])
                 else:
-                    log.info("Rejected by NotebookLM: %s (verdict=мусор)", sf["path"])
                     try:
                         os.remove(sf["path"])
                     except OSError:
                         pass
 
-            if valid_files:
-                vfiles = self._state.get_valid_files_for_task(task.task_id)
-                vpaths = [f["path"] for f in vfiles if os.path.exists(f.get("path", ""))]
-
-                if vpaths:
-                    synthesis = asyncio.run(
-                        self._validator.synthesize_task(vpaths, task.query)
-                    )
-                else:
-                    synthesis = {"summary": "Нет доступных файлов для синтеза", "verdict": "empty"}
-
-                verification = self._verifier.verify(vfiles)
-
-                self._kafka.send_task_summary(
-                    task, synthesis,
-                    valid_count=len(valid_files),
-                    total_count=len(saved_files),
-                )
-
-                self._state.update_task_status(task.task_id, "done")
-                log.info("Task %s done: %d/%d valid, confidence=%s",
-                         task.task_id, len(valid_files), len(saved_files),
-                         verification.get("confidence", "unknown"))
-            else:
-                self._state.update_task_status(task.task_id, "done")
-                log.info("Task %s done: all %d files rejected by NotebookLM",
-                         task.task_id, len(saved_files))
+            self._kafka.send_task_summary(task, len(valid_files), len(saved))
+            self._state.update_task_status(task.task_id, "done")
+            log.info("Task %s done: %d/%d valid", task_id, len(valid_files), len(saved))
 
         except Exception as e:
-            log.error("Task %s failed: %s", task.task_id, e)
+            log.error("Task %s failed: %s", task_id, e)
             self._state.update_task_status(task.task_id, "failed", str(e))
 
-    def run(self):
-        log.info("=" * 60)
-        log.info("Field Agent (Scout) v2.0 starting...")
-        log.info("Agent ID: %s", AGENT_ID)
-        log.info("Kafka: %s", KAFKA_BROKER)
-        log.info("State DB: /home/waters-data/scout_state.db")
-        log.info("=" * 60)
+    def _kafka_callback(self, data: dict):
+        self._process_task(data, no_expand=False)
 
+    def run(self):
+        _ensure_dir("/home/waters-data/logs")
+        _ensure_dir(RAW_BASE)
+        _ensure_dir(SECRET_DIR)
+
+        if not Healthcheck.run():
+            self._report_error("Healthcheck failed at startup")
+            return
+
+        self._state.retry_pending_on_startup()
         self._cleanup.start()
 
-        self._kafka.set_task_callback(self._process_task)
-        kafka_thread = threading.Thread(
-            target=self._kafka.listen,
-            args=(self._stop_event,),
-            daemon=True,
-            name="kafka",
-        )
-        kafka_thread.start()
-
-        telegram = TelegramBot(self._process_task)
-        tgram_thread = threading.Thread(
-            target=telegram.start,
-            args=(self._stop_event,),
-            daemon=True,
-            name="telegram",
-        )
-        tgram_thread.start()
+        threading.Thread(target=self._run_heartbeat, daemon=True, name="heartbeat").start()
+        threading.Thread(target=self._kafka.listen, args=(self._kafka_callback, self._stop),
+                         daemon=True, name="kafka").start()
+        threading.Thread(target=TelegramBot(self._process_task).start,
+                         args=(self._stop,), daemon=True, name="telegram").start()
 
         try:
-            while not self._stop_event.is_set():
+            while not self._stop.is_set():
                 time.sleep(1)
         except KeyboardInterrupt:
-            log.info("Shutting down...")
-            self._stop_event.set()
+            self._stop.set()
 
 
 if __name__ == "__main__":
-    _ensure_dir("/home/waters-data/logs")
-    _ensure_dir(RAW_BASE)
-    _ensure_dir(str(SECRET_DIR))
-    agent = FieldAgent()
-    agent.run()
+    FieldAgent().run()

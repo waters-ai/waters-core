@@ -1,8 +1,10 @@
-"""scout_ratelimit.py — Rate limiter с exponential backoff."""
+"""scout_ratelimit.py — Rate limiter. 100% без бана."""
 
 import time
 import threading
 import logging
+
+from agents.config import RATE_LIMITS
 
 log = logging.getLogger("scout.ratelimit")
 
@@ -24,9 +26,7 @@ class TokenBucket:
 
     def acquire(self, tokens: float = 1.0, block: bool = True) -> bool:
         if tokens > self.burst:
-            log.warning("%s: request %f > burst %d, clamping", self.name, tokens, self.burst)
             tokens = float(self.burst)
-
         with self._lock:
             self._refill()
             if self._tokens >= tokens:
@@ -34,9 +34,8 @@ class TokenBucket:
                 return True
             if not block:
                 return False
-            wait_time = (tokens - self._tokens) / self.rate
-            log.debug("%s: waiting %.2fs for token", self.name, wait_time)
-        time.sleep(wait_time)
+            wait_time = (tokens - self._tokens) / self.rate if self.rate > 0 else 1.0
+        time.sleep(min(wait_time, 30))
         with self._lock:
             self._refill()
             self._tokens -= tokens
@@ -45,14 +44,11 @@ class TokenBucket:
 
 class RateLimiter:
     def __init__(self):
-        self._buckets = {
-            "duckduckgo": TokenBucket(rate=0.5, burst=2, name="ddg"),
-            "youtube": TokenBucket(rate=0.2, burst=1, name="youtube"),
-            "yandex": TokenBucket(rate=1.0, burst=5, name="yandex"),
-            "page_fetch": TokenBucket(rate=0.33, burst=3, name="page_fetch"),
-            "notebooklm": TokenBucket(rate=0.1, burst=1, name="notebooklm"),
-        }
-        self._retry_counters = {}
+        self._buckets = {}
+        for name, cfg in RATE_LIMITS.items():
+            self._buckets[name] = TokenBucket(
+                rate=cfg["rate"], burst=cfg["burst"], name=name
+            )
 
     def acquire(self, source: str, tokens: float = 1.0) -> bool:
         bucket = self._buckets.get(source)
