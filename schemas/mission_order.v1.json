@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://waters.ai/schemas/mission/order.v1.json",
+  "title": "Mission Order",
+  "description": "Приказ с хаба 238 на миссионный сервер. Kafka topic: mission.1.orders.v1",
+  "type": "object",
+  "required": ["order_id", "type", "issued_by", "issued_at", "payload", "priority", "ttl_seconds"],
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "pattern": "^ord_[a-zA-Z0-9]+$",
+      "description": "Уникальный ID приказа"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["search", "recalibrate", "pause", "resume", "shutdown", "reconfigure"],
+      "description": "Тип приказа"
+    },
+    "issued_by": {
+      "type": "string",
+      "pattern": "^agent\\.[a-z]+\\.[a-z0-9]+$",
+      "description": "ID отправителя"
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Время выдачи (ISO 8601)"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Параметры приказа, зависят от type",
+      "oneOf": [
+        {
+          "$comment": "type = search",
+          "properties": {
+            "area": {
+              "type": "object",
+              "properties": {
+                "lat_min": {"type": "number", "minimum": -90, "maximum": 90},
+                "lat_max": {"type": "number", "minimum": -90, "maximum": 90},
+                "lon_min": {"type": "number", "minimum": -180, "maximum": 180},
+                "lon_max": {"type": "number", "minimum": -180, "maximum": 180}
+              },
+              "required": ["lat_min", "lat_max", "lon_min", "lon_max"]
+            },
+            "date_from": {"type": "string", "format": "date"},
+            "date_to": {"type": "string", "format": "date"},
+            "count": {"type": "integer", "minimum": 1, "maximum": 100}
+          }
+        },
+        {
+          "$comment": "type = reconfigure",
+          "properties": {
+            "force_level": {"type": "string", "enum": ["L0", "L1", "L2", "L3", "L4"]},
+            "config_updates": {"type": "object"}
+          }
+        }
+      ]
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "normal", "high", "critical"],
+      "default": "normal"
+    },
+    "ttl_seconds": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 86400,
+      "description": "Время жизни приказа в секундах"
+    }
+  }
+}

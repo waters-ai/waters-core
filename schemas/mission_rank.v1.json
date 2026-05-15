@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://waters.ai/schemas/mission/rank.v1.json",
+  "title": "Mission Rank Event",
+  "description": "Событие изменения ранга агента. Kafka topic: mission.1.ranks.v1",
+  "type": "object",
+  "required": ["agent_id", "event", "type", "old_rank", "new_rank", "trigger", "timestamp"],
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "pattern": "^[a-z]+\\.[0-9]+$",
+      "description": "ID агента или mission_id для командного ранга"
+    },
+    "event": {
+      "type": "string",
+      "enum": ["upgraded", "demoted", "unchanged"],
+      "description": "Тип события ранга"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["personal", "team"],
+      "description": "Тип ранга (личный или командный)"
+    },
+    "old_rank": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "Предыдущий ранг"
+    },
+    "new_rank": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "Новый ранг"
+    },
+    "trigger": {
+      "type": "string",
+      "description": "Условие, вызвавшее изменение ранга"
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "findings": {"type": "integer", "minimum": 0},
+        "avg_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "uptime_hours": {"type": "integer", "minimum": 0}
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Время события (ISO 8601)"
+    }
+  }
+}

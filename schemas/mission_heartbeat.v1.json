@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://waters.ai/schemas/mission/heartbeat.v1.json",
+  "title": "Mission Heartbeat",
+  "description": "Healthcheck миссионного сервера. Kafka topic: mission.1.heartbeat.v1",
+  "type": "object",
+  "required": ["mission_id", "level", "agents_active", "agents_total", "findings_total", "uptime_seconds"],
+  "properties": {
+    "mission_id": {
+      "type": "string",
+      "description": "ID миссии"
+    },
+    "level": {
+      "type": "string",
+      "enum": ["L0", "L1", "L2", "L3", "L4"],
+      "description": "Текущий уровень автономии"
+    },
+    "agents_active": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Количество активных sub-agent'ов"
+    },
+    "agents_total": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Общее количество sub-agent'ов"
+    },
+    "findings_total": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Всего находок за время миссии"
+    },
+    "uptime_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Время работы миссии в секундах"
+    },
+    "memory_usage_pct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Использование RAM (0.0-1.0)"
+    },
+    "kafka_lag": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Отставание Kafka consumer"
+    },
+    "llm": {
+      "type": "string",
+      "description": "Текущий LLM провайдер"
+    },
+    "last_order_processed": {
+      "type": "string",
+      "description": "ID последнего выполненного order"
+    },
+    "errors_last_hour": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Количество ошибок за последний час"
+    }
+  }
+}

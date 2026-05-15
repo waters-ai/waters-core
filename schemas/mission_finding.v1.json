@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://waters.ai/schemas/mission/finding.v1.json",
+  "title": "Mission Finding",
+  "description": "Находка с миссионного сервера на хаб 238. Kafka topic: mission.1.findings.v1",
+  "type": "object",
+  "required": ["finding_id", "type", "source_agent", "found_at", "confidence", "data"],
+  "properties": {
+    "finding_id": {
+      "type": "string",
+      "pattern": "^f_[a-zA-Z0-9]+$",
+      "description": "Уникальный ID находки"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["meteorite_candidate", "anomaly", "spectrum", "trajectory", "status"],
+      "description": "Тип находки"
+    },
+    "source_agent": {
+      "type": "string",
+      "pattern": "^[a-z]+\\.[0-9]+$",
+      "description": "ID агента-отправителя"
+    },
+    "source_skill": {
+      "type": "string",
+      "description": "Название SKILL.md агента"
+    },
+    "found_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Время находки (ISO 8601)"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Уверенность в находке (0.0-1.0)"
+    },
+    "rank": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "Ранг агента на момент находки"
+    },
+    "data": {
+      "type": "object",
+      "description": "Данные находки, зависят от type",
+      "oneOf": [
+        {
+          "$comment": "type = meteorite_candidate",
+          "properties": {
+            "coordinates": {
+              "type": "object",
+              "properties": {
+                "lat": {"type": "number"},
+                "lon": {"type": "number"}
+              },
+              "required": ["lat", "lon"]
+            },
+            "mass_kg": {"type": "number", "minimum": 0},
+            "classification": {"type": "string"},
+            "velocity_kms": {"type": "number"},
+            "energy_kt": {"type": "number"},
+            "altitude_km": {"type": "number"}
+          },
+          "required": ["coordinates"]
+        },
+        {
+          "$comment": "type = spectrum",
+          "properties": {
+            "spectrum_url": {"type": "string", "format": "uri"},
+            "mineral_type": {"type": "string"},
+            "wavelength_range": {
+              "type": "object",
+              "properties": {
+                "min_nm": {"type": "number"},
+                "max_nm": {"type": "number"}
+              }
+            }
+          },
+          "required": ["spectrum_url"]
+        },
+        {
+          "$comment": "type = trajectory",
+          "properties": {
+            "trajectory": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "time_s": {"type": "number"},
+                  "alt_km": {"type": "number"},
+                  "lat": {"type": "number"},
+                  "lon": {"type": "number"},
+                  "velocity_kms": {"type": "number"}
+                }
+              }
+            },
+            "landing_zone": {
+              "type": "object",
+              "properties": {
+                "lat": {"type": "number"},
+                "lon": {"type": "number"},
+                "error_radius_km": {"type": "number"}
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

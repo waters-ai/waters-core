@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>waters-node — WATES Node Runtime</title>
+<style>
+  body { font-family: system-ui, monospace; max-width: 700px; margin: 40px auto; padding: 20px; line-height: 1.6; background: #0a0a0a; color: #e0e0e0; }
+  h1 { color: #00d4ff; border-bottom: 1px solid #333; padding-bottom: 10px; }
+  pre { background: #111; padding: 15px; border-radius: 8px; overflow-x: auto; color: #a0ffa0; }
+  code { background: #111; padding: 2px 6px; border-radius: 4px; }
+  a { color: #00d4ff; }
+  .download { display: inline-block; background: #00d4ff; color: #000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; margin: 10px 0; }
+  .download:hover { background: #00b8e6; }
+  .meta { color: #888; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<h1>🌊 waters-node v0.2.0</h1>
+<p>Distributed agent runtime. Как TUI, но для роя.</p>
+<p><strong>5.9MB</strong> · Один бинарник · 0 зависимостей</p>
+
+<a class="download" href="download/waters-node-v0.2.0-linux-x64.tar.gz">⬇ Скачать waters-node (Linux x64, 2.3MB)</a>
+
+<pre>
+# Установка за 30 секунд
+wget https://kapelka.h2o-mining.space/download/waters-node-v0.2.0-linux-x64.tar.gz
+tar xzf waters-node-v0.2.0-linux-x64.tar.gz
+./waters-node --prompt "hello"
+</pre>
+
+<h2>Что внутри</h2>
+<ul>
+  <li>✅ SubAgent Manager (7 ролей, mpsc)</li>
+  <li>✅ Инструменты: read_file, write_file, grep_files, exec_shell</li>
+  <li>✅ LLM клиент (Ollama / DeepSeek)</li>
+  <li>✅ MCP Client (подключение MCP-серверов)</li>
+  <li>✅ Сессии (save/resume контекста)</li>
+  <li>✅ Автономия L0-L4 (работа без связи)</li>
+  <li>✅ DTN Engine (tc-netem, эмуляция задержек)</li>
+  <li>✅ Node Protocol (UUID, discovery, announce)</li>
+  <li>🟡 Kafka Transport (опционально, для роя)</li>
+</ul>
+
+<h2>SHA256</h2>
+<pre><code id="sha">ebd0ac44943a81c2bba6c1a67599ca33cf0164e2b33010c377124bba25ec625d</code></pre>
+
+<h2>Как подключиться к глобальной сети WATERS</h2>
+<pre>
+./waters-node --kafka 238.hub.waters:9092
+</pre>
+
+<p class="meta">WATERS Platform · 2026 · Путь воды</p>
+</body>
+</html>

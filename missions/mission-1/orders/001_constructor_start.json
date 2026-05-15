@@ -1,0 +1,32 @@
+{
+  "type": "order",
+  "order_id": "ord_arch_001",
+  "mission": "mission-1-meteorite",
+  "issued_by": "agent.architect.v1",
+  "issued_at": "2026-05-15T18:00:00Z",
+  "priority": "critical",
+  "ttl_seconds": 604800,
+  "message": "СТАРТ РАЗРАБОТКИ МИССИИ 1.
+Архитектура утверждена: Kafka-native Agent Runtime. Rust core + Python edge.
+TUI — reference, не форк.
+
+Что делать:
+1. Развернуть миссионный сервер (Hetzner AX52, €35/мес)
+2. Реализовать Rust core: kafka.rs → subagent.rs → autonomy.rs → dtn.rs → api.rs → mcp.rs
+3. Реализовать Python edge: rank_engine.py, MCP-серверы
+4. Интеграционный тест: order → sub-agent → finding → rank
+
+Полный SPEC: docs/mission-control/CONSTRUCTOR_PACKAGE.md
+Архитектура: 6 слоёв (см. доктрину)
+Ранги: адаптация из h2o-mining.space
+Протоколы: schemas/mission_*.v1.json
+
+Дедлайн: 2026-05-28",
+  "references": [
+    "docs/mission-control/CONSTRUCTOR_PACKAGE.md",
+    "docs/mission-control/ARCHITECTURE.md",
+    "docs/mission-control/KAFKA_PROTOCOL.md",
+    "schemas/mission_*.v1.json",
+    "doctrine/onboard_logs.md"
+  ]
+}

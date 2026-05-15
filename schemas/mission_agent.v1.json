@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://waters.ai/schemas/mission/agent.v1.json",
+  "title": "Mission Agent Status",
+  "description": "Статус sub-agent'а миссии. Kafka topic: mission.1.agents.v1",
+  "type": "object",
+  "required": ["agent_id", "role", "status", "uptime_seconds", "rank"],
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "pattern": "^[a-z]+\\.[0-9]+$",
+      "description": "ID агента (роль.номер)"
+    },
+    "role": {
+      "type": "string",
+      "enum": ["explorer", "collector", "analyzer", "matcher", "coordinator"],
+      "description": "Роль sub-agent'а"
+    },
+    "skill": {
+      "type": "string",
+      "description": "Название установленного SKILL.md"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["idle", "working", "error", "offline"],
+      "description": "Текущий статус"
+    },
+    "current_task": {
+      "type": "string",
+      "description": "ID текущего order, если working"
+    },
+    "findings_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Всего находок агентом"
+    },
+    "avg_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Средняя уверенность по всем находкам"
+    },
+    "uptime_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Время работы агента в секундах"
+    },
+    "rank": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "Текущий личный ранг (0-4)"
+    },
+    "level": {
+      "type": "string",
+      "enum": ["L0", "L1", "L2", "L3", "L4"],
+      "description": "Текущий уровень автономии миссии"
+    },
+    "memory_usage_mb": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Использование памяти агентом в MB"
+    }
+  }
+}

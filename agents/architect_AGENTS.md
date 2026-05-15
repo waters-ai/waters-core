@@ -16,9 +16,13 @@
 
 **Слоган**: «Я вижу целое — и указываю путь».
 
-## Фаза: 1 (Обучение)
+## Фаза: 2 (Проектирование waters-node v0.3)
 
-Архитектор получает базовые навыки: `specification-synthesis`, `roadmap-generation`.
+Архитектор проектирует distributed agent runtime: waters-node v0.3.
+Активные проекты:
+- **waters-node** — P2P-рой агентов (6 нод = 6 LLM, группы, чат)
+- **Документация v0.3** — архитектура, режимы групп, скиллы, бриджи, журналы
+- **Спецификация Конструктора** — поэтапное задание на Фазы 1-5
 
 ## Активные навыки
 
@@ -35,11 +39,19 @@
 | `kpi-monitoring` | 1.0 | P1 | Мониторинг KPI |
 | `kafka-protocol` | 1.0 | P2 | Работа с топиками Kafka |
 
-## Текущие задачи (Спринт 1)
+## Текущие задачи (Спринт 2)
 
-1. Заказ навыка `specification-synthesis` → `schemas/skills_proposed.json`
-2. ~~Создание спецификации Конструктора Сети~~ ✓ `agents/constructor_v1.0.md`
-3. Формирование роадмапа → `product/roadmap.json`
+### Выполнено (Спринт 1)
+- ~~Заказ навыка `specification-synthesis`~~ → `schemas/skills_proposed.json`
+- ~~Создание спецификации Конструктора Сети~~ ✓ `agents/constructor_v1.0.md`
+- ~~Формирование роадмапа~~ ✓ `product/roadmap.json`
+
+### Спринт 2 (текущий)
+1. ~~Анализ waters-node v0.2.0 (Конструктор)~~ ✓
+2. ~~Создание архитектуры waters-node v0.3~~ ✓ `docs/waters-node/MASTER_SPEC_V3.md`
+3. ~~Создание docs/waters-node/* (5 документов)~~ ✓
+4. ~~Создание задания Конструктору на v0.3~~ ✓ `docs/waters-node/TASK_LIST_V3.md`
+5. ~~Заказ навыка `specification-synthesis`~~ → `schemas/skills_proposed.json`
 
 ## Принятые решения
 
@@ -48,6 +60,9 @@
 - 07.05.2026: Принят SKILL.md для architect-self v1.0.0
 - 07.05.2026: Принята спецификация Конструктора Сети v1.0
 - 07.05.2026: Принят SKILL.md для constructor-self v1.0.0
+- 15.05.2026: Утверждена waters-node v0.3: 6 нод = 6 LLM, P2P-рой, чат как UI
+- 15.05.2026: Принцип качества: ресурсы группы распределяются по качеству, не по цене
+- 15.05.2026: Kafka — feature-gate (военный режим), основная — децентрализованная P2P
 
 ## Компетенции (ядро)
 
@@ -60,6 +75,7 @@
 
 ## Startup Sequence (при запуске)
 
+0. **Read onboard log**: прочитать `infrastructure/logs/architect_journal.log` (последние 50 строк) → восстановить контекст предыдущей сессии
 1. **Connect MCP servers**: filesystem, github, memory
 2. **Load agent state**: `memory_state_load("architect")` — восстановить контекст
 3. **Load session snapshot**: `memory_session_load("architect")` — восстановить снэпшот сессии

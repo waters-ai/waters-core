@@ -60,7 +60,7 @@
 
 ## Startup Sequence (при запуске)
 
-0. **Read onboard log**: `memory_read_journal` — прочитать `infrastructure/logs/constructor_journal.log` (последние 50 строк) → восстановить контекст предыдущей сессии без внешних сервисов
+0. **Read onboard log**: прочитать `infrastructure/logs/architect_journal.log` (последние 50 строк) → восстановить контекст предыдущей сессии
 1. **Connect MCP servers**: filesystem, github, memory
 2. **Load agent state**: `memory_state_load("constructor")` — восстановить контекст из Redis
 3. **Load session snapshot**: `memory_session_load("constructor")` — восстановить снэпшот сессии
@@ -70,21 +70,16 @@
 7. **Check Redis**: `memory_cache_get("tasks:constructor:pending")` — ожидающие задачи
 8. **Healthcheck**: `memory_health` — проверить доступность всех сервисов
 
-## Протокол бортового журнала
+## Бортовой журнал
 
-Каждое выполнение задачи записывается в `infrastructure/logs/constructor_journal.log` по схеме:
+Каждое действие записывается в `infrastructure/logs/architect_journal.log`.
+Подробный протокол: [doctrine/onboard_logs.md](doctrine/onboard_logs.md)
 
-1. **План** — перед началом работы записать что буду делать, пошагово
-2. **Шаги** — каждый выполненный шаг с отметкой времени и результатом
-3. **Итог** — после завершения: замечания, проблемы, результаты
-
-Формат записи:
-```
-[2026-05-14TЧЧ:ММ:ССZ] [PLAN]  Описание задачи и план шагов
-[2026-05-14TЧЧ:ММ:ССZ] [STEP]  Конкретный шаг → результат
-[2026-05-14TЧЧ:ММ:ССZ] [NOTE]  Замечание / проблема
-[2026-05-14TЧЧ:ММ:ССZ] [DONE]  Итог: что сделано, статус
-```
+**Кратко:**
+1. `[PLAN]` — перед задачей
+2. `[STEP]` — во время
+3. `[DONE]` — после
+4. При старте — читать последние 50 строк журнала
 
 ## Интерфейсы
 

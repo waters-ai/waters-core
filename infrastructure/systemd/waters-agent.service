@@ -1,0 +1,17 @@
+[Unit]
+Description=WATERS Agent Runtime
+After=network.target kafka.service redis.service
+Wants=kafka.service redis.service
+
+[Service]
+Type=simple
+User=constructor
+WorkingDirectory=/home/constructor/projects/waters-agent
+ExecStart=/home/constructor/projects/waters-agent/target/release/waters-agent -c /home/constructor/projects/waters-agent/config.toml
+Restart=always
+RestartSec=10
+Environment=RUST_LOG=info
+Environment=KAFKA_BROKERS=127.0.0.1:9092
+
+[Install]
+WantedBy=multi-user.target

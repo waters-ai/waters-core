@@ -1,0 +1,12 @@
+{
+  "name": "scout-cn",
+  "version": "1.0.0",
+  "description": "搜索中国互联网段。百度、中文来源。",
+  "author": "constructor",
+  "tags": ["search", "cn", "zh"],
+  "dependencies": ["general"],
+  "bridges": ["baidu.search"],
+  "bookmarks": [
+    {"description": "搜索中文", "test": "web_search('人工智能', 'cn')", "expected": "success"}
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://waters.ai/schemas/mission/config.v1.json",
+  "title": "Mission Configuration",
+  "description": "Конфигурация миссии (имитация PDA из Solana). Kafka topic: mission.1.config.v1",
+  "type": "object",
+  "required": ["type"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["rank_config", "mission_config", "dtn_config"],
+      "description": "Тип конфигурации"
+    },
+    "ranks": {
+      "type": "array",
+      "description": "Конфигурация рангов (при type=rank_config)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "level": {"type": "integer", "minimum": 1, "maximum": 4},
+          "name": {"type": "string"},
+          "requirements": {
+            "type": "object",
+            "properties": {
+              "min_findings": {"type": "integer", "minimum": 0},
+              "min_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+              "min_uptime_hours": {"type": "integer", "minimum": 0}
+            }
+          }
+        },
+        "required": ["level", "name", "requirements"]
+      }
+    },
+    "mission": {
+      "type": "object",
+      "description": "Параметры миссии (при type=mission_config)",
+      "properties": {
+        "max_concurrent_agents": {"type": "integer", "minimum": 1, "maximum": 20},
+        "default_llm": {"type": "string"},
+        "fallback_llm": {"type": "string"},
+        "findings_batch_size": {"type": "integer", "minimum": 1},
+        "heartbeat_interval_sec": {"type": "integer", "minimum": 10, "maximum": 3600}
+      }
+    },
+    "dtn": {
+      "type": "object",
+      "description": "DTN конфигурация (при type=dtn_config)",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "interface": {"type": "string"},
+        "default_profile": {"type": "string"},
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "delay_ms": {"type": "integer", "minimum": 0},
+              "jitter_ms": {"type": "integer", "minimum": 0},
+              "loss": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          }
+        }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Время обновления конфига"
+    }
+  }
+}

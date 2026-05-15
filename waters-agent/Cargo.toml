@@ -1,0 +1,31 @@
+[package]
+name = "waters-agent"
+version = "0.2.0"
+edition = "2021"
+description = "WATERS Agent Runtime — standalone agent, optional Kafka transport"
+
+[[bin]]
+name = "waters-agent"
+path = "src/main.rs"
+
+[features]
+default = []
+kafka-transport = ["dep:rdkafka", "dep:redis"]
+
+[dependencies]
+# Core
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+toml = "0.8"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+# Optional: Kafka + Redis transport
+rdkafka = { version = "0.37", optional = true }
+redis = { version = "0.27", optional = true, default-features = false }

@@ -1,0 +1,18 @@
+[node]
+name = "waters-node-177"
+workspace = "."
+session_dir = ".waters/sessions"
+llm_provider = "ollama"
+
+[ollama]
+url = "http://127.0.0.1:11434"
+model = "qwen2.5:14b"
+
+# [kafka]
+# brokers = "127.0.0.1:9092"
+# group_id = "waters-node-1"
+# [kafka.topics]
+# orders = "mission.1.orders.v1"
+# findings = "mission.1.findings.v1"
+# heartbeat = "mission.1.heartbeat.v1"
+# agents = "mission.1.agents.v1"

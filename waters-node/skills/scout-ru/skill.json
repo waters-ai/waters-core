@@ -1,0 +1,13 @@
+{
+  "name": "scout-ru",
+  "version": "1.0.0",
+  "description": "Поиск информации в RU-сегменте интернета. Яндекс, YaCy, русскоязычные источники.",
+  "author": "constructor",
+  "tags": ["search", "ru"],
+  "dependencies": ["general"],
+  "bridges": ["yandex.search", "yandex.gpt"],
+  "bookmarks": [
+    {"description": "Поиск новостей RU", "test": "web_search('новости', 'ru')", "expected": "results > 0"},
+    {"description": "Поиск по умолчанию", "test": "web_search('погода')", "expected": "success"}
+  ]
+}
