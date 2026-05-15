@@ -2,7 +2,7 @@
 """Архитектор для Капельки — проектирует план аудита сайта H2O
 
 Читает приказы из Kafka -> orders.constructor.v1
-Ходит в Ollama (171.22.180.237:11434) за архитектурным решением
+Ходит в Ollama (localhost:11434) за архитектурным решением
 Пишет план аудита в -> planners.answers.v1
 """
 
@@ -16,7 +16,7 @@ from http.client import HTTPSConnection, HTTPConnection
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("architect-kapelka")
 
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "171.22.180.237")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost")
 OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "11434"))
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:14b")
 

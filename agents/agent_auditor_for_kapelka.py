@@ -2,7 +2,7 @@
 """Аудитор для Капельки — выполняет аудит сайта H2O
 
 Читает конфиги из Kafka -> planners.answers.v1
-Ходит в Ollama (171.22.180.237:11434) за аудиторскими отчётами
+Ходит в Ollama (localhost:11434) за аудиторскими отчётами
 Пишет результаты аудита в -> planners.answers.v1 и -> alerts.security.v1
 """
 
@@ -17,7 +17,7 @@ from typing import Optional
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("auditor-kapelka")
 
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "171.22.180.237")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "localhost")
 OLLAMA_PORT = int(os.getenv("OLLAMA_PORT", "11434"))
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:14b")
 
