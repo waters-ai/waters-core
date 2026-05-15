@@ -1,139 +1,31 @@
-[2026-05-15T10:00:00Z] [INIT] Бортовой журнал Архитектора создан
-[2026-05-15T10:00:00Z] [STATE] Проект: WATERS Platform, Фаза 0 (Зарождение)
-[2026-05-15T10:00:00Z] [STATE] Среда: OpenCode CLI, модель: deepseek-v4-flash
-[2026-05-15T10:00:00Z] [STATE] Память: ChromaDB, Redis, LightRAG, Kafka
-[2026-05-15T10:00:00Z] [STATE] Доступные MCP: filesystem, github, memory, space
-[2026-05-15T10:00:00Z] [STATE] Агенты в Гексаде: Архитектор (я), Конструктор, Интегратор (специфицированы)
-[2026-05-15T10:00:00Z] [STATE] Активные миссии: Миссия 1 — Поиск метеоритов (Земля)
-[2026-05-15T10:00:00Z] [STATE] Текущий спринт: Спринт 1 (2026-05-08 — 2026-05-14), статус: active
-[2026-05-15T10:00:00Z] [PLAN] Создание бортового журнала Архитектора
-[2026-05-15T10:00:00Z] [STEP] Изучен формат журнала Конструктора: infrastructure/logs/constructor_journal.log
-[2026-05-15T10:00:00Z] [STEP] Изучены теги и протокол: [TAG] + ISO8601 + описание
-[2026-05-15T10:00:00Z] [STEP] Создан infrastructure/logs/architect_journal.log
-[2026-05-15T10:00:00Z] [DONE] Бортовой журнал инициализирован
-[2026-05-15T10:00:00Z] [PLAN] Обновить AGENTS.md — исправить Startup Sequence на свой журнал
-[2026-05-15T10:00:00Z] [STEP] Чтение текущего AGENTS.md — найдена секция Startup Sequence и Протокол бортового журнала
-[2026-05-15T10:00:00Z] [NOTE] Startup Sequence п.0 ссылается на constructor_journal.log — нужно заменить на architect_journal.log
-[2026-05-15T10:00:00Z] [NOTE] Секция «Протокол бортового журнала» ссылается на constructor_journal.log — нужно заменить на architect_journal.log
-[2026-05-15T10:00:00Z] [STEP] AGENTS.md — Startup Sequence: исправлен путь на architect_journal.log
-[2026-05-15T10:00:00Z] [STEP] AGENTS.md — Протокол бортового журнала: исправлен путь на architect_journal.log
-[2026-05-15T10:00:00Z] [STEP] agents/architect_AGENTS.md — добавлен шаг 0 (Read onboard log), исправлен путь
-[2026-05-15T10:00:00Z] [DONE] AGENTS.md обновлён: Startup Sequence и Протокол журнала теперь указывают на architect_journal.log
-[2026-05-15T10:00:00Z] [PLAN] Изучить проект WATERS, дать анализ предложений Архитектора и vision решений
-[2026-05-15T10:00:00Z] [STEP] Изучены: README.md, доктрины (manifesto, hexad, hivemind), спецификации агентов
-[2026-05-15T10:00:00Z] [STEP] Изучены: docs/mission-1/ (архитектура, план ТУИ-форка, анализ, сервер, воркфлоу)
-[2026-05-15T10:00:00Z] [STEP] Изучены: product/roadmap.json, doctrine/mission_control_architecture.md
-[2026-05-15T10:00:00Z] [STEP] Прочитан constructor_journal.log (699 строк) — изучен формат и протокол ведения
-[2026-05-15T10:00:00Z] [ANALYSIS] DeepSeek TUI — база выбрана верно: Rust, RLM Pro+Flash, RocksDB, MCP. Но план форка перегружен (4 типа Rust-агентов)
-[2026-05-15T10:00:00Z] [ANALYSIS] Архитектор верно ставит Kafka как нервную систему, Гексаду из 6 специалистов, Skills как SKILL.md
-[2026-05-15T10:00:00Z] [ANALYSIS] Корректировка: монархическая модель -> военная/научная для поля; приоритет навыков -> dtn-simulator, infra-deployer
-[2026-05-15T10:00:00Z] [ANALYSIS] Миссия 1 (метеориты) должна начинаться в эмуляции на 238, а не с RTG и дронами за $5000
-[2026-05-15T10:00:00Z] [DONE] Анализ завершён, vision представлен пользователю
-[2026-05-15T10:00:00Z] [PLAN] Завести бортовой журнал по просьбе пользователя
-[2026-05-15T10:00:00Z] [STEP] Изучен формат журнала Конструктора
-[2026-05-15T10:00:00Z] [STEP] Определены собственные теги: INIT, STATE, PLAN, STUDY, ANALYSIS, SPEC, ONTOLOGY, ROADMAP, STEP, NOTE, DECISION, SYNC, DONE, CHECK, STOP
-[2026-05-15T10:00:00Z] [STEP] Создан infrastructure/logs/architect_journal.log
-[2026-05-15T10:00:00Z] [STEP] Исправлены ссылки в AGENTS.md и agents/architect_AGENTS.md
-[2026-05-15T10:00:00Z] [DONE] Бортовой журнал работает. Протокол: PLAN → STEP... → DONE. При старте — чтение последних 50 строк.
-[2026-05-15T11:00:00Z] [STATE] Спринт 1 завершён. Текущая дата: 2026-05-15. Начало Спринта 2.
-[2026-05-15T11:00:00Z] [MISSION] Задача: очистка документации от упоминаний сервера 237 + пакет документации для Конструктора
-[2026-05-15T11:00:00Z] [PLAN] Этап 1: найти и заменить все упоминания 171.22.180.237 на актуальные
-[2026-05-15T11:00:00Z] [STEP] Поиск: найдено 21 файл с упоминаниями 237 (не считая логов)
-[2026-05-15T11:00:00Z] [STEP] run_model.sh — обновлены комментарии, удалён SSH-туннель к 237
-[2026-05-15T11:00:00Z] [STEP] run_architect.sh — удалён блок SSH-туннелей (4 туннеля к 237)
-[2026-05-15T11:00:00Z] [STEP] run_architect_7b.sh — удалён блок SSH-туннелей
-[2026-05-15T11:00:00Z] [STEP] run_constructor.sh — удалён блок SSH-туннелей
-[2026-05-15T11:00:00Z] [STEP] run_safe.sh, run_meaning.sh, run_build.sh, run_arch.sh — удалены SSH-туннели
-[2026-05-15T11:00:00Z] [STEP] run_distributed.sh — удалены ссылки на 237 в Ollama tunnel
-[2026-05-15T11:00:00Z] [STEP] Kapelka: run_kapelka.sh, .env.example, base_agent.py — OLLAMA_HOST → localhost
-[2026-05-15T11:00:00Z] [STEP] Systemd: 3 kapelka-*.service — OLLAMA_HOST → localhost
-[2026-05-15T11:00:00Z] [STEP] scripts: kafka_to_timescaledb.py → 238, mcp_space_bridge.py → 238
-[2026-05-15T11:00:00Z] [STEP] skills/ollama-local-model/SKILL.md — убрано упоминание 237
-[2026-05-15T11:00:00Z] [STEP] documents/opencode_24_7_setup.md — убраны упоминания 237
-[2026-05-15T11:00:00Z] [STEP] missions/meteorite_search_earth/lunar_adaptation.md — DTN → 238
-[2026-05-15T11:00:00Z] [STEP] documents/llm_server_models_report.md → перемещён в archive/ (исторический отчёт)
-[2026-05-15T11:00:00Z] [DONE] Этап 1: 21 файл обработан, 1 файл архивирован. Чистка 237 завершена.
-[2026-05-15T11:00:00Z] [PLAN] Этап 2: пакет документации для Конструктора (5 документов)
-[2026-05-15T11:00:00Z] [PLAN] Документ 1: ARCHITECTURE_V2.md — новая архитектура форка (без 237, с новым сервером миссии)
-[2026-05-15T11:00:00Z] [PLAN] Документ 2: FORK_SPECIFICATION.md — спецификация форка для разработки
-[2026-05-15T11:00:00Z] [PLAN] Документ 3: SYSTEM_REQUIREMENTS.md — системные требования
-[2026-05-15T11:00:00Z] [PLAN] Документ 4: DEVELOPMENT_ORGANIZATION.md — организация разработки
-[2026-05-15T11:00:00Z] [PLAN] Документ 5: WEBSITE_SPEC.md — сайт виртуальной миссии
-[2026-05-15T12:00:00Z] [STEP] ARCHITECTURE_V2.md — написана двухуровневая архитектура (238 ↔ миссионный сервер)
-[2026-05-15T12:00:00Z] [STEP] FORK_SPECIFICATION.md — написана спецификация форка (4 фазы, 76ч работ)
-[2026-05-15T12:00:00Z] [STEP] SYSTEM_REQUIREMENTS.md — написаны требования к серверам, ПО, сети, DTN
-[2026-05-15T12:00:00Z] [STEP] DEVELOPMENT_ORGANIZATION.md — описаны роли, CI/CD, процессы, релизы
-[2026-05-15T12:00:00Z] [STEP] WEBSITE_SPEC.md — описана архитектура сайта, 3 этапа реализации
-[2026-05-15T12:00:00Z] [NOTE] Пользователь поправил: используем Kafka, не Redpanda. ARCHITECTURE_V2.md и SYSTEM_REQUIREMENTS.md исправлены.
-[2026-05-15T12:00:00Z] [DONE] Пакет документации для Конструктора готов — 5 документов в docs/mission-1/
-[2026-05-15T13:00:00Z] [PLAN] Изучить реальный DeepSeek TUI на GitHub — github.com/Hmbown/DeepSeek-TUI
-[2026-05-15T13:00:00Z] [STEP] Репозиторий найден: Hmbown/DeepSeek-TUI (29.6k ⭐, MIT)
-[2026-05-15T13:00:00Z] [STEP] Склонован в /tmp/opencode/DeepSeek-TUI — 14 workspace крейтов, ~264 .rs файла
-[2026-05-15T13:00:00Z] [STEP] Прочитаны: README, ARCHITECTURE, SUBAGENTS, MCP, MEMORY, MODES, RUNTIME_API, CONFIGURATION, TOOL_SURFACE
-[2026-05-15T13:00:00Z] [ANALYSIS] КЛЮЧЕВОЕ ОТКРЫТИЕ: Архитектура TUI не соответствует нашим предположениям
-[2026-05-15T13:00:00Z] [ANALYSIS] В TUI нет "RLM Pro+Flash" — есть sub-agent система (7 ролей: general, explore, plan, review, implementer, verifier, custom)
-[2026-05-15T13:00:00Z] [ANALYSIS] В TUI нет RocksDB — sub-agents persist в JSON (~/.deepseek/subagents.v1.json)
-[2026-05-15T13:00:00Z] [ANALYSIS] Memory = простой Markdown-файл (~/.deepseek/memory.md, max 100KB)
-[2026-05-15T13:00:00Z] [ANALYSIS] Есть встроенный RUNTIME_API (HTTP/SSE, sessions, turns, tasks, automations)
-[2026-05-15T13:00:00Z] [ANALYSIS] Есть встроенные MCP-клиент и Skills-система (SKILL.md)
-[2026-05-15T13:00:00Z] [DECISION] ФОРК TUI ОТМЕНЯЕТСЯ. Используем TUI как git dependency, не копируем код.
-[2026-05-15T13:00:00Z] [DECISION] Всё, что нужно: bridge.py (читает RUNTIME_API TUI, шлёт на 238) + SKILL.md + MCP-серверы + dtn.sh
-[2026-05-15T13:00:00Z] [STEP] Документация TUI (18 файлов) скопирована в docs/deepseek-tui/
-[2026-05-15T13:00:00Z] [STEP] ANALYSIS.md — написаны ключевые отличия от наших предположений
-[2026-05-15T13:00:00Z] [STEP] FORK_SPECIFICATION_V2.md — написана новая спецификация (без форка, 47 часов вместо 76)
-[2026-05-15T13:00:00Z] [STEP] FORK_SPECIFICATION_V1_DEPRECATED.md — перемещена в archive/
-[2026-05-15T13:00:00Z] [DONE] TUI изучен, документация обновлена. План сокращён на 40%
-[2026-05-15T14:00:00Z] [STATE] Переход в build mode. Утверждено направление: Kafka-native, ранги, MCP, автономия L0-L4
-[2026-05-15T14:00:00Z] [PLAN] Создать полную документацию mission-control как форка TUI + доктрину миссионной системы
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/README.md — создан (аналог TUI README)
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/ARCHITECTURE.md — создана полная архитектура (6 модулей)
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/AGENTS.md — создана sub-agent система (5 ролей, lifecycle)
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/MCP.md — создано описание MCP-серверов
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/RANKS.md — создана система рангов (адаптация из h2o-mining)
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/MODES.md — уровни автономии L0-L4
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/CONFIGURATION.md — конфиги (mission.toml, mcp.json, latency_plan)
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/KAFKA_PROTOCOL.md — 6 топиков с JSON-примерами
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/INSTALL.md — установка, запуск, Docker
-[2026-05-15T14:00:00Z] [STEP] 6 JSON-схем созданы: schemas/mission_*.v1.json
-[2026-05-15T14:00:00Z] [STEP] doctrine/mission_system.md — доктрина миссионной системы
-[2026-05-15T14:00:00Z] [STEP] docs/mission-control/WEBSITE.md — сайт виртуальной миссии
-[2026-05-15T14:00:00Z] [DONE] Полный пакет документации mission-control готов: 10 docs + 6 schemas + 1 doctrine
-[2026-05-15T15:00:00Z] [PLAN] Проанализировать улучшения WATERS над TUI в 4 областях: коммуникация агентов, внешние источники, автономия, сеансовая связь
-[2026-05-15T15:00:00Z] [STUDY] Изучены внутренние слои TUI: Engine (event loop), Session, Turn, TaskManager, AutomationManager, RLM, SubAgent, CapacityController, CycleManager, RuntimeThreads
-[2026-05-15T15:00:00Z] [STUDY] Изучен деплой TUI: Docker, CI/CD (9 workflow), app-server (HTTP + stdio), Lighthouse bootstrap
-[2026-05-15T15:00:00Z] [ANALYSIS] TUI использует in-process mpsc каналы — всё в одном процессе. Мы: Kafka — распределённая шина
-[2026-05-15T15:00:00Z] [ANALYSIS] TUI: нет автономии, нет сеансовой связи, нет DTN. Мы: L0-L4 + Contact Window Protocol
-[2026-05-15T15:00:00Z] [ANALYSIS] TUI: 2 внешних источника (CLI + Feishu). Мы: ∞ (Telegram, Web, Voice, API, Cron, ...)
-[2026-05-15T15:00:00Z] [DECISION] Архитектура WATERS = Kafka-native. Rust core (4 модуля: kafka, subagent, autonomy, dtn). Python edge (ранги, MCP, сайт)
-[2026-05-15T15:00:00Z] [STEP] docs/mission-control/WATERS_VS_TUI.md — создан: 11 таблиц сравнения, архитектура сеансового режима, burst sync протокол
-[2026-05-15T15:00:00Z] [DONE] Анализ завершён. Все улучшения зафиксированы в документе
-[2026-05-15T16:00:00Z] [PLAN] Аудит всей документации + обновление до v2.0
-[2026-05-15T16:00:00Z] [STEP] Проведён аудит 16 файлов — найдено 59 критических несоответствий
-[2026-05-15T16:00:00Z] [STEP] Архивировано: tui-fork-plan, server-plan, project-analysis, architecture (v1)
-[2026-05-15T16:00:00Z] [STEP] Redpanda → Kafka: constructor_v1.0.md, constructor-self/SKILL.md, docker-compose.yml
-[2026-05-15T16:00:00Z] [STEP] doctrine/mission_control_architecture.md — раздел 7 переписан
-[2026-05-15T16:00:00Z] [STEP] doctrine/onboard_logs.md — создана доктрина бортовых журналов
-[2026-05-15T16:00:00Z] [STEP] AGENTS.md — ссылка на onboard_logs.md
-[2026-05-15T16:00:00Z] [DONE] Аудит завершён. 4 файла архивировано, 5 обновлено, 1 создан
-[2026-05-15T17:00:00Z] [STEP] docs/mission-1/README.md — переписан полностью (Kafka-native, sub-agents, L0-L4, ранги)
-[2026-05-15T17:00:00Z] [STEP] team-workflow-example.md → archive/ (устарел)
-[2026-05-15T17:00:00Z] [STEP] roadmap.json → v2.0: спринты, milestones, даты
-[2026-05-15T17:00:00Z] [STEP] opencode.json — Ollama name: "237 via SSH" → "local"
-[2026-05-15T17:00:00Z] [STEP] docs/deepseek-tui/ANALYSIS.md — переписан (TUI как reference, не форк)
-[2026-05-15T17:00:00Z] [STEP] ARCHITECTURE_V2, SYSTEM_REQUIREMENTS, DEVELOPMENT_ORGANIZATION, WEBSITE_SPEC → archive/ (заменены docs/mission-control/)
-[2026-05-15T17:00:00Z] [DONE] Полный аудит завершён. 10 файлов архивировано, 10 обновлено/создано
-[2026-05-15T18:00:00Z] [PLAN] Создать полный пакет для Конструктора — всё что нужно для старта разработки
-[2026-05-15T18:00:00Z] [STEP] Изучено 308 .rs файлов TUI (~26 000 строк прочитано). Пропущенное — UI/themes/locale/vim — не нужно
-[2026-05-15T18:00:00Z] [STEP] docs/mission-control/CONSTRUCTOR_PACKAGE.md — создан
-[2026-05-15T18:00:00Z] [STEP] Включено: спецификация сервера, 6-слойная архитектура, 4 модуля Rust, API контракты, фазы, оценки
-[2026-05-15T18:00:00Z] [DONE] Пакет для Конструктора готов. Оценка Rust core: ~6 дней. Python edge: ~2 дня
-[2026-05-15T18:30:00Z] [SYNC] Kafka недоступен (docker daemon не запущен). Использую file-based протокол.
-[2026-05-15T18:30:00Z] [SYNC] Отправлен order: missions/mission-1/orders/001_constructor_start.json
-[2026-05-15T18:30:00Z] [SYNC] Проверены reports/ и orders/*.done — ответов от Конструктора нет
-[2026-05-15T18:30:00Z] [SYNC] Проверен constructor_journal.log — новых сообщений нет
-[2026-05-15T19:00:00Z] [PLAN] Исправить Kafka — dual listeners, rules для Конструктора
-[2026-05-15T19:00:00Z] [STEP] docker-compose.yml — Kafka исправлен: INTERNAL:9091 + EXTERNAL:9092
-[2026-05-15T19:00:00Z] [STEP] docs/mission-control/KAFKA_RULES.md — создано (8 разделов)
-[2026-05-15T19:00:00Z] [STEP] scripts/init_kafka_topics.sh — создан скрипт инициализации 6 топиков
-[2026-05-15T19:00:00Z] [STEP] .env — добавлены KAFKA_BOOTSTRAP, REMOTE_KAFKA_BOOTSTRAP, MISSION_ID
-[2026-05-15T19:00:00Z] [DONE] Kafka rules готовы. Dual listeners, consumer groups, topic config
+=== БОРТОВОЙ ЖУРНАЛ АРХИТЕКТОРА ===
+=== agent.architect.v1 | WATERS Platform ===
+
+[2026-05-15T20:00:00Z] [SESSION] waters-node v0.3 — архитектура утверждена
+[2026-05-15T20:00:00Z] [DONE]  Создана полная архитектурная документация waters-node v0.3:
+           - docs/waters-node/MASTER_SPEC_V3.md — единый документ
+           - docs/waters-node/ARCHITECTURE_V3.md — архитектура ноды
+           - docs/waters-node/GROUP_MODES.md — 5 режимов групповой работы
+           - docs/waters-node/SKILL_FORMAT.md — Skills 2.0 + конвертация TUI
+           - docs/waters-node/BRIDGES_MCP.md — 3 слоя интеграции
+           - docs/waters-node/AGENT_JOURNAL.md — журналы и личные агенты
+           - docs/waters-node/TASK_LIST_V3.md — задание Конструктору на 5 фаз
+           - docs/waters-node/TUI_ANALYSIS.md — что брать/не брать из TUI
+[2026-05-15T20:00:00Z] [DONE]  Обновлён product/roadmap.json (Спринты 2-4 под waters-node)
+[2026-05-15T20:00:00Z] [DONE]  Обновлены AGENTS.md (корень + architect_AGENTS.md)
+[2026-05-15T20:00:00Z] [DONE]  Git commit + push на GitHub (waters-ai/waters-core, 2 коммита)
+[2026-05-15T20:00:00Z] [DONE]  Принятые архитектурные решения:
+           - waters-node v0.3: 6 нод = 6 LLM, P2P-рой, чат как UI
+           - Принцип качества: ресурсы группы по качеству, не по цене
+           - Kafka — feature-gate (военный режим), основная — децентрализованная P2P
+           - Роли агентов = профессии (астроном, писатель, аналитик), не TUI-роли
+[2026-05-15T20:00:00Z] [TASK]   Создано задание Конструктору: docs/waters-node/TASK_LIST_V3.md
+           - Фаза 1: Streaming LLM + Crash Recovery (2 дня)
+           - Фаза 2: Bridges Config + Group Resources (2 дня)
+           - Фаза 3: Chat Approval + Task Binding (1 день)
+           - Фаза 4: Personal Agents + Journal (2 дня)
+           - Фаза 5: Event Stream + Kafka Military (2 дня)
+[2026-05-15T20:00:00Z] [NOTE]  waters-node доказал: TUI не нужен как код. Нужны только базовые
+           инструменты (read/write/list_dir, exec_shell, web_search, MCP client).
+           Всё остальное — своё, под P2P-коллеборацию разных профессий.
+[2026-05-15T20:00:00Z] [STOP]  Сессия завершена. waters-node v0.3 спроектирован.
