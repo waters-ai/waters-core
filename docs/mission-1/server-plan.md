@@ -1,165 +1,177 @@
-# План запуска сервера Миссии 1
+# План полевой станции Миссии 1
 
-## Спецификация: Hetzner AX102
+## Архитектура: полевая автономная станция
+
+```
+                  ═══════ НЕБО ═══════
+                     ▲        ▲
+                    /          \
+      ТЕТЕРИРОВАННЫЙ АЭРОСТАТ  /  СОЛНЕЧНЫЙ ДРОН (24/7)
+      (ретранслятор 10 км)    /   (резерв, разведка)
+           │                 /
+           │     10 км радиус
+           │    ┌───────────┐
+           │    │           │
+           ▼    ▼           ▼
+      ┌──────────────────────────────┐
+      │     ПОЛЕВАЯ СТАНЦИЯ          │
+      │     (ядро миссии)            │
+      │                              │
+      │  ┌──────────────────────┐    │
+      │  │  Compute Module      │    │
+      │  │  (RPi 5 / Jetson)    │    │
+      │  │  mission-control     │    │
+      │  │  RLM × 16+ агентов   │    │
+      │  │  Redis + ChromaDB    │    │
+      │  │  LightRAG + Ollama   │    │
+      │  └──────────────────────┘    │
+      │                              │
+      │  ┌──────────────────────┐    │
+      │  │  LoRa/Mesh 10 км     │◄───┼──► Рой агентов (земля)
+      │  │  WiFi (локалка)      │    │
+      │  │  Sat-линк → 238      │    │
+      │  └──────────────────────┘    │
+      │                              │
+      │  ┌──────────────────────┐    │
+      │  │  Солнечные панели    │    │
+      │  │  200-400W            │    │
+      │  │  LiFePO4 батарея     │    │
+      │  │  24/7 автономность   │    │
+      │  └──────────────────────┘    │
+      └──────────────────────────────┘
+               │         │
+      ┌────────┘         └────────┐
+      ▼                           ▼
+ ┌──────────┐             ┌──────────┐
+ │ Рой A    │             │ Рой B    │
+ │ (поиск)  │    10 км    │ (сбор)   │
+ │ 6 дронов │◄───────────►│ 6 дронов │
+ └──────────┘  LoRa mesh  └──────────┘
+```
+
+---
+
+## 1. Спецификация полевой станции
+
+### Вычислительный модуль
+
+| Параметр | Raspberry Pi 5 | Jetson Orin Nano | Intel NUC (i5) |
+|----------|---------------|-------------------|----------------|
+| **CPU** | 4 ядра ARM | 6 ядер ARM | 8 ядер x86 |
+| **RAM** | 8 GB | 8 GB | 16 GB |
+| **TDP** | 15-25W | 10-25W | 28W |
+| **AI** | — | 40 TOPS | — |
+| **Цена** | $80 | $500 | $400 |
+| **Выбор** | ⭐ Базовый | ⭐ С AI-ускорением | ❌ Много ватт |
+
+**Рекомендация:** Raspberry Pi 5 (8GB) для старта. Jetson Orin Nano — если нужен локальный AI без Ollama.
+
+### Энергосистема
+
+#### Основной источник: радиоизотопная батарея (RTG) — 50 лет
 
 | Параметр | Значение |
 |----------|----------|
-| **Модель** | AX102 |
-| **CPU** | 12 ядер AMD |
-| **RAM** | 32 GB |
-| **Диск** | 2 × 512 GB NVMe (RAID1 или раздельные) |
-| **Сеть** | 1 Gbps |
-| **Цена** | €35/мес |
-| **Локация** | Хельсинки / Нюрнберг |
+| **Тип** | Радиоизотопный термоэлектрический генератор (РИТЭГ) |
+| **Изотоп** | Pu-238 / Sr-90 |
+| **Срок службы** | 50 лет непрерывно ☢️ |
+| **Мощность** | 50-100 Вт (электрических) |
+| **Напряжение** | 12V / 24V DC |
+| **Масса** | ~20-50 кг (экранирование) |
+| **Особенности** | Не зависит от солнца, погоды, времени суток |
+| **Применение** | Космические миссии, арктические станции, маяки |
 
-## Этапы развёртывания
+#### Резерв: солнечные панели + LiFePO4
 
-### Шаг 1: Аренда и базовая настройка
+| Компонент | Спецификация | Расчёт |
+|-----------|-------------|--------|
+| **Станция** (RPi + радио + периферия) | 25 Вт × 24ч = 600 Вт·ч/день |
+| **Аэростат** (ретранслятор) | 10 Вт × 24ч = 240 Вт·ч/день |
+| **Дроны** × 12 (зарядка) | 100 Вт × 4ч = 400 Вт·ч/день |
+| **Итого** | | **~1240 Вт·ч/день** |
+| **RTG (основной)** | 80 Вт × 24ч = 1920 Вт·ч/день | ✅ Покрывает 100% |
+| **Солнечные панели (резерв)** | 300 Вт × 5ч = 1500 Вт·ч/день | ✅ Дубль |
+| **Батарея LiFePO4** | 12.8V × 100Ah = 1280 Вт·ч | ✅ Буфер |
+| **Контроллер** | MPPT 30A | — |
 
-```bash
-# 1. Заказать через Hetzner Robot или Cloud Console
-# 2. Установить Ubuntu 24.04 LTS
-# 3. SSH-доступ по ключу
-ssh root@<IP_сервера>
+RTG даёт **50 лет непрерывной работы** без обслуживания. Солнечные панели — резерв на случай выхода RTG из строя или пиковых нагрузок (одновременная зарядка всех дронов).
 
-# 4. Базовая безопасность
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow ssh
-ufw enable
+### Связь
 
-# 5. Системные пакеты
-apt update && apt upgrade -y
-apt install -y docker.io docker-compose-v2 git curl htop iotop
+| Канал | Дальность | Технология | Назначение |
+|-------|-----------|------------|------------|
+| **LoRa Mesh** | 10 км | 868/915 МГц | Связь с роем агентов (данные, приказы) |
+| **WiFi 6** | 100 м | 2.4/5 ГГц | Локальная сеть станции |
+| **Satellite** | глобально | Starlink / Iridium | Findings → центр 238, orders оттуда |
+| **Аэростат** | 10 км | WiFi-мост | Ретрансляция между роями и станцией |
+
+---
+
+## 2. Состав полевой станции
+
+### Hardware
+
+```
+┌─────────────────────────────────────────┐
+│         ПОЛЕВОЙ КЕЙС (IP65)             │
+│                                         │
+│  ┌──────────────┐  ┌──────────────┐     │
+│  │ RPi 5 (8GB)  │  │ MPPT         │     │
+│  │ + SSD 1TB    │  │ контроллер   │     │
+│  ├──────────────┤  ├──────────────┤     │
+│  │ LoRa-модем   │  │ LiFePO4      │     │
+│  │ 868 МГц, 2W  │  │ 12.8V 100Ah │     │
+│  ├──────────────┤  ├──────────────┤     │
+│  │ WiFi AP      │  │ GPS/GNSS     │     │
+│  │ + Sat-модем  │  │ + компас     │     │
+│  └──────────────┘  └──────────────┘     │
+│                                         │
+│  ┌──────────────┐  ┌──────────────┐     │
+│  │ Солнечные    │  │ Аэростат     │     │
+│  │ панели 300W  │  │ (привязной)  │     │
+│  │ (внешние)    │  │ с ретрансл.  │     │
+│  └──────────────┘  └──────────────┘     │
+└─────────────────────────────────────────┘
 ```
 
-### Шаг 2: Docker Compose (инфраструктура миссии)
+### Software Stack
 
-```yaml
-# docker-compose.yml
-services:
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
-    command: redis-server --appendonly yes
-    volumes: [redis-data:/data]
-    restart: always
-
-  chromadb:
-    image: chromadb/chroma:latest
-    ports: ["8000:8000"]
-    volumes: [chroma-data:/chroma/chroma]
-    environment: [ALLOW_RESET=true, IS_PERSISTENT=true]
-    restart: always
-
-  lightrag:
-    build: ./docker/lightrag
-    ports: ["8002:8000"]
-    volumes: [lightrag-data:/data]
-    restart: always
-
-  ollama:
-    image: ollama/ollama:latest
-    ports: ["11434:11434"]
-    volumes: [ollama-data:/root/.ollama]
-    restart: always
-    # После запуска: ollama pull deepseek-coder-v2:7b
-
-volumes:
-  redis-data:
-  chroma-data:
-  lightrag-data:
-  ollama-data:
+```
+┌──────────────────────────────────────────┐
+│  mission-control (Rust, TUI-форк)         │
+│                                          │
+│  RLM Pro (оркестратор)                   │
+│   ├── DataCollectorAgent × 4             │
+│   │   ├── MCP: LoRa-сеть → данные с поля │
+│   │   ├── MCP: камеры дронов → снимки    │
+│   │   └── MCP: спектрометры → спектры    │
+│   ├── AnalyzerAgent × 6                  │
+│   │   ├── траектории метеоритов          │
+│   │   ├── классификация образцов         │
+│   │   └── корреляция с данными NASA      │
+│   ├── PatternMatcherAgent × 4            │
+│   │   ├── ChromaDB (аномалии)            │
+│   │   └── LightRAG (граф находок)        │
+│   └── CoordinatorAgent × 2               │
+│       ├── управление роем                │
+│       └── sat-bridge → 238 (findings)    │
+│                                          │
+│  Redis (состояние, pub/sub)               │
+│  ChromaDB (вектора аномалий)              │
+│  LightRAG (граф знаний миссии)            │
+│  RocksDB (очередь TUI)                   │
+│  Ollama (fallback LLM)                    │
+└──────────────────────────────────────────┘
 ```
 
-### Шаг 3: Деплой mission-control
+---
 
-```bash
-# 1. Клонировать форк
-git clone https://github.com/waters-ai/mission-control /opt/mission-control
+## 3. Уровни автономии полевой станции
 
-# 2. Собрать Rust-бинар
-cd /opt/mission-control
-cargo build --release
-
-# 3. Systemd-сервис
-cat > /etc/systemd/system/mission-control.service << 'EOF'
-[Unit]
-Description=WATERS Mission 1 Control
-After=redis.service docker.service
-
-[Service]
-User=root
-WorkingDirectory=/opt/mission-control
-ExecStart=/opt/mission-control/target/release/mission-control
-Restart=always
-RestartSec=10
-Environment=RUST_LOG=info
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable mission-control
-systemctl start mission-control
-```
-
-### Шаг 4: Bridge (связь с 238)
-
-```bash
-# Отдельный systemd-сервис для bridge
-cat > /etc/systemd/system/mission-bridge.service << 'EOF'
-[Unit]
-Description=WATERS Mission 1 Bridge → Center 238
-After=network.target mission-control.service
-
-[Service]
-ExecStart=/opt/mission-control/bridge/mission-bridge
-Restart=always
-RestartSec=30
-Environment=CENTER_URL=https://238.bridge.waters
-
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-
-### Шаг 5: Healthcheck
-
-```bash
-# Healthcheck endpoint: http://localhost:8080/health
-# Проверяет: Redis, ChromaDB, Ollama, RLM-агенты, диск, RAM
-
-# Prometheus (опционально) — метрики
-# Grafana — дашборд миссии
-```
-
-### Шаг 6: Запуск миссии
-
-```bash
-# 1. Установить скиллы миссии
-mission-control install-skill skills/meteorite-search/
-
-# 2. Проверить MCP-серверы
-mission-control check-mcp
-
-# 3. Запустить RLM
-mission-control start-mission --mode autonomous
-
-# 4. Проверить агентов
-mission-control list-agents
-# DataCollectorAgent ×4  [active]
-# AnalyzerAgent     ×6  [active]
-# PatternMatcher    ×4  [active]
-# CoordinatorAgent  ×2  [active]
-```
-
-## Бюджет
-
-| Статья | Стоимость |
-|--------|-----------|
-| Сервер AX102 | €35/мес |
-| Домен (если нужен) | ~€10/год |
-| DeepSeek API | по usage |
-| **Итого** | **~€35-40/мес** |
+| Уровень | Связь с 238 | LLM | Режим |
+|---------|-------------|-----|-------|
+| **L0** | ✅ Sat-линк есть | DeepSeek API | Полный центр |
+| **L1** | ✅ Sat-линк есть | Ollama (локально) | Экономия API |
+| **L2** | ❌ Нет связи | Ollama (локально) | **Автономный**: очередь findings, sync при восстановлении |
+| **L3** | ❌ Нет связи | Ollama (урезанная модель) | **Энергосбережение**: только критичные задачи |
+| **L4** | ❌ Нет связи + нет солнца | — | **Safe mode**: только логирование, ожидание |"
