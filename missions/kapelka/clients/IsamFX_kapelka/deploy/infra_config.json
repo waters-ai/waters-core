@@ -1,0 +1,90 @@
+{
+  "type": "infrastructure_config",
+  "target": "ISamFX/kapelka",
+  "created_at": "2026-05-10T18:00:00Z",
+  "files": [
+    {
+      "path": "deploy/Dockerfile",
+      "description": "Multi-stage Docker build (node:20-alpine → nginx:alpine), non-root user, HEALTHCHECK"
+    },
+    {
+      "path": "deploy/docker-compose.yml",
+      "description": "Compose file with single nginx service, restart policy, logging, healthcheck"
+    },
+    {
+      "path": "deploy/nginx.conf",
+      "description": "Nginx config with SPA fallback, gzip, security headers, assets cache, rate limiting, SSL template"
+    },
+    {
+      "path": "deploy/.env.production.example",
+      "description": "Template with VITE_CLUSTER, VITE_SOLANA_RPC_URL, VITE_APP_VERSION"
+    },
+    {
+      "path": "deploy/deploy.sh",
+      "description": "Deploy script with --full (deps), --ssl (certbot), --check (healthcheck) flags, rsync-based"
+    },
+    {
+      "path": "deploy/.github/workflows/deploy.yml",
+      "description": "GitHub Actions workflow: audit → build → deploy with SSH secrets"
+    },
+    {
+      "path": "deploy/infra_config.json",
+      "description": "Meta-file describing generated infrastructure"
+    }
+  ],
+  "deploy_steps": [
+    "1. Скопировать .env.production.example → .env.production и заполнить переменные",
+    "2. Убедиться, что на VPS установлены Docker и Docker Compose (или запустить deploy.sh --full)",
+    "3. Запустить deploy.sh для rsync + сборки Docker",
+    "4. После получения домена — запустить deploy.sh --ssl для Let's Encrypt",
+    "5. Проверить healthcheck: deploy.sh --check",
+    "6. Для CI/CD — добавить secrets в GitHub: SSH_PRIVATE_KEY, REMOTE_HOST, REMOTE_USER"
+  ],
+  "env_required": [
+    {
+      "name": "VITE_CLUSTER",
+      "description": "Solana cluster: mainnet / devnet / testnet / localnet",
+      "default": "mainnet"
+    },
+    {
+      "name": "VITE_SOLANA_RPC_URL",
+      "description": "Solana RPC endpoint (Helius / Triton / QuickNode)",
+      "required": true
+    },
+    {
+      "name": "VITE_APP_VERSION",
+      "description": "Версия приложения",
+      "default": "1.0.0"
+    },
+    {
+      "name": "SSH_PRIVATE_KEY",
+      "context": "GitHub secret",
+      "description": "Приватный SSH-ключ для доступа к VPS"
+    },
+    {
+      "name": "REMOTE_HOST",
+      "context": "GitHub secret",
+      "description": "IP-адрес или домен VPS"
+    },
+    {
+      "name": "REMOTE_USER",
+      "context": "GitHub secret",
+      "description": "SSH-пользователь на VPS"
+    }
+  ],
+  "security_headers_applied": [
+    "Strict-Transport-Security (HSTS) — 2 года, includeSubDomains, preload",
+    "X-Frame-Options — SAMEORIGIN",
+    "X-Content-Type-Options — nosniff",
+    "Referrer-Policy — strict-origin-when-cross-origin",
+    "Permissions-Policy — запрещены камера, микрофон, геолокация, FLoC"
+  ],
+  "notes": [
+    "nginx.conf содержит закомментированную SSL-секцию — раскомментировать после получения сертификата",
+    "Rate limiting: 30 req/s на IP, burst 50 — защита от DDoS",
+    "Assets в /assets/ кешируются на 1 год (immutable) — fingerprinted Vite-бандлы",
+    "Gzip включён для JS, CSS, HTML, JSON, SVG, шрифтов",
+    "Не забудь удалить console.log из прода (см. audit_plan.json FRONT-CONSOLE_LOG)",
+    "skipPreflight: true на mainnet — рекомендуется переключить на false (см. audit_plan.json SOL-SKIP_PREFLIGHT)"
+  ]
+}

@@ -1,28 +1,26 @@
 #!/usr/bin/env bash
-# Запуск агента: Верховный Архитектор v1.0
+# Запуск Верховного Архитектора v1.0 на qwen2.5:7b (CPU)
+# Гарантирует модель 7B + чистые SSH туннели + pre-flight
 # Использование:
-#   ./run_architect.sh          # обычный запуск
-#   ./run_architect.sh --tmux   # запуск в tmux-сессии (24/7)
+#   ./run_architect_7b.sh            # обычный запуск
+#   ./run_architect_7b.sh --tmux     # в tmux-сессии
 set -euo pipefail
 
-AGENT="architect"
-AGENT_FILE="agents/${AGENT}_AGENTS.md"
-MODE="${1:-}"
+cd "$(dirname "$0")"
 
-if [ ! -f "$AGENT_FILE" ]; then
-    echo "❌ Файл $AGENT_FILE не найден"
-    exit 1
-fi
+echo "🏛️  Верховный Архитектор v1.0 — принудительно qwen2.5:7b"
+echo ""
 
-echo "🏛️  Запуск Верховного Архитектора v1.0..."
-echo "   AGENTS.md ← $AGENT_FILE"
-
-cp "$AGENT_FILE" AGENTS.md
-
-# Загрузка секретов из .env
-if [ -f "$(dirname "$0")/.env" ]; then
-  set -a; source "$(dirname "$0")/.env"; set +a
-fi
+# Принудительно ставим 7B в конфиге
+python3 -c "
+import json
+with open('opencode.json') as f:
+    cfg = json.load(f)
+cfg['model'] = 'ollama/qwen2.5:7b'
+with open('opencode.json', 'w') as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+print('   ✅ Модель: qwen2.5:7b')
+"
 
 # ─── SSH туннели ────────────────────────────────────────────────────
 echo "   🔌 SSH tunnels (очистка старых + keepalive)..."
@@ -59,7 +57,19 @@ else
 fi
 
 # ─── Запуск ──────────────────────────────────────────────────────────
-if [ "$MODE" = "--tmux" ]; then
+AGENT="architect"
+AGENT_FILE="agents/${AGENT}_AGENTS.md"
+
+if [ ! -f "$AGENT_FILE" ]; then
+    echo "❌ Файл $AGENT_FILE не найден"
+    exit 1
+fi
+
+echo ""
+echo "🏛️  AGENTS.md ← $AGENT_FILE"
+cp "$AGENT_FILE" AGENTS.md
+
+if [ "${1:-}" = "--tmux" ]; then
     echo ""
     echo "🌐 Запуск в tmux-сессии..."
     exec "$(dirname "$0")/scripts/opencode_tmux.sh" "$AGENT" start

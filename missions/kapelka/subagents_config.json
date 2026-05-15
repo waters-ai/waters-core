@@ -1,0 +1,52 @@
+{
+  "type": "subagents_config",
+  "project": "Kapelka",
+  "version": "1.0.0",
+  "created": "2026-05-12",
+  "subagents": [
+    {
+      "id": "agent.kapelka.infra",
+      "role": "Настройка инфраструктуры тестирования",
+      "tools": ["ssh", "nginx", "solana-cli"],
+      "last_used": "init-rank-4-v3.ts"
+    },
+    {
+      "id": "agent.kapelka.frontend",
+      "role": "Сборка и деплой фронта",
+      "tools": ["pnpm", "vite", "nginx"],
+      "last_used": "build with VITE_CLUSTER=testnet"
+    },
+    {
+      "id": "agent.kapelka.contract",
+      "role": "Патчинг и деплой контракта",
+      "tools": ["cargo-build-sbf", "solana"],
+      "last_used": "update_mem_rank.rs + config_trait.rs patch"
+    }
+  ],
+  "ssh_config": {
+    "host": "87.242.102.177",
+    "user": "constructor",
+    "key": "~/new_server_key",
+    "hostname": "k-internal"
+  },
+  "contract": {
+    "program_id": "H6sdhUrYUPyqg8LC1oKubjmC9WR6b7ugVpVMc6qQPZZk",
+    "root_pda": "HhrvugkNREo2USCM3DHWb4siCq2SoyM1aCw8AC5Tohm7",
+    "deploy_key": "~/projects/testw/deploy/testw-keypair.json",
+    "source_dir": "~/projects/testw/src/",
+    "scripts_dir": "~/projects/testw/scripts/"
+  },
+  "ranks_activated": {
+    "member": [1, 2, 3, 4],
+    "team": [1, 2, 3, 4]
+  },
+  "init_phases": {
+    "phase1": true,
+    "phase2": true,
+    "phase3a_3g": true,
+    "phase4": true,
+    "phase5": true,
+    "all_32_shards": true
+  },
+  "state_snapshot": "~/projects/testw/scripts/initialization/state.json"
+}

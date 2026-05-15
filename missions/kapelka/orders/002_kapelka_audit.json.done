@@ -1,0 +1,11 @@
+{
+  "type": "order",
+  "order_id": "kapelka-002",
+  "agent": "agent.constructor.v1",
+  "target": "https://github.com/ISamFX/kapelka.git",
+  "repo_path": "/tmp/kapelka_tmp",
+  "scope": "full",
+  "depth": "quick",
+  "message": "React/Vite/TypeScript SPA with Solana (Token2022) integration. Need audit plan covering: frontend code quality, security, Solana integration (staking, token sale, team/invite system, RPC audit), deploy readiness. Stack: React 19, Vite 7, Three.js, Solana Web3, Phantom/Solflare wallets.",
+  "created_at": "2026-05-10T17:50:00Z"
+}

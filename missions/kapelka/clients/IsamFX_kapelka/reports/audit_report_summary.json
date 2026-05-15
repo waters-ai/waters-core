@@ -1,0 +1,243 @@
+{
+  "type": "audit_report",
+  "target": "ISamFX/kapelka",
+  "created_at": "2026-05-10T18:30:00Z",
+  "overall_grade": "D",
+  "overall_score": 52,
+  "categories": [
+    {
+      "name": "Frontend Code Quality",
+      "grade": "D",
+      "score": 55,
+      "issues": [
+        {
+          "severity": "high",
+          "title": "398+ console.log/warn/debug statements in production",
+          "detail": "Codebase contains 398+ unguarded console.log/warn/debug calls across all services (TeamViewService, InviteRegistryReaderService, TreeCache, etc.). These leak internal state, PDAs, and shard IDs to browser console.",
+          "fix": "Remove all console.log from production code or wrap in VITE_DEBUG flag. Add ESLint rule 'no-console': 'warn'."
+        },
+        {
+          "severity": "high",
+          "title": "process.env polyfill is empty object",
+          "detail": "vite.config.ts defines 'process.env': {} — any process.env.X reference returns undefined. The RpcAuditor.ts check at line 165 (process.env.NODE_ENV === 'development') NEVER matches, breaking dev-mode gating entirely. Yet all other console.log remain active regardless.",
+          "fix": "Use import.meta.env.MODE or import.meta.env.DEV instead. Remove process.env polyfill and use Vite-native env vars."
+        },
+        {
+          "severity": "medium",
+          "title": "Background_old.tsx dead code",
+          "detail": "File /src/components/Background_old.tsx exists in the tree but is unused. Indicates incomplete cleanup.",
+          "fix": "Delete Background_old.tsx."
+        },
+        {
+          "severity": "medium",
+          "title": "Dual WebGLRenderer conflict",
+          "detail": "main.tsx renders <Background /> outside AppProviders, while Home page likely uses Earth.tsx. Two independent Three.js WebGLRenderer instances compete for GPU, causing FPS drop on mobile.",
+          "fix": "Consolidate into a single Three.js scene. Disable Background when Earth is visible, or render both in one canvas."
+        },
+        {
+          "severity": "medium",
+          "title": "Vite dev server config used as-is",
+          "detail": "vite.config.ts: host: '0.0.0.0', cors.origin: '*', strictPort: true — these are dev-only settings. CORS wildcard exposes the app to any origin.",
+          "fix": "Use VITE_DEV_MODE flag or separate vite.prod.config.ts. Remove CORS wildcard for production builds."
+        },
+        {
+          "severity": "low",
+          "title": "No CSS modules for core components",
+          "detail": "Header, Footer, WalletButton and other layout components lack CSS modules, relying on global styles.",
+          "fix": "Adopt CSS modules consistently (*.module.css) for component-scoped styles."
+        },
+        {
+          "severity": "low",
+          "title": "No i18n / Russian strings in code",
+          "detail": "UI strings hardcoded in Russian across components (e.g., 'Кошелек не подключен'). LanguageSwitcher placeholder exists but no i18n framework integrated.",
+          "fix": "Integrate react-i18next or similar. Extract all strings to translation files (ru/en)."
+        }
+      ],
+      "strengths": [
+        "Clean App.tsx routing with React Router lazy-ready structure",
+        "StrictMode enabled in main.tsx for development error detection",
+        "Polyfills (Buffer, global) properly configured for Solana compatibility"
+      ]
+    },
+    {
+      "name": "Security",
+      "grade": "D",
+      "score": 45,
+      "issues": [
+        {
+          "severity": "critical",
+          "title": "Hardcoded Helius API key in source",
+          "detail": "rpc.config.ts line 34: 'https://devnet.helius-rpc.com/?api-key=demo' — hardcoded demo API key exposed in source code. While marked 'demo', it still exposes the endpoint pattern and could be abused.",
+          "fix": "Remove hardcoded key. Source RPC URLs exclusively from VITE_SOLANA_RPC_URL env var with no fallback to hardcoded keys."
+        },
+        {
+          "severity": "high",
+          "title": "skipPreflight: true on all transactions",
+          "detail": "Found in 6 locations: StakingDashboard.tsx (lines 347, 523), InvitesDashboard.tsx (line 71), useTransaction.ts (line 27, default), useTeamBonusData.ts (line 56), useConnect.ts (line 460). On mainnet, skipPreflight:true can send invalid transactions that waste fees.",
+          "fix": "Set skipPreflight: false for mainnet. Keep true only for devnet/testnet. Add cluster-aware logic."
+        },
+        {
+          "severity": "high",
+          "title": "console.log leaks PII and internal state",
+          "detail": "RpcAuditor.ts logs sessionId (line 102), walletPublicKey, traceId, full RPC params/response metadata. TeamViewService logs full PDA addresses, wallet addresses, shard assignments to console.",
+          "fix": "Remove all production console.log. Implement structured logging to a backend endpoint if needed."
+        },
+        {
+          "severity": "medium",
+          "title": "IndexedDB audit data persists after logout",
+          "detail": "RpcAuditor stores sessionId, wallet hashes, full RPC trace in IndexedDB (RpcAuditDB). No cleanup on wallet disconnect. Data persists indefinitely.",
+          "fix": "Add wallet disconnect listener to clearAllData() from RpcAuditor. Add data retention policy (max 24h)."
+        },
+        {
+          "severity": "medium",
+          "title": "No Content Security Policy (CSP)",
+          "detail": "No CSP meta tag in index.html and no CSP header. Combined with CORS wildcard, increases XSS risk surface.",
+          "fix": "Add CSP meta tag or configure in nginx. Use strict CSP: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'."
+        },
+        {
+          "severity": "medium",
+          "title": "CORS wildcard in Vite config",
+          "detail": "vite.config.ts: cors.origin: '*' — allows any origin to access the dev server. In shared network environments, this is a risk.",
+          "fix": "Remove CORS config or restrict to specific origins. This is dev-only config and should not affect production."
+        },
+        {
+          "severity": "low",
+          "title": "window.rpcAuditor exposed globally",
+          "detail": "RpcAuditor.ts line 490: (window as any).rpcAuditor = rpcAuditor — exposes the full auditor instance with exportAll(), clearAllData() in browser console.",
+          "fix": "Remove global exposure or guard with import.meta.env.DEV."
+        }
+      ],
+      "strengths": [
+        "IndexedDB-based RPC audit with auto-flush and cleanup is well-architected",
+        "No dangerouslySetInnerHTML usage found (no obvious XSS vectors)",
+        "Wallet adapter setup correctly uses autoConnect=false"
+      ]
+    },
+    {
+      "name": "Solana Integration",
+      "grade": "B",
+      "score": 78,
+      "issues": [
+        {
+          "severity": "high",
+          "title": "skipPreflight:true default on all transactions",
+          "detail": "useTransaction.ts defaults skipPreflight=true. StakingDashboard, InvitesDashboard, useConnect, useTeamBonusData all use it. On mainnet this bypasses preflight checks, allowing invalid transactions to be submitted.",
+          "fix": "Add cluster detection: skipPreflight: cluster === 'devnet' || cluster === 'localhost'. Default to false for mainnet."
+        },
+        {
+          "severity": "medium",
+          "title": "ConnectionContext.Provider override conflict",
+          "detail": "WalletProvider.tsx line 102: <ConnectionContext.Provider value={{ connection }}> overrides the connection from ConnectionProvider with AuditedConnection. AuditedConnection may not expose all methods of standard Connection class.",
+          "fix": "Ensure AuditedConnection extends Connection fully and delegates all methods. Consider removing the override and patching ConnectionProvider directly."
+        },
+        {
+          "severity": "medium",
+          "title": "Token2022 exclusive — Phantom incompatibility",
+          "detail": "All token operations use TOKEN_2022_PROGRAM_ID only. Phantom wallet on desktop does not display Token2022 balances on devnet/mainnet. Users cannot see their WATER/STABLE balances in wallet.",
+          "fix": "Add fallback display logic or use standard Token program for balance display. Document Token2022 requirement prominently."
+        },
+        {
+          "severity": "low",
+          "title": "RPC fallback chain — single try/catch, no rate limiting",
+          "detail": "rpc.config.ts defines fallback endpoints but ScaledBatchedRpcFetcher.executeWithFallback iterates them sequentially with no rate limiting awareness. No circuit breaker pattern.",
+          "fix": "Implement circuit breaker per endpoint. Add rate limit tracking and endpoint exclusion on repeated failures."
+        }
+      ],
+      "strengths": [
+        "62 accounts, 32 shards, 20+ PDA seeds comprehensively defined in addresses.ts with typed exports",
+        "ScaledBatchedRpcFetcher with adaptive TTL, batch sizing, fallback chain, retry with exponential backoff — high quality RPC layer",
+        "AuditedConnection wrapping provides full RPC tracing capability",
+        "5 wallet adapters correctly configured (Phantom, Solflare, Ledger, Clover, Alpha)",
+        "PDA seed constants and account structure well-organized and documented",
+        "Shard-based architecture (32 shards across 7 chunks) correctly implemented"
+      ]
+    },
+    {
+      "name": "Deploy Readiness",
+      "grade": "F",
+      "score": 25,
+      "issues": [
+        {
+          "severity": "critical",
+          "title": "No Dockerfile in repository",
+          "detail": "The actual application repository (/tmp/kapelka_tmp) contains NO Dockerfile. The Constructor generated deploy/Dockerfile in waters-core but it was never integrated into the repo.",
+          "fix": "Copy deploy/Dockerfile to repository root. Use multi-stage build (node:20-alpine → nginx:alpine)."
+        },
+        {
+          "severity": "critical",
+          "title": "No docker-compose.yml in repository",
+          "detail": "No docker-compose.yml in repo. Cannot orchestrate the service.",
+          "fix": "Copy deploy/docker-compose.yml to repository root with healthcheck, restart policy, logging limits."
+        },
+        {
+          "severity": "critical",
+          "title": "No nginx.conf in repository",
+          "detail": "No nginx configuration in repo. SPA requires proper routing (try_files $uri /index.html), security headers, gzip, caching.",
+          "fix": "Copy deploy/nginx.conf. Includes SPA fallback, HSTS, X-Frame-Options, rate limiting, gzip, assets caching."
+        },
+        {
+          "severity": "high",
+          "title": "No .env or .env.example in repository",
+          "detail": "No .env or .env.example file in repo. Required env vars (VITE_CLUSTER, VITE_SOLANA_RPC_URL, VITE_APP_VERSION) are undocumented for developers.",
+          "fix": "Copy deploy/.env.production.example to .env.example in root. Document all required VITE_ variables."
+        },
+        {
+          "severity": "high",
+          "title": "No CI/CD pipeline in repository",
+          "detail": "No .github/workflows directory in repo. No automated audit → build → deploy pipeline.",
+          "fix": "Copy deploy/.github/workflows/deploy.yml. Configure SSH secrets (REMOTE_HOST, REMOTE_USER, SSH_PRIVATE_KEY) in GitHub."
+        },
+        {
+          "severity": "medium",
+          "title": "No monitoring or error tracking",
+          "detail": "No Sentry, Datadog RUM, or any error tracking integrated. Production errors are invisible.",
+          "fix": "Integrate Sentry or Datadog RUM. Capture unhandled promise rejections and React error boundaries."
+        },
+        {
+          "severity": "medium",
+          "title": "Vite build lacks production optimizations",
+          "detail": "No code splitting strategy, no image minimizer plugin, no gzip/brotli compression plugin in vite.config.ts. Bundle size likely >500kb with Three.js + Solana libs.",
+          "fix": "Add vite-plugin-compression (gzip/brotli), manualChunks for vendor splitting, image optimization plugin."
+        },
+        {
+          "severity": "medium",
+          "title": "No environment variable validation",
+          "detail": "WalletProvider.tsx:47 accepts any string for VITE_CLUSTER/VITE_NODE_ENV with no enum validation. Invalid values silently default to devnet.",
+          "fix": "Add Zod schema or enum validation for VITE_CLUSTER. Throw on invalid values in development."
+        }
+      ],
+      "strengths": [
+        "Constructor generated complete infra package at deploy/ — Docker, Nginx, CI/CD, .env.example, deploy.sh — but needs integration into repo root",
+        "Infra config includes HSTS, rate limiting, gzip, non-root user, HEALTHCHECK, SSL template"
+      ]
+    }
+  ],
+  "critical_issues": [
+    {
+      "severity": "critical",
+      "title": "Hardcoded Helius API key (SEC)",
+      "action": "Remove from rpc.config.ts immediately. Move RPC URLs to VITE_SOLANA_RPC_URL env var."
+    },
+    {
+      "severity": "critical",
+      "title": "No Docker/Nginx/CI-CD in repo (DEPLOY)",
+      "action": "Integrate deploy/* files into repo root: Dockerfile, docker-compose.yml, nginx.conf, .env.example, .github/workflows/deploy.yml"
+    },
+    {
+      "severity": "critical",
+      "title": "skipPreflight:true in all transactions (SEC+SOL)",
+      "action": "Add cluster-aware skipPreflight logic. Set to false for mainnet."
+    },
+    {
+      "severity": "high",
+      "title": "398+ console.log leaking internal state (FRONT+SEC)",
+      "action": "Mass-remove or gate behind VITE_DEBUG flag. Add ESLint no-console rule."
+    },
+    {
+      "severity": "high",
+      "title": "process.env polyfill breaks env detection (FRONT)",
+      "action": "Replace with import.meta.env.MODE. Remove 'process.env': {} from vite.config.ts."
+    }
+  ],
+  "recommendations_summary": "Проект ISamFX/kapelka имеет сильную архитектурную базу (Solana интеграция, шардирование, PDA seeds, ScaledBatchedRpcFetcher), но критически страдает от security-дыр (хардкод ключа, skipPreflight везде, console.log 398+ вызовов) и полного отсутствия deploy-инфраструктуры в репозитории. Конструктор уже сгенерировал Docker, Nginx, CI/CD и .env в deploy/, но эти файлы не интегрированы в корень репозитория. Приоритет: 1) удалить хардкод ключей и console.log, 2) запретить skipPreflight на mainnet, 3) скопировать deploy/* в корень репозитория, 4) настроить CI/CD. Без этих шагов релиз невозможен."
+}

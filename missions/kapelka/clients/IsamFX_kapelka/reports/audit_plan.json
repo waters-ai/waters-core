@@ -1,0 +1,128 @@
+{
+  "type": "audit_plan",
+  "target": "ISamFX/kapelka",
+  "created_at": "2026-05-10T18:00:00Z",
+  "scope": "full",
+  "depth": "quick",
+  "sections": [
+    {
+      "id": "frontend",
+      "name": "Frontend Code Quality",
+      "priority": "high",
+      "checks": [
+        {"name": "TypeScript strict", "tool": "tsc --noEmit", "what": "strict: true, noUnusedLocals, noUnusedParameters — проверить ошибки типов и неиспользуемые переменные"},
+        {"name": "ESLint", "tool": "eslint .", "what": "tseslint.recommended + react-hooks + react-refresh — проверить warnings"},
+        {"name": "Bundle size", "tool": "vite build --report / rollup-plugin-visualizer", "what": "Three.js (179kb), @solana/web3.js, react-router-dom — суммарный бандл может превышать 500kb"},
+        {"name": "A11y", "tool": "axe-core / @axe-core/react", "what": "no aria labels on buttons, no alt on canvas, keyboard navigation"},
+        {"name": "Three.js performance", "tool": "Chrome DevTools Performance", "what": "Background.tsx + Earth.tsx дублируют 3D-сцену Земли, два WebGLRenderer на одной странице"},
+        {"name": "CSS Modules coverage", "tool": "ls src/components/*.module.css", "what": "многие компоненты без CSS modules (Header, Footer, WalletButton)"},
+        {"name": "React strict mode", "tool": "check main.tsx", "what": "StrictMode включён — проверить двойной рендер эффектов в Three.js"},
+        {"name": "Unused components", "tool": "grep -r Background_old", "what": "Background_old.tsx присутствует в дереве — удалить"},
+        {"name": "Console.log cleanup", "tool": "rg 'console\\.(log|warn|debug)' src/ --count", "what": "50+ console.log в проде — убрать или обернуть в debug-режим"},
+        {"name": "i18n", "tool": "rg 'ru|en' src/", "what": "зачатки LanguageSwitcher, но строки на русском в коде компонентов"}
+      ]
+    },
+    {
+      "id": "security",
+      "name": "Security Audit",
+      "priority": "high",
+      "checks": [
+        {"name": "npm audit", "tool": "npm audit --audit-level=high", "what": "проверить уязвимости @solana/web3.js v1.98.4 и зависимостей"},
+        {"name": "Secrets in code", "tool": "gitleaks / trufflehog", "what": "all RPC_URL в открытую (Helius demo key), адреса кошельков, проверка на хардкод"},
+        {"name": "XSS vectors", "tool": "rg 'dangerouslySetInnerHTML|innerHTML' src/", "what": "нет явных XSS-векторов, но проверить UserAccount data rendering"},
+        {"name": "CSP headers", "tool": "check index.html + nginx config", "what": "нет ни CSP meta-тега, ни заголовка — dev-сервер CORS * (wildcard)"},
+        {"name": "Security headers", "tool": "securityheaders.com", "what": "нет HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy"},
+        {"name": "Dependency supply chain", "tool": "npm ls --depth=0", "what": "buffer polyfill required — устал ли? solana/wallet-adapter-wallets тянет много зависимостей"},
+        {"name": "process.env polyfill", "tool": "check vite.config.ts", "what": "'process.env': {} — пустой объект, любой process.env.NODE_ENV вернёт undefined"},
+        {"name": "IndexedDB data exposure", "tool": "check RpcAuditor", "what": "RPC audit данные в IndexedDB (sessionId, wallet hash) — нет очистки при logout"}
+      ]
+    },
+    {
+      "id": "solana",
+      "name": "Solana Integration",
+      "priority": "critical",
+      "checks": [
+        {"name": "PDA derivation correctness", "tool": "compare pda-utils.ts vs Rust", "what": "32 PDA seed types — проверить каждый на совпадение с on-chain программой"},
+        {"name": "RPC endpoint strategy", "tool": "check rpc.config.ts", "what": "fallback-цепочка один try/catch, нет rate-limiting, devnet использует demo API key Helius"},
+        {"name": "Wallet adapter setup", "tool": "check WalletProvider.tsx", "what": "5 адаптеров (Phantom, Solflare, Ledger, Clover, Alpha) — autoConnect=false, проверка на mainnet"},
+        {"name": "Token2022 usage", "tool": "rg 'TOKEN_2022_PROGRAM_ID|spl-token' src/", "what": "Token2022 везде — проверить совместимость с кошельками (Phantom не показывает балансы Token2022 на devnet)"},
+        {"name": "Transaction building", "tool": "check StakingDashboard, InvitesDashboard, DepositWithdrawModal", "what": "skipPreflight: true на всех sendRawTransaction — выключить для mainnet"},
+        {"name": "Anchor / raw instructions", "tool": "rg 'TransactionInstruction' src/", "what": "все инструкции Raw (не Anchor) — проверка data layout на совпадение с Rust"},
+        {"name": "RPC auditor privacy", "tool": "check RpcAuditor.ts:165", "what": "process.env.NODE_ENV === 'development' — всегда undefined из-за пустого polyfill, console.log ВСЕГДА активен"},
+        {"name": "Batching & caching", "tool": "check ScaledBatchedRpcFetcher", "what": "пакетный fetcher с adaptive TTL — потенциальная stale data при cacheTTL=60s"},
+        {"name": "Airdrop counter", "tool": "check addresses.ts", "what": "AIRDROP_COUNTER адрес — проверить на mainnet"},
+        {"name": "ConnectionContext override", "tool": "check WalletProvider.tsx:102", "what": "ConnectionContext.Provider переопределяет connection — возможен конфликт с ConnectionProvider"}
+      ]
+    },
+    {
+      "id": "deploy",
+      "name": "Deploy Readiness",
+      "priority": "high",
+      "checks": [
+        {"name": "Docker config", "tool": "ls Dockerfile* docker-compose*", "what": "НЕТ ДОКЕРА — отсутствует Dockerfile и docker-compose.yml"},
+        {"name": "Nginx config", "tool": "ls nginx* .conf", "what": "НЕТ NGINX — необходим для SPA fallback, CORS, security headers"},
+        {"name": "CI/CD pipeline", "tool": "ls .github/workflows .gitlab-ci.yml", "what": "НЕТ CI/CD — ни GitHub Actions, ни GitLab CI"},
+        {"name": "Environment variables", "tool": "ls .env*", "what": "НЕТ .env / .env.example — VITE_CLUSTER, VITE_SOLANA_RPC_URL не документированы"},
+        {"name": "Build output", "tool": "vite build && ls dist/", "what": "проверить корректность сборки tsc -b && vite build"},
+        {"name": "SPA routing", "tool": "check nginx config need", "what": "react-router-dom с BrowserRouter — требуется fallback к index.html"},
+        {"name": "Asset optimization", "tool": "check vite.config.ts", "what": "нет image minimizer, нет code splitting strategy, нет gzip/brotli"},
+        {"name": "Monitoring", "tool": "grep -r 'sentry|datadog|grafana' src/", "what": "нет мониторинга — Sentry, Datadog RUM, или аналогов"},
+        {"name": "Environment detection", "tool": "check WalletProvider.tsx:47", "what": "VITE_CLUSTER / VITE_NODE_ENV — нет enum-валидации, любое значение попадёт в default"}
+      ]
+    }
+  ],
+  "risk_areas": [
+    {
+      "id": "SEC-CORS",
+      "severity": "high",
+      "description": "Vite dev-сервер: cors.origin='*', host='0.0.0.0', strictPort:true — production-ready server настройки отсутствуют"
+    },
+    {
+      "id": "SEC-SKIP_PREFLIGHT",
+      "severity": "high",
+      "description": "Все Solana транзакции используют skipPreflight:true — на mainnet может отправить заведомо невалидную tx"
+    },
+    {
+      "id": "SOL-CONNECTION_CTX",
+      "severity": "medium",
+      "description": "WalletProvider перезаписывает ConnectionContext — AuditedConnection не идентичен Connection (нет некоторых методов)"
+    },
+    {
+      "id": "FRONT-DUAL_3D",
+      "severity": "medium",
+      "description": "Background.tsx и three/Earth.tsx создают два независимых WebGLRenderer с Землёй — падение FPS на мобильных"
+    },
+    {
+      "id": "SEC-LOG_LEAK",
+      "severity": "medium",
+      "description": "RPC Auditor логит sessionId + wallet hash в console.log — утечка метаданных пользователей"
+    },
+    {
+      "id": "DEPLOY-INFRA",
+      "severity": "critical",
+      "description": "Docker, Nginx, CI/CD, .env — отсутствуют. Приложение не готово к деплою."
+    },
+    {
+      "id": "SOL-TOKEN2022",
+      "severity": "medium",
+      "description": "Token2022 эксклюзивный — Phantom на десктопе не поддерживает display балансов Token2022 на devnet/mainnet"
+    }
+  ],
+  "tools_required": [
+    "tsc --noEmit",
+    "eslint .",
+    "npm audit",
+    "gitleaks / trufflehog",
+    "lighthouse (a11y + best practices)",
+    "source-map-explorer / rollup-plugin-visualizer",
+    "three.js performance monitor (stats.js)",
+    "securityheaders.com",
+    "CSP Evaluator"
+  ],
+  "recommended_order": [
+    "deploy — Docker + Nginx + .env + CI/CD (критично, без этого нельзя развернуть)",
+    "security — npm audit + проверка уязвимостей + CSP",
+    "solana — PDA + инструкции + skipPreflight + Token2022",
+    "frontend — TypeScript + ESLint + bundle + Three.js + a11y"
+  ]
+}

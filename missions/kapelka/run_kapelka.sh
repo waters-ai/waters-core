@@ -17,8 +17,8 @@ KAPELKA_WORKSPACE="${SCRIPT_DIR}"
 
 # === Настройки ===
 KAPELKA_MODE="${KAPELKA_MODE:-file}"  # kafka или file
-OLLAMA_HOST="${OLLAMA_HOST:-171.22.180.237}"
-OLLAMA_PORT="${OLLAMA_PORT:-11434}"
+OLLAMA_HOST="171.22.180.237"          # фикс: игнорируем системное localhost:11434
+OLLAMA_PORT="11434"
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:14b}"
 
 mkdir -p "${LOG_DIR}" "${PID_DIR}"

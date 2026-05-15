@@ -1,0 +1,2 @@
+2026-05-10 17:45:01,823 [INFO] Architect-Kapelka Kafka-режим отключён (KAPELKA_MODE=file)
+2026-05-10 17:45:01,830 [INFO] Architect-Kapelka Architect-Kapelka (agent.architect.kapelka.v1) запущен. Режим: file, Ollama: 171.22.180.237:11434/qwen2.5:14b

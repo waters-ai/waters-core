@@ -16,19 +16,6 @@ cd /home/ubuntu/WATERS/repos/waters-core
 pip install -r requirements.txt
 ```
 
-### Секреты (~/.secrets/)
-
-| Файл | Назначение | Обязателен |
-|------|-----------|-----------|
-| `.secret_telegram_token` | Токен Telegram-бота | ✅ Да |
-| `.secret_telegram_users` | Белый список user_id (каждый с новой строки) | ❌ Опционально |
-| `.secret_yandexgpt_api_key` | API-ключ YandexGPT (AI Studio) | ✅ Да |
-| `.secret_yandexgpt_budget` | Дневной лимит в долларах (default: 0.10) | ❌ Опционально |
-| `.secret_yandex_xml_api_key` | Ключ Yandex.XML | ❌ Опционально |
-| `.secret_yandex_xml_user` | Логин Yandex.XML | ❌ Опционально |
-
-Права: `chmod 600 ~/.secrets/*`
-
 ### Запуск
 
 ```bash
@@ -49,7 +36,7 @@ sudo journalctl -u field-agent -f
 
 Найти бота в Telegram → `/start` → писать запросы.
 
-Если настроен белый список (`.secret_telegram_users`) — бот отвечает только указанным user_id.
+Если настроен белый список — бот отвечает только указанным user_id.
 
 Узнать свой user_id: написать боту `/start`, посмотреть лог:
 ```bash
@@ -219,7 +206,7 @@ Scout проверяет при старте:
 
 | Сервис | Дневной лимит | Расход сегодня |
 |--------|--------------|----------------|
-| **YandexGPT** | $0.10 (или сколько указано в `.secret_yandexgpt_budget`) | `SELECT * FROM daily_usage WHERE service='yandexgpt'` |
+| **YandexGPT** | $0.10 (или дневной лимит) | `SELECT * FROM daily_usage WHERE service='yandexgpt'` |
 | **Yandex.XML** | $0.05 | `SELECT * FROM daily_usage WHERE service='yandex_xml'` |
 | **NotebookLM** | 50 запросов | `SELECT * FROM daily_usage WHERE service='notebooklm'` |
 | **DuckDuckGo** | ~200 запросов | `SELECT * FROM daily_usage WHERE service='ddg'` |
@@ -227,7 +214,7 @@ Scout проверяет при старте:
 ### Изменение бюджета
 
 ```bash
-echo "0.20" > ~/.secrets/.secret_yandexgpt_budget
+# изменить значение в файле бюджета YandexGPT
 systemctl restart field-agent
 ```
 
@@ -241,7 +228,7 @@ Scout продолжает работать на бесплатных движк
 
 | Правило | Описание |
 |---------|----------|
-| **Секреты** | Все ключи в `~/.secrets/`, `chmod 600`. Ни одного в коде |
+| **Секреты** | Через переменные окружения или файлы. Ни одного в коде |
 | **Telegram** | Белый список. Неизвестные пользователи получают «Доступ запрещён» |
 | **Файлы** | Автоудаление через 7 дней. Диск не переполняется |
 | **Rate limit** | В 2 раза ниже официальных. 100% без бана |
@@ -281,7 +268,7 @@ Scout продолжает работать на бесплатных движк
 
 | Проблема | Решение |
 |----------|---------|
-| **«Scout не отвечает в Telegram»** | Проверь `.secret_telegram_token`. Проверь лог: `tail -f logs/scout.log` |
+| **«Scout не отвечает в Telegram»** | Проверь токен Telegram-бота. Проверь лог: `tail -f logs/scout.log` |
 | **«Нет результатов поиска»** | Проверь лимиты: `sqlite3 /home/waters-data/scout_state.db "SELECT * FROM daily_usage"` |
 | **«Ошибка Kafka»** | Проверь `WATERS_KAFKA_BROKER`. Проверь что 238 доступен: `ping 171.22.180.238` |
 | **«YaCy не отвечает»** | Может быть недоступен публичный пир. Scout переключится на DDG |

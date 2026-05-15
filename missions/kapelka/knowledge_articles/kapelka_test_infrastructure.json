@@ -1,0 +1,9 @@
+{
+  "article_id": "kapelka-infra-v2",
+  "title": "Kapelka — инфраструктура тестирования v2",
+  "content": "Тестовый сервер: 87.242.102.177. Пользователь: constructor. SSH-ключ: ~/new_server_key.\n\nSolana test-validator: 127.0.0.1:8899 (Solana Core 3.1.14). PID 56803. Ledger: /tmp/test-ledger.\nnginx: порт 80, SPA + /api/solana/ → 127.0.0.1:8899 (RPC proxy).\n\nКонтракт testw v0.3.0: Program ID H6sdhUrYUPyqg8LC1oKubjmC9WR6b7ugVpVMc6qQPZZk.\nИсходник: ~/projects/testw/src/. Деплой-ключ: ~/projects/testw/deploy/testw-keypair.json.\nRoot PDA: HhrvugkNREo2USCM3DHWb4siCq2SoyM1aCw8AC5Tohm7.\n\nИнициализация: Полностью пройдена (5 фаз, 15/15 checks). state.json в scripts/initialization/.\nРанги: Активированы 1-4 для личных и командных. Бонусы обновлены.\nФронтенд: ~/projects/kapelka, dist/ на nginx, VITE_CLUSTER=testnet, RPC через nginx proxy.\n\nСкрипты (~/projects/testw/scripts/):\n  admin/init-rank-4-v3.ts — создание рангов 3-4\n  admin/verify-ranks.ts — проверка рангов\n  initialization/ — 11 фаз инициализации (phase1-5)\n  test-full-cycle.ts — полный цикл\n  47-adnin-create-team.ts — создание команды\n  54-55-check-team-view.ts — проверка VIEW 54-55",
+  "source": "constructor.deploy",
+  "tags": ["kapelka", "infrastructure", "test-server", "solana-validator", "contract", "ranks"],
+  "created_at": "2026-05-12",
+  "author": "agent.constructor.v1"
+}
