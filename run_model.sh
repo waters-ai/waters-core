@@ -7,6 +7,7 @@
 # Синтаксис:
 #   ./run_model.sh -m <3|7|14|4> -s <arch|build|meaning|safe>   # набор агентов
 #   ./run_model.sh -m <3|7|14|4> -a <agent_name>                 # одиночный агент
+#   ./run_model.sh -m <3|7|14|4> -a <agent_name> -r             # восстановить сессию
 #
 # Модели (-m):
 #   3  — Ollama Qwen 2.5 3B (через SSH-туннель на 237:11434)
@@ -23,11 +24,15 @@
 # Одиночные агенты (-a):
 #   architect | constructor | integrator | director | lawkeeper | keeper
 #
+# Флаги:
+#   -r  — восстановить сессию (не пересоздавать конфиг, использовать существующий)
+#
 # Примеры:
 #   ./run_model.sh -m 14 -s arch            # Троица Структуры на 14B
 #   ./run_model.sh -m 7 -a constructor      # Конструктор на 7B
 #   ./run_model.sh -m 4 -s arch             # Троица Структуры на DeepSeek V4
 #   ./run_model.sh -m 4 -a architect        # Архитектор на DeepSeek V4
+#   ./run_model.sh -m 4 -a constructor -r   # Конструктор на DeepSeek, восстановить сессию
 #   ./run_model.sh -m 7 -a integrator       # Интегратор на 7B
 #
 # Как это работает:
@@ -56,6 +61,7 @@ usage() {
     echo "Синтаксис:"
     echo "  $0 -m ${YELLOW}<7|14|4>${NC} -s ${YELLOW}<arch|build|meaning|safe>${NC}   # набор агентов"
     echo "  $0 -m ${YELLOW}<7|14|4>${NC} -a ${YELLOW}<agent>${NC}                       # одиночный агент"
+    echo "  $0 -m ${YELLOW}<7|14|4>${NC} -a ${YELLOW}<agent>${NC} ${GREEN}-r${NC}                     # восстановить сессию"
     echo ""
 echo -e "${GREEN}Модели${NC} (-m):"
 echo "  3  — Ollama Qwen 2.5 3B   (:11434, туннель → 237)"
@@ -80,12 +86,13 @@ echo "  4  — DeepSeek V4 Flash    (API, ключ из .env)"
     exit 1
 }
 
-MODE=""; SET=""; AGENT=""
-while getopts "m:s:a:h" opt; do
+MODE=""; SET=""; AGENT=""; RESUME=false
+while getopts "m:s:a:rh" opt; do
     case $opt in
         m) MODE="$OPTARG" ;;
         s) SET="$OPTARG" ;;
         a) AGENT="$OPTARG" ;;
+        r) RESUME=true ;;
         h|*) usage ;;
     esac
 done
@@ -141,6 +148,17 @@ if [ "$MODE" = "3" ] || [ "$MODE" = "7" ] || [ "$MODE" = "14" ]; then
         sleep 1
     fi
     echo -e "${GREEN}✅ Ollama :$PORT — доступен${NC}"
+fi
+
+# ─── Восстановление сессии (--resume) ──────────────────────────────────────────
+if [ "$RESUME" = true ] && [ -f "$WORK_DIR/opencode.json" ]; then
+    echo -e "${GREEN}✅ Сессия восстановлена: ${WORK_DIR}${NC}"
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  Запуск OpenCode (восстановление) в ${WORK_DIR}${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    cd "$WORK_DIR" && exec opencode
 fi
 
 # ─── Создание профиля ─────────────────────────────────────────────────────────
