@@ -214,6 +214,68 @@ MCC построен по четырёхуровневой модели HiveMind
 
 ---
 
+---
+
+## 7. Движок миссий — mission-control (форк DeepSeek-TUI)
+
+**Статус:** Проектирование. Фаза 1.
+**Дата:** 15.05.2026
+**Источник:** `docs/mission-1/`
+
+### Решение: создать форк DeepSeek-TUI как движок миссий
+
+DeepSeek-TUI (MIT-лицензия) взят за основу для создания собственного движка `mission-control`.
+
+**Что берём из TUI без изменений:**
+- RLM (Pro + Flash) — иерархическая система агентов
+- Durable Task Queue (RocksDB)
+- HTTP Runtime API
+- MCP Client (подключение внешних MCP-серверов)
+
+**Что перерабатываем:**
+- Типизированные агенты (DataCollectorAgent, AnalyzerAgent, PatternMatcherAgent, CoordinatorAgent) вместо универсальных Flash
+- Redis pub/sub как шина между агентами (JSON)
+- Memory Layer: ChromaDB (вектора) + LightRAG (граф) + Redis (состояние)
+- Mission Mode (автономная работа 24/7 без человека)
+- Адаптер-мост HTTP → Kafka для связи с центром 238
+
+**Skills-система:**
+- Внутренний формат: TOML (skill.toml) + INSTRUCTIONS.md
+- Конвертеры: TUI .skill.md → наш формат, OpenCode SKILL.md → наш формат
+- И наоборот: экспорт нашего скилла в TUI/OpenCode
+
+### Архитектура связи
+
+```
+МИССИЯ (TUI-форк)                    ЦЕНТР 238 (Kafka)
+┌─────────────────┐                  ┌──────────────────┐
+│  RLM Pro        │  HTTP bridge     │  Kafka broker    │
+│   ├─ Flash × N  │◄───────────────► │  (20+ топиков)   │
+│   ├─ Redis      │  findings/orders │  OpenCode агенты │
+│   ├─ ChromaDB   │                  │  MCP адаптеры    │
+│   └─ Ollama     │                  │  Global ChromaDB │
+└─────────────────┘                  └──────────────────┘
+```
+
+### Серверная инфраструктура
+
+| Узел | Сервер | Роль |
+|------|--------|------|
+| **Центр 238** | Hetzner AX52 (8 ядер, 32GB, 1TB) | Kafka, OpenCode, глоб. БД |
+| **Миссия 1** | Hetzner AX102 (12 ядер, 32GB, 1TB) | TUI-форк, RLM, Ollama, Redis, ChromaDB |
+
+### Документация
+
+Полное описание: `docs/mission-1/` (6 файлов):
+- `README.md` — обзор миссии
+- `tui-fork-plan.md` — план форка TUI
+- `architecture.md` — архитектура и потоки данных
+- `server-plan.md` — развёртывание сервера
+- `project-analysis.md` — сравнение аналогов, апгрейд 238
+- `team-workflow-example.md` — пример работы команды агентов
+
+---
+
 *MCC — нервный центр платформы WATERS. Без него миссия слепа.*
 *MCC is the nerve center of the WATERS platform. Without it, the mission is blind.*
 *MCC 是 WATERS 平台的神经中枢。没有它，任务就是盲目的。*
