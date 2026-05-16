@@ -28,6 +28,7 @@ pub async fn handle_slash(
     state_path: &PathBuf,
     kvstore: &Arc<KvStore>,
     reviewer: &crate::agent_rating::AgentReviewer,
+    group_chat: &crate::group_chat::GroupChat,
 ) -> Result<bool, anyhow::Error> {
     match slash_cmd {
         "help" | "h" => {
@@ -384,6 +385,51 @@ pub async fn handle_slash(
                 let task = parts[1..].join(" ");
                 match subagents.agent_assign(agent_id, &task, 0).await {
                     Ok(()) => println!("{}✅ Агент {} переназначен: {}{}", GREEN, agent_id, task, RESET),
+                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                }
+            }
+        }
+        "say" if !slash_arg.is_empty() => {
+            let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+            let group_id = parts[0].parse::<u8>().unwrap_or(0);
+            let text = if !slash_arg.contains(' ') { slash_arg.to_string() } else { parts[1..].join(" ") };
+            match group_chat.host_say(group_id, &text, None) {
+                Ok(_) => println!("{}💬 [g:{}] Вы: {}{}", GREEN, group_id, text, RESET),
+                Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+            }
+        }
+        "chat" if !slash_arg.is_empty() => {
+            let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+            let group_id = parts[0].parse::<u8>().unwrap_or(0);
+            let text = parts[1..].join(" ");
+            match group_chat.host_say(group_id, &text, None) {
+                Ok(_) => {
+                    println!("{}💬 [g:{}] Вы: {}{}", GREEN, group_id, text, RESET);
+                    let msgs = group_chat.read(group_id, 5, None).unwrap_or_default();
+                    println!("{}Последнее:{}", DIM, RESET);
+                    for m in msgs.iter().rev().take(3) {
+                        println!("  {}", m.display_short());
+                    }
+                }
+                Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+            }
+        }
+        "opinions" => {
+            let parts: Vec<&str> = slash_arg.splitn(2, ' ').collect();
+            let group_id = parts[0].parse::<u8>().unwrap_or(0);
+            let task_id = if parts.len() >= 2 { parts[1] } else { "" };
+            if task_id.is_empty() {
+                let msgs = group_chat.read(group_id, 10, None).unwrap_or_default();
+                println!("{}💬 Группа #{} ({}):{}", BOLD, group_id, msgs.len(), RESET);
+                for m in &msgs { println!("  {}", m.display_short()); }
+            } else {
+                match group_chat.get_opinions(group_id, task_id) {
+                    Ok(ops) => {
+                        println!("{}🧠 Задача #{} мнений: {}{}", BOLD, &task_id[..8.min(task_id.len())], ops.len(), RESET);
+                        for o in &ops {
+                            println!("  {} [{}] conf:{:.0}%: {}", o["role"].as_str().unwrap_or("?"), &o["agent"].as_str().unwrap_or("?")[..8.min(o["agent"].as_str().unwrap_or("?").len())], o["confidence"].as_f64().unwrap_or(0.0) * 100.0, o["opinion"].as_str().unwrap_or(""));
+                        }
+                    }
                     Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
                 }
             }

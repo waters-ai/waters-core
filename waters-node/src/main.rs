@@ -6,6 +6,7 @@ mod subagent;
 mod bridge_agent;
 mod agent_rating;
 mod media_bridge;
+mod group_chat;
 mod mcp;
 mod mcp_server;
 mod autonomy;
@@ -307,6 +308,7 @@ async fn main() -> Result<()> {
     let mut agent_mgr = agent::AgentManager::new();
     let mut subagents = subagent::SubAgentManager::new(kvstore.clone());
     let reviewer = agent_rating::AgentReviewer::new(kvstore.clone(), Arc::new(subagents.clone()));
+    let group_chat = group_chat::GroupChat::new(kvstore.clone());
     let start = std::time::Instant::now();
 
     let api_state = {
@@ -461,7 +463,7 @@ async fn main() -> Result<()> {
                 &mut subagents, &mut agent_mgr, &mut session_mgr,
                 &mut convo, &convo_path,
                 &mut task_mgr, &mut group_mgr, &mut node, &state_path,
-                &kvstore, &reviewer,
+                &kvstore, &reviewer, &group_chat,
             ).await?
         } else {
             handlers::handle_natural(

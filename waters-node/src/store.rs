@@ -244,6 +244,40 @@ impl KvStore {
         }
     }
 
+    pub fn xread_all(&self, stream: &str) -> Result<Vec<HashMap<String, String>>> {
+        if self.connected {
+            let mut conn = self.redis_client.as_ref().unwrap().get_connection()?;
+            let db = *self.current_db.lock().unwrap();
+            if db != 0 {
+                redis::cmd("SELECT").arg(db).query::<()>(&mut conn)?;
+            }
+            // XREAD from stream to get all entries
+            let result: Option<HashMap<String, Vec<(String, HashMap<String, String>)>>> =
+                redis::cmd("XREAD")
+                    .arg(&[stream, "0"])
+                    .query(&mut conn)
+                    .ok();
+            if let Some(map) = result {
+                if let Some(entries) = map.get(stream) {
+                    return Ok(entries.iter().map(|(_, fields)| fields.clone()).collect());
+                }
+            }
+            Ok(vec![])
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    pub fn xread_latest(&self, stream: &str, count: usize) -> Result<Vec<HashMap<String, String>>> {
+        let all = self.xread_all(stream)?;
+        let start = if all.len() > count {
+            all.len() - count
+        } else {
+            0
+        };
+        Ok(all[start..].to_vec())
+    }
+
     pub fn xlen(&self, stream: &str) -> Result<u64> {
         if self.connected {
             let mut conn = self.redis_client.as_ref().unwrap().get_connection()?;
