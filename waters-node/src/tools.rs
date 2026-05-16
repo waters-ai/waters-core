@@ -255,7 +255,6 @@ impl ToolRegistry {
         });
         reg
     }
-    }
 
     pub fn register(&mut self, tool: Tool) {
         info!("Tool registered: {}", tool.name);

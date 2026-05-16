@@ -1,6 +1,19 @@
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
+pub enum ConvoAction {
+    Exit,
+    Menu,
+    Help,
+    ListTasks,
+    ListAgents,
+    ListGroups,
+    ListPeers,
+    Report,
+    Setup,
+    Response(String),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfile {
     pub name: String,
@@ -52,29 +65,26 @@ impl Convo {
         "👋 Привет! Я waters-node.\n\nКак тебя зовут?"
     }
 
-    /// Возвращает строку ответа.
-    /// Если строка начинается с "CMD:", это команда для main.rs
-    pub fn handle(&mut self, input: &str) -> String {
+    pub fn handle(&mut self, input: &str) -> ConvoAction {
         let lower = input.to_lowercase().trim().to_string();
 
-        // Команды, которые обрабатывает main.rs
         if lower.contains("задачи") && (lower.contains("покажи") || lower.contains("список") || lower == "задачи") {
-            return "CMD:tasks".into();
+            return ConvoAction::ListTasks;
         }
         if lower.contains("агенты") && (lower.contains("покажи") || lower == "агенты" || lower == "мои агенты") {
-            return "CMD:agents".into();
+            return ConvoAction::ListAgents;
         }
         if lower.contains("группы") && (lower.contains("покажи") || lower == "группы" || lower == "мои группы") {
-            return "CMD:groups".into();
+            return ConvoAction::ListGroups;
         }
         if lower.contains("ноды") || lower.contains("подключен") || lower == "сеть" {
-            return "CMD:peers".into();
+            return ConvoAction::ListPeers;
         }
         if lower.contains("отчёт") || lower.contains("отчет") || lower.contains("статус") {
-            return "CMD:report".into();
+            return ConvoAction::Report;
         }
         if lower.contains("настрой") || lower.contains("конфиг") {
-            return "CMD:setup".into();
+            return ConvoAction::Setup;
         }
 
         match self.step {
@@ -83,23 +93,23 @@ impl Convo {
                 self.profile.name = name.clone();
                 self.profile.greeted = true;
                 self.step = 1;
-                format!("Приятно познакомиться, {0}! 🌊\n\nЧто хочешь сделать?\n• задачи\n• агенты\n• группы\n• отчёт\n• помощь", name)
+                ConvoAction::Response(format!("Приятно познакомиться, {0}! 🌊\n\nЧто хочешь сделать?\n• задачи\n• агенты\n• группы\n• отчёт\n• помощь", name))
             }
             5 => {
                 self.step = 10;
-                format!("С возвращением, {0}! 🌊\n• задачи\n• агенты\n• группы\n• помощь", self.profile.name)
+                ConvoAction::Response(format!("С возвращением, {0}! 🌊\n• задачи\n• агенты\n• группы\n• помощь", self.profile.name))
             }
             _ => {
                 if lower.contains("помощ") || lower == "help" || lower == "?" || lower == "меню" {
-                    format!("{0}, команды:\n  задачи — список задач\n  агенты — список агентов\n  группы — список групп\n  ноды — подключённые ноды\n  отчёт — сводка\n  настройки — конфигурация\n  помощь — это меню", self.profile.name)
+                    ConvoAction::Help
                 } else if lower.contains("привет") || lower.contains("здрав") || lower.contains("hello") {
-                    format!("Привет, {0}! Чем займёмся?", self.profile.name)
+                    ConvoAction::Response(format!("Привет, {0}! Чем займёмся?", self.profile.name))
                 } else if lower.contains("пока") || lower.contains("до свидан") {
-                    format!("Пока, {0}! напиши exit чтобы выключить", self.profile.name)
+                    ConvoAction::Response(format!("Пока, {0}! напиши exit чтобы выключить", self.profile.name))
                 } else if lower.contains("exit") || lower.contains("quit") || lower.contains("выход") {
-                    "CMD:exit".into()
+                    ConvoAction::Exit
                 } else {
-                    format!("Не понял, {0}. Попробуй: задачи | агенты | группы | отчёт", self.profile.name)
+                    ConvoAction::Response(format!("Не понял, {0}. Попробуй: задачи | агенты | группы | отчёт", self.profile.name))
                 }
             }
         }

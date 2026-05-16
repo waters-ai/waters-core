@@ -14,16 +14,6 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct RedisConfig {
-    #[serde(default = "default_redis_url")]
-    pub url: String,
-}
-
-fn default_redis_url() -> String {
-    "redis://127.0.0.1:6379".into()
-}
-
-#[derive(Debug, Clone, Deserialize)]
 pub struct NodeConfig {
     #[serde(default = "default_name")]
     pub name: String,
@@ -35,6 +25,12 @@ pub struct NodeConfig {
     pub session_dir: String,
     #[serde(default = "default_llm_provider")]
     pub llm_provider: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisConfig {
+    #[serde(default = "default_redis_url")]
+    pub url: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -67,6 +63,7 @@ pub struct KafkaTopics {
 fn default_name() -> String { "waters-node".into() }
 fn default_workspace() -> String { ".".into() }
 fn default_session_dir() -> String { ".waters/sessions".into() }
+fn default_redis_url() -> String { "redis://127.0.0.1:6379".into() }
 fn default_llm_provider() -> String { "ollama".into() }
 fn default_ollama_url() -> String { "http://127.0.0.1:11434".into() }
 fn default_ollama_model() -> String { "qwen2.5:14b".into() }
@@ -83,10 +80,12 @@ impl Config {
 
     pub fn default() -> Self {
         Config {
-            agent: AgentConfig {
-                id: "agent.constructor.v1".into(),
-                mission_id: "mission-1".into(),
-                llm_provider: "ollama".into(),
+            node: NodeConfig {
+                name: default_name(),
+                id: None,
+                workspace: default_workspace(),
+                session_dir: default_session_dir(),
+                llm_provider: default_llm_provider(),
             },
             kafka: None,
             redis: None,
@@ -95,6 +94,5 @@ impl Config {
                 model: default_ollama_model(),
             }),
         }
-    }
     }
 }

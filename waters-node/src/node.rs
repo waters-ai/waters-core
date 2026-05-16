@@ -16,6 +16,12 @@ pub struct NodeIdentity {
     pub findings: u64,
     pub kafka_connected: bool,
     pub autonomy_level: u8,
+    pub cargo_sent: u64,
+    pub cargo_received: u64,
+    pub cargo_pending: u64,
+    pub last_sync_seq: u64,
+    pub is_home_node: bool,
+    pub fixed_ip: bool,
 }
 
 pub struct Node {
@@ -39,6 +45,12 @@ impl Node {
                 findings: 0,
                 kafka_connected: false,
                 autonomy_level: 0,
+                cargo_sent: 0,
+                cargo_received: 0,
+                cargo_pending: 0,
+                last_sync_seq: 0,
+                is_home_node: false,
+                fixed_ip: false,
             },
             uptime_counter: AtomicU64::new(0),
         }
@@ -87,6 +99,12 @@ impl Node {
             "findings": self.identity.findings,
             "autonomy": self.identity.autonomy_level,
             "kafka": self.identity.kafka_connected,
+            "cargo_sent": self.identity.cargo_sent,
+            "cargo_received": self.identity.cargo_received,
+            "cargo_pending": self.identity.cargo_pending,
+            "last_sync_seq": self.identity.last_sync_seq,
+            "is_home_node": self.identity.is_home_node,
+            "fixed_ip": self.identity.fixed_ip,
             "timestamp": chrono::Utc::now().to_rfc3339(),
         })
     }

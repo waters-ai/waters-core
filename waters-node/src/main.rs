@@ -7,6 +7,7 @@ mod llm;
 mod mcp;
 mod autonomy;
 mod dtn;
+mod cargo;
 mod chat;
 mod api;
 mod channel;
@@ -26,10 +27,10 @@ mod kafka;
 
 use anyhow::Result;
 use clap::Parser;
+use convo::ConvoAction;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::info;
 
 #[derive(Parser, Debug)]
 #[command(name = "waters-node", version, about = "WATERS Node — distributed agent runtime")]
@@ -109,7 +110,7 @@ async fn main() -> Result<()> {
     println!();
 
     // Identity
-    let id_short = &node.id()[..8];
+    let id_short = node.id()[..8].to_string();
     println!("  {0}{1}Node{2}       {3}{4}{5}  {6}(name: {7}){8}",
         BOLD, RESET, DIM, CYAN, id_short, RESET, DIM, node.name(), RESET);
     println!("  {0}{1}Version{2}   {3}0.2.0{4}", BOLD, RESET, DIM, GREEN, RESET);
@@ -171,6 +172,9 @@ async fn main() -> Result<()> {
     // Agent Manager
     let mut agent_mgr = agent::AgentManager::new();
 
+    // SubAgent Manager
+    let mut subagents = subagent::SubAgentManager::new();
+
     // Autonomy
     let mut _autonomy = autonomy::AutonomyEngine::new();
     let start = std::time::Instant::now();
@@ -198,7 +202,7 @@ async fn main() -> Result<()> {
     agent_journal.log("system", "channels_ready", "4 system channels created");
 
     // Group Manager
-    let mut _group_mgr = group::GroupManager::new(node.id());
+    let mut group_mgr = group::GroupManager::new(node.id());
 
     // Gossip Engine
     let gossip = gossip::GossipEngine::new(node.id(), node.name(), api_port);
@@ -548,27 +552,26 @@ async fn main() -> Result<()> {
                     match ci.process(cmd).await {
                         Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
                         Err(e) => {
-                            // Fallback to Convo
-                            let response = convo.handle(cmd);
-                            if response == "exit" {
-                                println!("Shutting down...");
-                                session_mgr.save()?;
-                                convo.save(&convo_path);
-                                node.save_state(&state_path)?;
-                                break;
+                            match convo.handle(cmd) {
+                                ConvoAction::Exit => {
+                                    println!("Shutting down...");
+                                    session_mgr.save()?;
+                                    convo.save(&convo_path);
+                                    node.save_state(&state_path)?;
+                                    break;
+                                }
+                                ConvoAction::Response(text) => println!("{}", text),
+                                _ => {},
                             }
-                    println!("{}", response);
+                        }
+                    }
                 } else {
                     if let Some(reply) = handle_convo(&mut convo, &convo_path, cmd, &task_mgr, &agent_mgr, &group_mgr, &gossip, &skill_reg, &bridge_reg, &mut node, &state_path, &mut session_mgr).await {
                         println!("{}", reply);
                     } else { break; }
                 }
-                    } else {
-                        if let Some(reply) = handle_convo(&mut convo, &convo_path, cmd, &task_mgr, &agent_mgr, &group_mgr, &gossip, &skill_reg, &bridge_reg, &mut node, &state_path, &mut session_mgr).await {
-                            println!("{}", reply);
-                        } else { break; }
-                    }
-        }
+            }
+    }
     }
 
     println!("{}Node {} stopped. Goodbye!{}", DIM, node.name(), RESET);

@@ -364,7 +364,7 @@ impl GroupManager {
             let infos: HashMap<String, GroupInfo> = serde_json::from_str(&content)?;
             for (name, info) in infos {
                 let (tx, rx) = mpsc::channel(256);
-                self.groups.insert(name, Group { info, tx, rx });
+                self.groups.insert(name, Group { info, tx, rx, shared: false });
             }
             info!("Groups loaded from {}", path.display());
         }

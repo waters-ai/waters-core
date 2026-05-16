@@ -4,12 +4,30 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TaskMode {
+    Plan,
+    Execute,
+    Stop,
+}
+
+impl TaskMode {
+    pub fn parse(input: &str) -> Option<TaskMode> {
+        let lower = input.to_lowercase();
+        if lower.contains("план") || lower.contains("plan") { Some(TaskMode::Plan) }
+        else if lower.contains("выпол") || lower.contains("execute") || lower.contains("задач") { Some(TaskMode::Execute) }
+        else if lower.contains("стоп") || lower.contains("stop") { Some(TaskMode::Stop) }
+        else { None }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
     pub title: String,
     pub description: String,
     pub status: String,
+    pub mode: TaskMode,
     pub created_by: String,
     pub assigned_to: Option<String>,
     pub assigned_node: Option<String>,
@@ -38,6 +56,7 @@ impl TaskManager {
             title: title.to_string(),
             description: desc.to_string(),
             status: "open".into(),
+            mode: TaskMode::Plan,
             created_by: created_by.to_string(),
             assigned_to: None,
             assigned_node: None,
@@ -45,8 +64,21 @@ impl TaskManager {
             created_at: chrono::Utc::now().to_rfc3339(),
         };
         self.tasks.lock().await.insert(id, task.clone());
-        info!("Task created: {} — {}", task.id, task.title);
+        info!("Task created: {} — {} [mode: Plan]", task.id, task.title);
         task
+    }
+
+    pub async fn set_mode(&self, task_id: &str, mode: TaskMode) -> Option<Task> {
+        let mut tasks = self.tasks.lock().await;
+        if let Some(task) = tasks.get_mut(task_id) {
+            let old = task.mode;
+            task.mode = mode;
+            let new = task.mode;
+            info!("Task {} mode: {:?} → {:?}", task_id, old, new);
+            Some(task.clone())
+        } else {
+            None
+        }
     }
 
     pub async fn assign(&self, task_id: &str, agent_name: &str, agent_node: &str) -> Option<Task> {
