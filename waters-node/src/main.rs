@@ -156,13 +156,26 @@ async fn main() -> Result<()> {
         if !bcfg.enabled { continue; }
         match bcfg.provider.as_str() {
             "llm" => {
+                let system_prompt = bcfg.config.get("system_prompt").cloned().unwrap_or_default();
+                let lang_primary = bcfg.config.get("lang").map(|s| s.as_str()).unwrap_or("ru").to_string();
+                let lang_extra = bcfg.config.get("lang_extra").map(|s| s.as_str()).unwrap_or("").to_string();
+                let lang = bridge::AssistantLang {
+                    primary: lang_primary,
+                    extra: if lang_extra.is_empty() { None } else { Some(lang_extra) },
+                };
+                let final_prompt = if system_prompt.is_empty() {
+                    bridge::assistant_system_prompt(&lang)
+                } else {
+                    system_prompt
+                };
                 let llm_cfg = bridge::SingleLlmConfig {
                     name: bcfg.name.clone(),
                     provider: bcfg.config.get("provider").cloned().unwrap_or_default(),
                     model: bcfg.config.get("model").cloned().unwrap_or_default(),
                     url: bcfg.config.get("url").cloned().unwrap_or_default(),
                     api_key: bcfg.config.get("api_key").cloned().unwrap_or_default(),
-                    system_prompt: bcfg.config.get("system_prompt").cloned().unwrap_or_default(),
+                    system_prompt: final_prompt,
+                    lang,
                     enabled: true,
                 };
                 if llm_cfg.is_available() {
@@ -186,22 +199,35 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Parse MCP servers and register each tool as a bridge
+    // Parse MCP servers, discover tools, register as bridges
     let mcp_client = Arc::new(std::sync::Mutex::new(mcp::McpClient::new()));
+    // Phase 1: register all MCP servers
     for mcp_cfg in &bridges_file.mcp_servers {
-        {
-            let mut client = mcp_client.lock().unwrap();
-            client.register(&mcp_cfg.name, "stdio", &mcp_cfg.command, &mcp_cfg.args);
-        }
-        let weight = if mcp_cfg.weight == "heavy" { bridge::BridgeWeight::Heavy } else { bridge::BridgeWeight::Light };
-        for tool in &mcp_cfg.tools {
-            let bridge_name = format!("{}-{}", mcp_cfg.name, tool);
+        let mut client = mcp_client.lock().unwrap();
+        client.register(&mcp_cfg.name, "stdio", &mcp_cfg.command, &mcp_cfg.args);
+    }
+    // Phase 2: tool discovery (auto-detect tools from each server)
+    {
+        let mut client = mcp_client.lock().unwrap();
+        let discovered = client.tool_discovery();
+        for tool in &discovered {
+            let weight = bridges_file.mcp_servers.iter()
+                .find(|s| s.name == tool.server_name)
+                .map(|s| if s.weight == "heavy" { bridge::BridgeWeight::Heavy } else { bridge::BridgeWeight::Light })
+                .unwrap_or(bridge::BridgeWeight::Light);
+            let priority = bridges_file.mcp_servers.iter()
+                .find(|s| s.name == tool.server_name)
+                .map(|s| s.priority).unwrap_or(3);
+            let bandwidth = bridges_file.mcp_servers.iter()
+                .find(|s| s.name == tool.server_name)
+                .map(|s| s.bandwidth_kbps).unwrap_or(100);
+            let bridge_name = format!("{}-{}", tool.server_name, tool.tool_name);
             bridge_pool.register(&bridge_name,
-                Box::new(bridge::McpBridge::new(&bridge_name, &mcp_cfg.name, tool, mcp_client.clone())),
-                bridge::BridgeInfo::new(&bridge_name, weight, mcp_cfg.priority, mcp_cfg.bandwidth_kbps));
+                Box::new(bridge::McpBridge::new(&bridge_name, &tool.server_name, &tool.tool_name, mcp_client.clone())),
+                bridge::BridgeInfo::new(&bridge_name, weight, priority, bandwidth));
+            info!("MCP bridge: {} ({})", bridge_name, tool.description.as_deref().unwrap_or("no desc"));
         }
-        info!("MCP server registered: {} ({} tools, {} Kbps, priority {})",
-            mcp_cfg.name, mcp_cfg.tools.len(), mcp_cfg.bandwidth_kbps, mcp_cfg.priority);
+        info!("MCP: {} tools discovered from {} servers", discovered.len(), bridges_file.mcp_servers.len());
     }
 
     // Register builtin search bridges

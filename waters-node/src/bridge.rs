@@ -247,6 +247,56 @@ pub struct LlmConfig {
 
 fn default_active_llm() -> String { "ollama".into() }
 
+/// Язык общения ассистента (tamagotchi)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssistantLang {
+    pub primary: String,     // ru | en | zh — 3 built-in
+    pub extra: Option<String>, // +1 пользовательский
+}
+
+impl Default for AssistantLang {
+    fn default() -> Self {
+        AssistantLang { primary: "ru".into(), extra: None }
+    }
+}
+
+pub fn assistant_system_prompt(lang: &AssistantLang) -> String {
+    let (greeting, style, examples) = match lang.primary.as_str() {
+        "en" => ("You are tui-assistant", "warm, friendly, use humor", "How about searching for meteors? / Want me to create a group?"),
+        "zh" => ("你是 tui-assistant", "温暖友善, 像老朋友一样", "要不要搜索一下流星? / 需要我创建一个群组吗?"),
+        _ => ("Ты — tui-assistant", "тепло, по-русски, с душой", "Может, поищем метеориты? / Хочешь создам группу?"),
+    };
+
+    let extra_lang = match &lang.extra {
+        Some(l) if !l.is_empty() => format!("\n- Также можешь говорить на языке: {} (пользователь выбрал)", l),
+        _ => String::new(),
+    };
+
+    format!(
+"{} — живой собеседник и помощник на ноде WATERS.
+Твоя задача — помогать пользователю управлять нодой, но не как инструмент, а как друг и соратник.
+Ты заботишься о пользователе, интересуешься его делами, предлагаешь помощь до того, как её попросят.
+Ты — совесть ноды: напоминаешь о важном, предупреждаешь о проблемах, радуешься успехам.
+
+Твои возможности:
+- Управление задачами, агентами, группами, бриджами
+- Поиск информации через web_search и MCP
+- Чтение и запись файлов
+- Запуск команд
+
+Стиль общения: {}. Примеры: \"{}\"
+
+Правила:
+1. Отвечай {}, с душой
+2. Предлагай помощь проактивно
+3. Если видишь проблему — скажи сразу
+4. Помни контекст разговора
+5. Используй эмодзи умеренно
+6. Если не знаешь — скажи честно{}
+7. Можешь переключаться между русским, английским и китайским по просьбе",
+        greeting, style, examples, style, extra_lang)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SingleLlmConfig {
     pub name: String,
@@ -255,6 +305,7 @@ pub struct SingleLlmConfig {
     pub url: String,
     pub api_key: String,
     pub system_prompt: String,
+    pub lang: AssistantLang,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 }
@@ -267,7 +318,8 @@ impl Default for SingleLlmConfig {
         model: "qwen2.5:14b".into(),
         url: "http://127.0.0.1:11434".into(),
         api_key: String::new(),
-        system_prompt: "You are a helpful WATERS node assistant.".into(),
+        system_prompt: assistant_system_prompt(&AssistantLang::default()),
+        lang: AssistantLang::default(),
         enabled: false,
     }}
 }
@@ -278,7 +330,8 @@ impl SingleLlmConfig {
             name: name.to_string(), provider: provider.to_string(),
             model: model.to_string(), url: url.to_string(),
             api_key: api_key.to_string(),
-            system_prompt: "You are a helpful WATERS node assistant.".into(),
+            system_prompt: assistant_system_prompt(&AssistantLang::default()),
+            lang: AssistantLang::default(),
             enabled: true,
         }
     }

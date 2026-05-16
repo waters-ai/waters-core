@@ -44,6 +44,9 @@ pub async fn handle_slash(
             println!("  /task done <id> — complete task");
             println!("  /llm         — list available LLM providers");
             println!("  /llm set <name> — switch active LLM");
+            println!("  /lang         — show current language");
+            println!("  /lang set ru|en|zh — switch assistant language");
+            println!("  /lang extra <code> — set extra language (e.g. ja, de, fr)");
             println!("  /group        — /group create/list/invite");
             println!("  /group create <name> — create group");
             println!("  /group invite <name> <node> — invite node to group");
@@ -327,6 +330,57 @@ pub async fn handle_slash(
                     agent_journal.log("system", "peer_approved", &peer.node_name);
                 } else {
                     println!("Invalid index.");
+                }
+            }
+        }
+        "lang" => {
+            if slash_arg.is_empty() {
+                println!("{}Language settings:{}", BOLD, RESET);
+                for name in bridge_pool.list() {
+                    if name.starts_with("llm-") {
+                        if let Some(info) = bridge_pool.info.get(&name) {
+                            let prompt = info.reason.as_str();
+                            let lang_hint = if prompt.contains("по-русски") { "ru" }
+                                else if prompt.contains("warm, friendly") { "en" }
+                                else if prompt.contains("温暖") { "zh" }
+                                else { "?" };
+                            println!("  {}: {} (/lang set {})", name, lang_hint, lang_hint);
+                        }
+                    }
+                }
+                println!("Usage: /lang set ru|en|zh | /lang extra ja|de|fr|...");
+            } else {
+                let parts: Vec<&str> = slash_arg.splitn(2, ' ').collect();
+                if parts.len() >= 2 && parts[0] == "set" {
+                    let lang_code = parts[1];
+                    let lang = crate::bridge::AssistantLang {
+                        primary: lang_code.to_string(),
+                        extra: None,
+                    };
+                    let prompt = crate::bridge::assistant_system_prompt(&lang);
+                    for name in bridge_pool.list() {
+                        if name.starts_with("llm-") {
+                            if let Some(info) = bridge_pool.info.get_mut(&name) {
+                                info.reason = prompt.clone();
+                            }
+                        }
+                    }
+                    println!("{}✓{} Language set to {} for all LLM bridges", GREEN, RESET, lang_code);
+                } else if parts.len() >= 2 && parts[0] == "extra" {
+                    let extra = parts[1];
+                    let lang = crate::bridge::AssistantLang {
+                        primary: "ru".into(),
+                        extra: Some(extra.to_string()),
+                    };
+                    let prompt = crate::bridge::assistant_system_prompt(&lang);
+                    for name in bridge_pool.list() {
+                        if name.starts_with("llm-") {
+                            if let Some(info) = bridge_pool.info.get_mut(&name) {
+                                info.reason = prompt.clone();
+                            }
+                        }
+                    }
+                    println!("{}✓{} Extra language set to {}", GREEN, RESET, extra);
                 }
             }
         }
