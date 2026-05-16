@@ -98,14 +98,9 @@ pub async fn handle_slash(
             println!("{}✓{} Connected to {}", GREEN, RESET, slash_arg);
         }
         "chat" if !slash_arg.is_empty() => {
-            session_mgr.add_message("user", slash_arg);
-            match bridge_pool.call("llm-ollama", slash_arg)
-                .or_else(|_| bridge_pool.call("llm-deepseek", slash_arg))
-            {
-                Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
-                Err(_) => {
-                    convo.handle(slash_arg);
-                }
+            match crate::tui_agent::assistant_chat(bridge_pool, slash_arg, session_mgr) {
+                Ok(r) => println!("{}", r),
+                Err(_) => { convo.handle(slash_arg); }
             }
         }
         "sessions" | "resume" => {
@@ -240,21 +235,15 @@ pub async fn handle_natural(
         }
         _ if cmd.to_lowercase().starts_with("chat ") => {
             let text = cmd[5..].trim();
-            session_mgr.add_message("user", text);
-            match bridge_pool.call("llm-ollama", text)
-                .or_else(|_| bridge_pool.call("llm-deepseek", text))
-            {
-                Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
+            match crate::tui_agent::assistant_chat(bridge_pool, text, session_mgr) {
+                Ok(r) => println!("{}", r),
                 Err(_) => demo_response(text),
             }
         }
         _ => {
             let text = cmd;
-            session_mgr.add_message("user", text);
-            match bridge_pool.call("llm-ollama", text)
-                .or_else(|_| bridge_pool.call("llm-deepseek", text))
-            {
-                Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
+            match crate::tui_agent::assistant_chat(bridge_pool, text, session_mgr) {
+                Ok(r) => println!("{}", r),
                 Err(_) => {
                     match convo.handle(cmd) {
                         ConvoAction::Exit => {

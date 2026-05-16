@@ -1,5 +1,9 @@
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
+use anyhow::Result;
 
+use crate::bridge::{BridgePool, BridgeProvider};
 use crate::cargo::OnboardLlm;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,14 +79,45 @@ pub fn convert_tui_to_node(tui_name: &str, description: &str, bridges: &[String]
     (agent, node_agent)
 }
 
+/// Ассистент переключается на внешний LLM ноды, если канал есть.
+/// Если внешнего LLM нет — использует свою бортовую (tiny 0.5B).
+pub fn assistant_chat(bridge_pool: &BridgePool, input: &str, session_mgr: &mut crate::session::SessionManager) -> Result<String> {
+    session_mgr.add_message("user", input);
+
+    // Try external LLM bridges first
+    for name in bridge_pool.list() {
+        if name.starts_with("llm-") {
+            match bridge_pool.call(&name, input) {
+                Ok(r) => {
+                    session_mgr.add_message("assistant", &r);
+                    return Ok(r);
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+
+    // Fallback: use assistant's onboard via chat bridge
+    if let Some(bridge) = bridge_pool.get("chat") {
+        let reply = bridge.call(input).unwrap_or_else(|_| {
+            "I'm here to help! Try: задачи, агенты, группы, help".into()
+        });
+        session_mgr.add_message("assistant", &reply);
+        return Ok(reply);
+    }
+
+    session_mgr.add_message("assistant", "Assistant ready.");
+    Ok("Assistant ready.".into())
+}
+
 /// 6 агентов (1 ассистент + 5 специалистов), каждый со своим бортовым LLM
 pub fn builtin_tui_agents() -> Vec<TuiAgent> {
     vec![
         TuiAgent::new(
             "assistant",
-            "Node setup assistant — conversational, helps manage tasks, agents, groups, bridges, settings",
+            "Node setup assistant — conversational, helps manage tasks, agents, groups, bridges, settings. Switches to node LLM when available.",
             &["chat".into()],
-            Some(OnboardLlm { model: "qwen2.5:1.5b".into(), quant: "Q4_K_M".into(), ctx_size: 4096, size_mb: 980 }),
+            Some(OnboardLlm { model: "qwen2.5:0.5b".into(), quant: "Q4_K_M".into(), ctx_size: 2048, size_mb: 350 }),
         ),
         TuiAgent::new(
             "scout-us",
