@@ -368,7 +368,7 @@ async fn main() -> Result<()> {
                 &gossip, &channel_mgr, &api_state, &agent_journal,
                 &mut subagents, &mut agent_mgr, &mut session_mgr,
                 &mut convo, &convo_path,
-                &task_mgr, &mut group_mgr, &mut node, &state_path,
+                &mut task_mgr, &mut group_mgr, &mut node, &state_path,
             ).await?
         } else {
             handlers::handle_natural(

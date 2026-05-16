@@ -21,7 +21,7 @@ pub async fn handle_slash(
     session_mgr: &mut crate::session::SessionManager,
     convo: &mut crate::convo::Convo,
     convo_path: &PathBuf,
-    task_mgr: &crate::task::TaskManager,
+    task_mgr: &mut crate::task::TaskManager,
     group_mgr: &mut crate::group::GroupManager,
     node: &mut crate::node::Node,
     state_path: &PathBuf,
@@ -36,6 +36,12 @@ pub async fn handle_slash(
             println!("  /priorities set <name> <1-5> — set priority");
             println!("  /priorities lock <name> — lock bridge (never offloaded)");
             println!("  /priorities unlock <name> — unlock bridge");
+            println!("  /task         — /task create/assign/list/bind/done");
+            println!("  /task create <title> <desc> [group] — create task");
+            println!("  /task assign <id> <agent> — assign agent to task");
+            println!("  /task list [group] — list tasks");
+            println!("  /task bind <id> bridge|db|mcp <name> — bind resource");
+            println!("  /task done <id> — complete task");
             println!("  /group        — /group create/list/invite");
             println!("  /group create <name> — create group");
             println!("  /group invite <name> <node> — invite node to group");
@@ -142,6 +148,52 @@ pub async fn handle_slash(
             } else {
                 println!("Usage: /agent create <name> <skill> <node_id>");
             }
+        }
+        "task" => {
+            let parts: Vec<&str> = slash_arg.splitn(4, ' ').collect();
+            if parts.len() >= 3 && parts[0] == "create" {
+                let title = parts[1];
+                let desc = parts[2];
+                let group = if parts.len() >= 4 { Some(parts[3]) } else { None };
+                let t = task_mgr.create(title, desc, node.name(), group).await;
+                println!("{}✓{} Task '{}' created (group: {})", GREEN, RESET, t.id, group.unwrap_or("none"));
+                agent_journal.log("system", "task_created", &t.id);
+            } else if parts.len() >= 3 && parts[0] == "assign" {
+                let task_id = parts[1];
+                let agent = parts[2];
+                let node_id = if parts.len() >= 4 { parts[3] } else { "local" };
+                match task_mgr.assign_agent(task_id, agent, node_id, "executor").await {
+                    Some(t) => println!("{}✓{} Task {} assigned to {} @{}", GREEN, RESET, t.id, agent, node_id),
+                    None => println!("Task '{}' not found.", task_id),
+                }
+            } else if parts.len() >= 2 && parts[0] == "list" {
+                let filter = if parts.len() >= 3 { Some(parts[2]) } else { None };
+                let tasks = if let Some(g) = filter { task_mgr.list_by_group(g).await } else { task_mgr.list().await };
+                if tasks.is_empty() { println!("No tasks."); }
+                else {
+                    println!("{}Tasks ({}):{}", BOLD, tasks.len(), RESET);
+                    for t in &tasks {
+                        println!("  [{}] {} — {} [mode:{:?}] (group: {})",
+                            t.id, t.title, t.status, t.mode, t.group.as_deref().unwrap_or("-"));
+                        for e in &t.executors {
+                            println!("    → {} @{} ({})", e.agent_id, e.node_id, e.role);
+                        }
+                    }
+                }
+            } else if parts.len() >= 3 && parts[0] == "bind" {
+                let task_id = parts[1];
+                let res_type = parts[2]; // "bridge", "db", "mcp"
+                let name = if parts.len() >= 4 { parts[3] } else { "" };
+                match task_mgr.bind_resource(task_id, res_type, name).await {
+                    Some(t) => println!("{}✓{} {} bound to task {} {}", GREEN, RESET, res_type, t.id, name),
+                    None => println!("Task '{}' not found.", task_id),
+                }
+            } else if parts.len() >= 2 && parts[0] == "done" {
+                match task_mgr.complete(parts[1]).await {
+                    Some(t) => println!("{}✓{} Task '{}' completed", GREEN, RESET, t.id),
+                    None => println!("Task '{}' not found.", parts[1]),
+                }
+            } else { println!("Usage: /task create <title> <desc> [group] | assign <id> <agent> | list [group] | bind <id> <type> <name> | done <id>"); }
         }
         "group" => {
             let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
