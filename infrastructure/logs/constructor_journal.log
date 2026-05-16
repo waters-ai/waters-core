@@ -833,6 +833,13 @@
          - dist/waters-node-v0.3.0-windows-x64.zip (4.7MB)
          - waters-node/README.md — обновлён
 [2026-05-16T07:10:00Z] [NEXT]  Git commit + push → опубликовать на kapelka.h2o-mining.space
+[2026-05-16T07:20:00Z] [GIT]   commit 91117ad → origin/main ✅
+[2026-05-16T07:20:00Z] [DONE]  waters-node v0.3.0 собран, упакован, запушен
+         - Linux: 7.2MB stripped, tar.gz 2.9MB
+         - Windows: 13MB PE32+, zip 4.7MB
+         - Cargo.toml, task modes (Plan/Execute/Stop), agent cargo (OnboardLlm)
+         - dist/ в репозитории: dist/linux/ + dist/windows/
+         - README.md с инструкцией по развёртыванию
 [2026-05-16T06:30:00Z] [STATE] Проект: waters-node, переход к сборке
 [2026-05-16T06:30:00Z] [PLAN]  План:
           1. Создать Cargo.toml для waters-node (отсутствует в репозитории)
