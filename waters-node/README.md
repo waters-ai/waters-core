@@ -1,7 +1,20 @@
-# 🌊 waters-node v0.3.0
+# 🌊 WATERS Node v0.4
 
-**Один бинарник — сеть интеллекта.**  
-P2P-рой агентов. Каждая нода = свой LLM. Чат как интерфейс.
+**Агентский интернет.** P2P-рой агентов с Redis, голосовым управлением, медиа-мостами.
+
+```bash
+# Быстрый старт:
+wget https://github.com/waters-ai/waters-core/releases/download/v0.4/waters-node-v0.4.tar.gz
+tar xzf waters-node-v0.4.tar.gz
+cd waters-node-v0.4
+export DEEPSEEK_API_KEY=sk-xxxx
+./bin/waters-node --port 42069
+# → http://localhost:42069
+```
+
+**Возможности:** 25+ агентов, Redis, P2P, голос 🎤, MCP, импорт TUI/Claude/Cursor, слияние агентов, медиа-мосты NDI/OBS/HDMI, рейтинг, YASA-досмотр, групповой чат.
+
+**Установка:** [INSTALL.md](INSTALL.md)
 
 ## Быстрый старт
 
