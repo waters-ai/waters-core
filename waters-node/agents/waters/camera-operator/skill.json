@@ -1,0 +1,12 @@
+{
+  "name": "waters-camera-operator",
+  "version": "1.0.0",
+  "description": "Управление камерами: фото, видео, стриминг. Поддерживает: веб-камеры, DSLR, PTZ, NDI, HDMI-захват. Управляет настройками: ISO, диафрагма, выдержка, фокус. Работает с NDI-выходом, RTMP-стримами, OBS-сценами.",
+  "category": "agents/waters",
+  "role": "camera-operator",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["mcp-camera", "mcp-ndi", "mcp-obs", "mcp-gphoto"],
+  "tools": ["read_file", "write_file", "fetch_url", "exec_shell"],
+  "output_types": ["image", "video", "stream", "frame", "timelapse"],
+  "imported_from": null
+}
