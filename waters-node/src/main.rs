@@ -93,7 +93,17 @@ async fn main() -> Result<()> {
 
     // Init BridgePool from bridges.json
     let bridges_file = bridge::BridgePool::load_config(&args.bridges);
-    let mut bridge_pool = bridge::BridgePool::new();
+    // Initialize KvStore (Redis or in-memory) — must be early for LLM cache
+    let kvstore = {
+        let redis_url = std::env::var("REDIS_URL").ok();
+        std::sync::Arc::new(store::KvStore::new(redis_url.as_deref()))
+    };
+    let kvstore_ref: Option<std::sync::Arc<crate::store::KvStore>> = Some(kvstore.clone());
+    if kvstore.is_connected() {
+        println!("  {}KvStore{}   ✅ Redis connected", BOLD, RESET);
+    }
+
+    let mut bridge_pool = bridge::BridgePool::with_kvstore(kvstore.clone());
 
     // Load link profiles for DTN bandwidth management
     for link in &bridges_file.links {
@@ -101,9 +111,8 @@ async fn main() -> Result<()> {
         info!("Link profile loaded: {} ({} Kbps)", link.name, link.max_bandwidth_kbps);
     }
 
-    // Register LLM bridges (3 built-in + 1 custom)
+    // Register LLM bridges (3 built-in + 1 custom) with KvStore cache
     let mut registered_llm = Vec::new();
-    // Built-in providers
     let builtin_configs = vec![
         bridge::SingleLlmConfig::new("deepseek", "deepseek", "deepseek-chat",
             "https://api.deepseek.com", &std::env::var("DEEPSEEK_API_KEY").unwrap_or_default()),
@@ -114,7 +123,7 @@ async fn main() -> Result<()> {
     ];
     for cfg in builtin_configs {
         if cfg.is_available() {
-            let bridge = bridge::LlmBridge::new(&cfg);
+            let bridge = bridge::LlmBridge::new(&cfg, kvstore_ref.clone());
             let name = bridge.name().to_string();
             bridge_pool.register(&name, Box::new(bridge),
                 bridge::BridgeInfo::new(&name, bridge::BridgeWeight::Heavy, 1, 50));
@@ -124,7 +133,7 @@ async fn main() -> Result<()> {
     // Custom provider from bridges.json
     let custom = &bridges_file.llm.custom;
     if custom.enabled && !custom.name.is_empty() && custom.is_available() {
-        let bridge = bridge::LlmBridge::new(custom);
+        let bridge = bridge::LlmBridge::new(custom, kvstore_ref.clone());
         let name = bridge.name().to_string();
         bridge_pool.register(&name, Box::new(bridge),
             bridge::BridgeInfo::new(&name, bridge::BridgeWeight::Heavy, 1, 50));
@@ -179,7 +188,7 @@ async fn main() -> Result<()> {
                     enabled: true,
                 };
                 if llm_cfg.is_available() {
-                    let bridge = bridge::LlmBridge::new(&llm_cfg);
+                    let bridge = bridge::LlmBridge::new(&llm_cfg, kvstore_ref.clone());
                     let name = bridge.name().to_string();
                     bridge_pool.register(&name, Box::new(bridge),
                         bridge::BridgeInfo::new(&bcfg.name, bridge::BridgeWeight::Heavy, 2, 50));

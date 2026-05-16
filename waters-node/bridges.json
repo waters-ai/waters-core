@@ -42,7 +42,35 @@
     "token": ""
   },
   "voice": null,
-  "mcp_servers": [],
+  "mcp_servers": [
+    {
+      "name": "mcp-db-duckdb",
+      "command": "python3",
+      "args": ["mcp-db-duckdb/server.py"],
+      "env": {"DUCKDB_PATH": "/data/mission.duckdb"},
+      "weight": "light",
+      "bandwidth_kbps": 50,
+      "priority": 2
+    },
+    {
+      "name": "mcp-obsidian",
+      "command": "python3",
+      "args": ["mcp-servers/obsidian_vault/server.py"],
+      "env": {"VAULT_PATH": "/home/user/obsidian"},
+      "weight": "light",
+      "bandwidth_kbps": 30,
+      "priority": 2
+    },
+    {
+      "name": "mcp-notebooklm",
+      "command": "python3",
+      "args": ["mcp-servers/notebooklm/server.py"],
+      "env": {"COOKIE": ""},
+      "weight": "light",
+      "bandwidth_kbps": 20,
+      "priority": 3
+    }
+  ],
   "links": [],
   "bridges": []
 }

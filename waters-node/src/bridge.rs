@@ -364,11 +364,16 @@ pub struct BridgePool {
     pub bridges: HashMap<String, Box<dyn BridgeProvider>>,
     pub info: HashMap<String, BridgeInfo>,
     pub governor: LinkGovernor,
+    pub kvstore: Option<std::sync::Arc<crate::store::KvStore>>,
 }
 
 impl BridgePool {
     pub fn new() -> Self {
-        BridgePool { bridges: HashMap::new(), info: HashMap::new(), governor: LinkGovernor::new() }
+        BridgePool { bridges: HashMap::new(), info: HashMap::new(), governor: LinkGovernor::new(), kvstore: None }
+    }
+
+    pub fn with_kvstore(kvstore: std::sync::Arc<crate::store::KvStore>) -> Self {
+        BridgePool { bridges: HashMap::new(), info: HashMap::new(), governor: LinkGovernor::new(), kvstore: Some(kvstore) }
     }
 
     pub fn register(&mut self, name: &str, bridge: Box<dyn BridgeProvider>, meta: BridgeInfo) {
@@ -378,15 +383,28 @@ impl BridgePool {
     }
 
     pub fn call(&self, name: &str, input: &str) -> Result<String> {
-        // Check if bridge is disabled by governor
         if let Some(m) = self.info.get(name) {
             if !m.enabled {
                 return Err(anyhow::anyhow!("Bridge '{}' is disabled: {}", name, m.reason));
             }
         }
-        self.bridges.get(name)
+        // Check KvStore cache for non-LLM bridges too
+        let cache_key = format!("bridge:{}:{}:{}", name, input.len(), &input[..input.len().min(20)].replace(' ', "_"));
+        if let Some(ref kv) = self.kvstore {
+            if let Ok(Some(cached)) = kv.get(&cache_key) {
+                info!("Bridge cache HIT: {}", name);
+                return Ok(cached);
+            }
+        }
+        let result = self.bridges.get(name)
             .ok_or_else(|| anyhow::anyhow!("Bridge '{}' not found", name))
-            .and_then(|b| b.call(input))
+            .and_then(|b| b.call(input));
+        if let Ok(ref text) = result {
+            if let Some(ref kv) = self.kvstore {
+                kv.set(&cache_key, text, 30).ok();
+            }
+        }
+        result
     }
 
     pub fn get(&self, name: &str) -> Option<&Box<dyn BridgeProvider>> {
@@ -445,7 +463,12 @@ impl BridgePool {
 /// ---------- LLM Bridge ----------
 
 #[derive(Debug)]
-pub struct LlmBridge { name: String, provider: LlmProvider, system_prompt: String }
+pub struct LlmBridge {
+    name: String,
+    provider: LlmProvider,
+    system_prompt: String,
+    kvstore: Option<std::sync::Arc<crate::store::KvStore>>,
+}
 #[derive(Debug)]
 enum LlmProvider {
     DeepSeek { api_key: String, model: String },
@@ -456,22 +479,39 @@ enum LlmProvider {
 impl LlmBridge {
     pub fn name(&self) -> &str { &self.name }
 
-    pub fn new(cfg: &SingleLlmConfig) -> Self {
+    pub fn new(cfg: &SingleLlmConfig, kvstore: Option<std::sync::Arc<crate::store::KvStore>>) -> Self {
         let name = format!("llm-{}", cfg.name);
         let provider = match cfg.provider.as_str() {
             "deepseek" => LlmProvider::DeepSeek { api_key: cfg.api_key.clone(), model: cfg.model.clone() },
             "openai" => LlmProvider::OpenAI { url: cfg.url.clone(), model: cfg.model.clone(), api_key: cfg.api_key.clone() },
             _ => LlmProvider::Ollama { url: cfg.url.clone(), model: cfg.model.clone() },
         };
-        LlmBridge { name, provider, system_prompt: cfg.system_prompt.clone() }
+        LlmBridge { name, provider, system_prompt: cfg.system_prompt.clone(), kvstore }
+    }
+}
+
+impl LlmBridge {
+    fn cache_key(&self, input: &str) -> String {
+        let prefix = &input[..input.len().min(20)];
+        format!("llm:{}:{}:{}", self.name, input.len(), prefix.replace(' ', "_"))
     }
 }
 
 impl BridgeProvider for LlmBridge {
     fn name(&self) -> &str { &self.name }
     fn call(&self, input: &str) -> Result<String> {
+        let cache_key = self.cache_key(input);
+        if let Some(ref kv) = self.kvstore {
+            if let Ok(Some(cached)) = kv.get(&cache_key) {
+                if !cached.is_empty() {
+                    info!("LLM cache HIT: {} ({} chars)", self.name, cached.len());
+                    return Ok(cached);
+                }
+            }
+        }
+
         let client = reqwest::blocking::Client::new();
-        match &self.provider {
+        let text = match &self.provider {
             LlmProvider::DeepSeek { api_key, model } => {
                 let body = serde_json::json!({"model": model, "messages": [
                     {"role": "system", "content": &self.system_prompt},
@@ -479,12 +519,12 @@ impl BridgeProvider for LlmBridge {
                 ], "stream": false});
                 let resp = client.post("https://api.deepseek.com/beta/chat/completions")
                     .header("Authorization", format!("Bearer {}", api_key)).json(&body).send()?;
-                Ok(resp.json::<serde_json::Value>()?["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string())
+                resp.json::<serde_json::Value>()?["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string()
             }
             LlmProvider::Ollama { url, model } => {
                 let body = serde_json::json!({"model": model, "system": &self.system_prompt, "prompt": input, "stream": false});
                 let resp = client.post(format!("{}/api/generate", url)).json(&body).send()?;
-                Ok(resp.json::<serde_json::Value>()?["response"].as_str().unwrap_or("").to_string())
+                resp.json::<serde_json::Value>()?["response"].as_str().unwrap_or("").to_string()
             }
             LlmProvider::OpenAI { url, model, api_key } => {
                 let body = serde_json::json!({"model": model, "messages": [
@@ -494,9 +534,17 @@ impl BridgeProvider for LlmBridge {
                 let mut req = client.post(format!("{}/v1/chat/completions", url));
                 if !api_key.is_empty() { req = req.header("Authorization", format!("Bearer {}", api_key)); }
                 let resp = req.json(&body).send()?;
-                Ok(resp.json::<serde_json::Value>()?["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string())
+                resp.json::<serde_json::Value>()?["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string()
             }
+        };
+
+        // Save to cache
+        if let Some(ref kv) = self.kvstore {
+            kv.set(&cache_key, &text, 60).ok();
+            info!("LLM cache MISS: saved {} chars under key {}", text.len(), cache_key);
         }
+
+        Ok(text)
     }
 }
 
