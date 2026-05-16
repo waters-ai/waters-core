@@ -73,7 +73,7 @@ impl McpHandler {
         while let Some(line) = lines.next_line().await? {
             if line.is_empty() && !buffer.is_empty() {
                 // Пустая строка = конец JSON-RPC запроса
-                if let Some(response) = self.handle_request(&buffer) {
+                if let Some(response) = self.handle_request(&buffer).await {
                     let resp = format!("{}\n\n", response);
                     writer.write_all(resp.as_bytes()).await?;
                     writer.flush().await?;
@@ -86,7 +86,7 @@ impl McpHandler {
         Ok(())
     }
 
-    fn handle_request(&self, json: &str) -> Option<String> {
+    async fn handle_request(&self, json: &str) -> Option<String> {
         let req: Value = serde_json::from_str(json).ok()?;
         let method = req["method"].as_str()?;
         let id = req["id"].clone();
@@ -166,10 +166,11 @@ impl McpHandler {
                 let node_id = "mcp-server";
 
                 // Открываем агента
-                match self.subagents.agent_open(role, &name, llm, 0, node_id) {
+                match self.subagents.agent_open(role, &name, llm, 0, node_id, None, false).await {
                     Ok(agent_id) => {
                         // Назначаем задачу
-                        let _ = self.subagents.agent_assign(&agent_id, task, 0);
+                        // Assign is best-effort for MCP calls
+                        let _ = self.subagents.agent_assign(&agent_id, task, 0).await;
 
                         // Создаём finding-результат
                         let finding_data = serde_json::json!({

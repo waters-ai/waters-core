@@ -315,21 +315,77 @@ pub async fn handle_slash(
         }
         "agent" => {
             let parts: Vec<&str> = slash_arg.splitn(4, ' ').collect();
-            if parts.len() >= 3 && parts[0] == "create" {
-                let name = parts[1];
-                let skill_name = parts[2];
-                let node = if parts.len() >= 4 { parts[3] } else { "local" };
+            if parts[0] == "create" && parts.len() >= 2 {
+                let skill_name = parts[1];
+                let node = if parts.len() >= 3 { parts[2] } else { "local" };
+                let bg = parts.len() >= 4 && parts[3] == "bg";
+
                 if let Some(skill) = skill_reg.get(skill_name) {
-                    let _ = subagents.agent_open(skill_name, skill_name, "auto", 0, "local");
-                    agent_journal.log(name, "created", &format!("skill={}, node={}", skill_name, node));
-                    agent_mgr.add(name, &skill.manifest.description, "delegated", node);
-                    println!("{}✓{} Agent '{}' created with skill '{}' on node '{}'", GREEN, RESET, name, skill_name, node);
+                    match subagents.agent_open(skill_name, skill_name, "auto", 0, node, None, bg).await {
+                        Ok(agent_id) => {
+                            agent_journal.log(skill_name, "created", &format!("id={}", agent_id));
+                            agent_mgr.add(skill_name, &skill.manifest.description, "delegated", node);
+                            let id_short = if agent_id.len() > 8 { &agent_id[..8] } else { &agent_id };
+                            println!("{}✅ Agent '{}' opened (id: {}, bg: {}){}", GREEN, skill_name, id_short, bg, RESET);
+                        }
+                        Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                    }
                 } else {
-                    println!("Skill '{}' not found. Available: {}", skill_name,
-                        skill_reg.list().iter().map(|s| s.manifest.name.as_str()).collect::<Vec<_>>().join(", "));
+                    println!("Skill '{}' not found.", skill_name);
+                }
+            } else if parts[0] == "list" {
+                match subagents.list_active(0) {
+                    Ok(agents) => {
+                        println!("{}Активные агенты ({}):{}", BOLD, agents.len(), RESET);
+                        for a in &agents {
+                            let status_icon = match a.status {
+                                crate::subagent::AgentStatus::Running => "🟢",
+                                crate::subagent::AgentStatus::Pending => "🟡",
+                                crate::subagent::AgentStatus::Completed => "✅",
+                                crate::subagent::AgentStatus::Failed(_) => "❌",
+                                crate::subagent::AgentStatus::Cancelled => "🚫",
+                            };
+                            println!("  {} {} — {} (role: {}, steps: {}, bg: {})",
+                                status_icon, &a.agent_id[..8.min(a.agent_id.len())],
+                                a.skill, a.role, a.steps_taken, a.background);
+                            if !a.objective.is_empty() {
+                                println!("     task: {}", a.objective);
+                            }
+                            if let Some(ref p) = a.parent_id {
+                                println!("     parent: {}", p);
+                            }
+                        }
+                    }
+                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
                 }
             } else {
-                println!("Usage: /agent create <name> <skill> <node_id>");
+                println!("Usage: /agent create <skill> [--parent <id>] [bg]  |  /agent list");
+            }
+        }
+        "send" if !slash_arg.is_empty() => {
+            let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+            if parts.len() < 2 {
+                println!("Usage: /send <agent_id> <message>");
+            } else {
+                let agent_id = parts[0];
+                let message = parts[1..].join(" ");
+                match subagents.agent_send_input(agent_id, &message, false).await {
+                    Ok(()) => println!("{}✅ Сообщение отправлено агенту {}{}", GREEN, agent_id, RESET),
+                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                }
+            }
+        }
+        "assign" if !slash_arg.is_empty() => {
+            let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+            if parts.len() < 2 {
+                println!("Usage: /assign <agent_id> <new_task>");
+            } else {
+                let agent_id = parts[0];
+                let task = parts[1..].join(" ");
+                match subagents.agent_assign(agent_id, &task, 0).await {
+                    Ok(()) => println!("{}✅ Агент {} переназначен: {}{}", GREEN, agent_id, task, RESET),
+                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                }
             }
         }
         "task" => {
