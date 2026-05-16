@@ -19,9 +19,13 @@ mod agent;
 mod skill;
 mod bridge;
 mod journal;
+mod offline;
 mod display;
 mod handlers;
 mod tui_agent;
+
+#[cfg(feature = "kafka-transport")]
+mod kafka;
 
 use anyhow::Result;
 use clap::Parser;
@@ -146,9 +150,31 @@ async fn main() -> Result<()> {
     let mut convo = convo::Convo::load(&convo_path);
 
     let mut session_mgr = session::SessionManager::new(&PathBuf::from(&cfg.node.session_dir));
+    let mut offline_queue = offline::OfflineQueue::new(&std::path::Path::new(".waters"));
+
+    // Crash recovery: check for checkpoint first
+    if let Ok(Some(cp)) = session::SessionManager::resume_from_checkpoint() {
+        println!("  {}⚠️  Found checkpoint — recovering from crash...{}", YELLOW, RESET);
+        let restored_session = cp.session;
+        let restored_node_id = restored_session.node_id.clone();
+        let node_name = cp.node_state.get("node_name").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+        // Restore session from checkpoint
+        session_mgr.restore_from(restored_session);
+        // Restore node state from checkpoint
+        node = node::Node::new(&node_name, Some(restored_node_id));
+        // Flush any pending offline events
+        if let Ok(events) = offline_queue.read_all() {
+            if !events.is_empty() {
+                println!("  {}📤 {} offline events pending{}", YELLOW, events.len(), RESET);
+            }
+        }
+        session::SessionManager::clear_checkpoint()?;
+        println!("  {}✓{} Recovery complete{}", GREEN, RESET, RESET);
+    }
+
     if let Some(sid) = &args.resume {
         session_mgr.resume(sid)?;
-    } else {
+    } else if session_mgr.current().is_none() {
         session_mgr.start(node.id(), &cfg.node.name,
             "You are the WATERS Node interface. Help the user.");
     }
@@ -275,6 +301,15 @@ async fn main() -> Result<()> {
         let cmd = line.trim();
         if cmd.is_empty() { continue; }
 
+        // Save checkpoint before each step
+        let node_state = serde_json::json!({
+            "node_name": node.name(),
+            "node_id": node.id(),
+            "uptime": uptime,
+            "peers": gossip.peer_count(),
+        });
+        session_mgr.save_checkpoint(&node_state)?;
+
         let continue_running = if cmd.starts_with("/") {
             let parts: Vec<&str> = cmd[1..].splitn(2, ' ').collect();
             handlers::handle_slash(
@@ -299,6 +334,9 @@ async fn main() -> Result<()> {
         if !continue_running {
             break;
         }
+
+        // Clear checkpoint after successful step
+        session::SessionManager::clear_checkpoint()?;
     }
 
     println!("{}Node {} stopped. Goodbye!{}", DIM, node.name(), RESET);

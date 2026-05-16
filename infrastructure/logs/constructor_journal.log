@@ -865,6 +865,13 @@
          - tui-cartographer: Qwen2.5-1.5B Q4_K_M (980MB)
          Каждый агент = скилы + бортовой журнал + своя маленькая LLM
 [2026-05-16T07:40:00Z] [NEXT]  Фаза 3: голосовые бриджи (Whisper MCP + TTS)
+[2026-05-16T08:10:00Z] [BUILD] Crash Recovery v1:
+         - session.rs: save_checkpoint(), resume_from_checkpoint(), clear_checkpoint()
+         - offline.rs: OfflineQueue (enqueue, read_all, flush)
+         - main.rs: при старте проверка чекпоинта → восстановление
+         - main.rs: checkpoint перед каждым шагом, clear после успеха
+         - Два новых файла: offline.rs + Checkpoint struct
+         - Статус: build clean, логика готова, тест при kill -9
 [2026-05-16T06:30:00Z] [STATE] Проект: waters-node, переход к сборке
 [2026-05-16T06:30:00Z] [PLAN]  План:
           1. Создать Cargo.toml для waters-node (отсутствует в репозитории)

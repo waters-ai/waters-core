@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use tracing::info;
 
@@ -21,16 +22,27 @@ pub struct Message {
     pub timestamp: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Checkpoint {
+    pub session: Session,
+    pub node_state: serde_json::Value,
+    pub saved_at: String,
+}
+
 pub struct SessionManager {
     session_dir: PathBuf,
+    checkpoint_path: PathBuf,
     current: Option<Session>,
 }
 
 impl SessionManager {
     pub fn new(session_dir: &Path) -> Self {
         std::fs::create_dir_all(session_dir).ok();
+        let checkpoint_path = session_dir.join("..").join("checkpoints");
+        std::fs::create_dir_all(&checkpoint_path).ok();
         SessionManager {
             session_dir: session_dir.to_path_buf(),
+            checkpoint_path,
             current: None,
         }
     }
@@ -73,6 +85,50 @@ impl SessionManager {
             info!("Session saved: {} ({} turns)", session.session_id, session.turn_count);
         }
         Ok(())
+    }
+
+    /// Checkpoint перед каждым шагом — полный снэпшот
+    pub fn save_checkpoint(&self, node_state: &serde_json::Value) -> anyhow::Result<()> {
+        if let Some(ref session) = self.current {
+            let checkpoint = Checkpoint {
+                session: session.clone(),
+                node_state: node_state.clone(),
+                saved_at: chrono::Utc::now().to_rfc3339(),
+            };
+            let path = self.checkpoint_path.join("latest.json");
+            let json = serde_json::to_string_pretty(&checkpoint)?;
+            std::fs::write(&path, json)?;
+            info!("Checkpoint saved: turn {}", session.turn_count);
+        }
+        Ok(())
+    }
+
+    /// Восстановление после падения — читает последний чекпоинт
+    pub fn resume_from_checkpoint() -> anyhow::Result<Option<Checkpoint>> {
+        let path = PathBuf::from(".waters/checkpoints/latest.json");
+        if path.exists() {
+            let content = std::fs::read_to_string(&path)?;
+            let checkpoint: Checkpoint = serde_json::from_str(&content)?;
+            info!("Resumed from checkpoint: turn {}", checkpoint.session.turn_count);
+            Ok(Some(checkpoint))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Очистить чекпоинт после успешного шага
+    pub fn clear_checkpoint() -> anyhow::Result<()> {
+        let path = PathBuf::from(".waters/checkpoints/latest.json");
+        if path.exists() {
+            std::fs::remove_file(&path)?;
+        }
+        Ok(())
+    }
+
+    /// Восстановить сессию из чекпоинта (после краша)
+    pub fn restore_from(&mut self, session: Session) {
+        info!("Session restored from checkpoint: {} (turn {})", session.session_id, session.turn_count);
+        self.current = Some(session);
     }
 
     pub fn resume(&mut self, session_id: &str) -> anyhow::Result<bool> {
