@@ -1,0 +1,13 @@
+[node]
+name = "waters-win"
+id = ""
+profile = "default"
+workspace = "."
+session_dir = ".waters/sessions"
+llm_provider = "auto"
+
+[profiles.default]
+llm_provider = "deepseek"
+llm_model = "deepseek-chat"
+bridges = ["duckduckgo"]
+autonomy_level = 0
