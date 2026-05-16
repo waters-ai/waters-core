@@ -9,8 +9,21 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::channel::ChannelManager;
+use crate::cargo::{CargoEngine, CargoGossipMessage, CargoStatus, CargoMode, 
+    AgentCargo, CargoManifest, CargoChunk};
 
 const MAX_PEERS: usize = 6;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingCargo {
+    pub cargo_id: String,
+    pub agent_name: String,
+    pub mode: String,
+    pub size_kb: u64,
+    pub from_node: String,
+    pub bridges: Vec<String>,
+    pub arrived_at: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingPeer {
@@ -43,14 +56,18 @@ pub struct GossipEngine {
     groups: Arc<Mutex<Vec<(String, String)>>>,
     chan_list: Arc<Mutex<Vec<String>>>,
     pub pending_peers: Arc<Mutex<Vec<PendingPeer>>>,
+    pub cargo_engine: Arc<Mutex<CargoEngine>>,
+    pub pending_cargo: Arc<Mutex<Vec<PendingCargo>>>,
 }
 
 impl GossipEngine {
     pub fn new(node_id: &str, node_name: &str, port: u16) -> Self {
         let pending_peers = Arc::new(Mutex::new(Vec::new()));
+        let pending_cargo = Arc::new(Mutex::new(Vec::new()));
+        let cargo_engine = Arc::new(Mutex::new(CargoEngine::new()));
         GossipEngine {
             node_id: node_id.to_string(),
-            pending_peers,
+            pending_peers, pending_cargo, cargo_engine,
             node_name: node_name.to_string(),
             port,
             peers: Arc::new(Mutex::new(HashMap::new())),
@@ -83,14 +100,14 @@ impl GossipEngine {
         self.chan_list.lock().await.clone()
     }
 
-    fn clone_state(&self) -> (String, String, u16, Arc<Mutex<HashMap<String, PeerInfo>>>, Arc<Mutex<Vec<String>>>, Arc<Mutex<Vec<(String, String)>>>, Arc<Mutex<Vec<PendingPeer>>>) {
-        (self.node_id.clone(), self.node_name.clone(), self.port, self.peers.clone(), self.chan_list.clone(), self.groups.clone(), self.pending_peers.clone())
+    fn clone_state(&self) -> (String, String, u16, Arc<Mutex<HashMap<String, PeerInfo>>>, Arc<Mutex<Vec<String>>>, Arc<Mutex<Vec<(String, String)>>>, Arc<Mutex<Vec<PendingPeer>>>, Arc<Mutex<CargoEngine>>, Arc<Mutex<Vec<PendingCargo>>>) {
+        (self.node_id.clone(), self.node_name.clone(), self.port, self.peers.clone(), self.chan_list.clone(), self.groups.clone(), self.pending_peers.clone(), self.cargo_engine.clone(), self.pending_cargo.clone())
     }
 
     // ─── mDNS ────────────────────────────────────────
 
     pub async fn start_mdns_listener(&self) -> anyhow::Result<()> {
-        let (node_id, _, _, peers, _, _, _) = self.clone_state();
+        let (node_id, _, _, peers, _, _, _, _, _) = self.clone_state();
         let bind: SocketAddr = format!("0.0.0.0:{}", self.port + 1).parse()?;
         let socket = tokio::net::UdpSocket::bind(bind).await?;
 
@@ -112,7 +129,7 @@ impl GossipEngine {
     }
 
     pub async fn start_mdns_broadcast(&self, interval: u64) -> anyhow::Result<()> {
-        let (node_id, node_name, port, _, chan_list, groups, _) = self.clone_state();
+        let (node_id, node_name, port, _, chan_list, groups, _, _, _) = self.clone_state();
         let bind: SocketAddr = format!("0.0.0.0:{}", port + 2).parse()?;
         let socket = tokio::net::UdpSocket::bind(bind).await?;
         socket.set_broadcast(true)?;
@@ -146,7 +163,7 @@ impl GossipEngine {
     // ─── TCP listener ────────────────────────────────
 
     pub async fn start_tcp_listener(&self, mgr: Arc<Mutex<ChannelManager>>) -> anyhow::Result<()> {
-        let (node_id, node_name, port, peers, chan_list, groups, pending_peers) = self.clone_state();
+        let (node_id, node_name, port, peers, chan_list, groups, pending_peers, cargo_engine, pending_cargo) = self.clone_state();
         let bind: SocketAddr = format!("0.0.0.0:{}", port + 3).parse()?;
         let listener = TcpListener::bind(bind).await?;
 
@@ -161,8 +178,10 @@ impl GossipEngine {
                         let cm = mgr.clone();
                         let gs = groups.clone();
                         let pp = pending_peers.clone();
+                        let ce = cargo_engine.clone();
+                        let pc = pending_cargo.clone();
                         tokio::spawn(async move {
-                            handle_incoming(stream, addr, &nid, &nn, &p, &cl, &cm, &gs, &pp).await.ok();
+                            handle_incoming(stream, addr, &nid, &nn, &p, &cl, &cm, &gs, &pp, &ce, &pc).await.ok();
                         });
                     }
                     Err(e) => warn!("TCP accept: {}", e),
@@ -176,7 +195,7 @@ impl GossipEngine {
     // ─── Periodic gossip ─────────────────────────────
 
     pub async fn start_periodic_sync(&self, mgr: Arc<Mutex<ChannelManager>>, interval: u64) {
-        let (node_id, node_name, _, peers, chan_list, groups, _) = self.clone_state();
+        let (node_id, node_name, _, peers, chan_list, groups, _, _, _) = self.clone_state();
 
         tokio::spawn(async move {
             loop {
@@ -232,6 +251,23 @@ impl GossipEngine {
         }
     }
 
+    /// Get pending cargo awaiting approval
+    pub async fn pending_cargo_list(&self) -> Vec<PendingCargo> {
+        self.pending_cargo.lock().await.clone()
+    }
+
+    /// Approve a pending cargo transfer by index
+    pub async fn approve_cargo(&self, idx: usize) -> Option<PendingCargo> {
+        let mut pc = self.pending_cargo.lock().await;
+        if idx < pc.len() { Some(pc.remove(idx)) } else { None }
+    }
+
+    /// Reject a pending cargo transfer by index
+    pub async fn reject_cargo(&self, idx: usize) -> Option<PendingCargo> {
+        let mut pc = self.pending_cargo.lock().await;
+        if idx < pc.len() { Some(pc.remove(idx)) } else { None }
+    }
+
     pub fn peer_count(&self) -> usize {
         self.peers.try_lock().map(|p| p.len()).unwrap_or(0)
     }
@@ -251,6 +287,8 @@ async fn handle_incoming(
     mgr: &Arc<Mutex<ChannelManager>>,
     groups: &Arc<Mutex<Vec<(String, String)>>>,
     pending_peers: &Arc<Mutex<Vec<PendingPeer>>>,
+    cargo_engine: &Arc<Mutex<CargoEngine>>,
+    pending_cargo: &Arc<Mutex<Vec<PendingCargo>>>,
 ) -> anyhow::Result<()> {
     let (reader, mut writer) = tokio::io::split(stream);
     let mut lines = BufReader::new(reader).lines();
@@ -361,6 +399,91 @@ async fn handle_incoming(
                     });
                     let data = serde_json::to_vec(&response)?;
                     writer.write_all(&data).await?;
+                }
+
+                "cargo.offer" => {
+                    let cargo_id = msg["cargo_id"].as_str().unwrap_or("?").to_string();
+                    let agent_name = msg["agent_name"].as_str().unwrap_or("?").to_string();
+                    let mode = msg["mode"].as_str().unwrap_or("Full").to_string();
+                    let from = msg["from_node"].as_str().unwrap_or("?").to_string();
+                    let bridges: Vec<String> = msg["bridges"].as_array()
+                        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default();
+                    info!("Cargo OFFER: {} from {} (mode: {})", agent_name, from, mode);
+
+                    // Add to pending cargo for chat approval
+                    let pc = PendingCargo {
+                        cargo_id: cargo_id.clone(),
+                        agent_name: agent_name.clone(),
+                        mode: mode.clone(),
+                        size_kb: msg["size_kb"].as_u64().unwrap_or(0),
+                        from_node: from,
+                        bridges: bridges.clone(),
+                        arrived_at: chrono::Utc::now().to_rfc3339(),
+                    };
+                    pending_cargo.lock().await.push(pc);
+
+                    // Respond with awaiting_approval
+                    let resp = serde_json::json!({
+                        "event": "cargo.ack",
+                        "cargo_id": cargo_id,
+                        "accepted": false,
+                        "reason": "awaiting_approval",
+                    });
+                    let data = serde_json::to_vec(&resp)?;
+                    writer.write_all(&data).await?;
+                }
+
+                "cargo.request" => {
+                    let agent_name = msg["agent_name"].as_str().unwrap_or("?").to_string();
+                    let mode = msg["mode"].as_str().unwrap_or("Lite").to_string();
+                    let requester = msg["requester"].as_str().unwrap_or("?").to_string();
+                    info!("Cargo REQUEST: {} from {} (mode: {})", agent_name, requester, mode);
+
+                    // Use CargoEngine to prepare offer
+                    let mut ce = cargo_engine.lock().await;
+                    // For now, auto-reply with offer if we have the agent
+                    if ce.list_active().iter().any(|(_, s)| **s == CargoStatus::AwaitingSend) {
+                        let ack = serde_json::json!({
+                            "event": "cargo.ack",
+                            "cargo_id": "request-ack",
+                            "accepted": true,
+                            "mode": mode,
+                        });
+                        let data = serde_json::to_vec(&ack)?;
+                        writer.write_all(&data).await?;
+                    } else {
+                        let deny = serde_json::json!({
+                            "event": "cargo.ack",
+                            "cargo_id": "request-deny",
+                            "accepted": false,
+                            "reason": "agent_not_available",
+                        });
+                        let data = serde_json::to_vec(&deny)?;
+                        writer.write_all(&data).await?;
+                    }
+                }
+
+                "cargo.ack" => {
+                    let cargo_id = msg["cargo_id"].as_str().unwrap_or("?").to_string();
+                    let accepted = msg["accepted"].as_bool().unwrap_or(false);
+                    let reason = msg["reason"].as_str().unwrap_or("").to_string();
+                    info!("Cargo ACK: {} accepted={} reason={}", cargo_id, accepted, reason);
+                    let mut ce = cargo_engine.lock().await;
+                    if accepted {
+                        ce.accept_cargo(&cargo_id);
+                    } else {
+                        ce.reject_cargo(&cargo_id);
+                    }
+                }
+
+                "cargo.confirm" => {
+                    let cargo_id = msg["cargo_id"].as_str().unwrap_or("?").to_string();
+                    let status = msg["status"].as_str().unwrap_or("landed").to_string();
+                    info!("Cargo CONFIRM: {} status={}", cargo_id, status);
+                    if status == "landed" {
+                        cargo_engine.lock().await.confirm_landed(&cargo_id);
+                    }
                 }
 
                 _ => warn!("Unknown event: {}", ev),

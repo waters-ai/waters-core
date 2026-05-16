@@ -58,6 +58,9 @@ pub async fn handle_slash(
             println!("  /connect      — connect to peer: /connect <ip>");
             println!("  /sessions     — list sessions");
             println!("  /json         — output JSON format");
+            println!("  /cargo        — show pending cargo transfers");
+            println!("  /cargo approve <idx> — approve cargo");
+            println!("  /cargo reject <idx> — reject cargo");
             println!("  /tui-agents   — list builtin TUI-converted agents");
             println!("  /exit         — shutdown");
         }
@@ -322,6 +325,37 @@ pub async fn handle_slash(
                     agent_journal.log("system", "peer_approved", &peer.node_name);
                 } else {
                     println!("Invalid index.");
+                }
+            }
+        }
+        "cargo" => {
+            if slash_arg.is_empty() {
+                let pending = gossip.pending_cargo_list().await;
+                if pending.is_empty() {
+                    println!("No pending cargo transfers.");
+                } else {
+                    println!("{}Pending cargo ({}):{}", BOLD, pending.len(), RESET);
+                    for (i, c) in pending.iter().enumerate() {
+                        println!("  [{}] {} — {} from {} ({} KB, bridges: {:?})",
+                            i, c.agent_name, c.mode, c.from_node, c.size_kb, c.bridges);
+                        println!("       /cargo approve {} or /cargo reject {}", i, i);
+                    }
+                }
+            }
+            let parts: Vec<&str> = slash_arg.splitn(2, ' ').collect();
+            if parts.len() == 2 && parts[0] == "approve" {
+                if let Ok(idx) = parts[1].parse::<usize>() {
+                    if let Some(c) = gossip.approve_cargo(idx).await {
+                        println!("{}✓{} Cargo approved: {} (mode: {})", GREEN, RESET, c.agent_name, c.mode);
+                        agent_journal.log("system", "cargo_approved", &c.agent_name);
+                    }
+                }
+            } else if parts.len() == 2 && parts[0] == "reject" {
+                if let Ok(idx) = parts[1].parse::<usize>() {
+                    if let Some(c) = gossip.reject_cargo(idx).await {
+                        println!("{}✗{} Cargo rejected: {}", YELLOW, RESET, c.agent_name);
+                        agent_journal.log("system", "cargo_rejected", &c.agent_name);
+                    }
                 }
             }
         }

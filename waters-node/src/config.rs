@@ -1,10 +1,13 @@
 use anyhow::Result;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::path::Path;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub node: NodeConfig,
+    #[serde(default)]
+    pub profiles: HashMap<String, ProfileConfig>,
     #[serde(default)]
     pub redis: Option<RedisConfig>,
     #[serde(default)]
@@ -19,12 +22,58 @@ pub struct NodeConfig {
     pub name: String,
     #[serde(default)]
     pub id: Option<String>,
+    #[serde(default = "default_profile")]
+    pub profile: String,
     #[serde(default = "default_workspace")]
     pub workspace: String,
     #[serde(default = "default_session_dir")]
     pub session_dir: String,
     #[serde(default = "default_llm_provider")]
     pub llm_provider: String,
+}
+
+impl Default for NodeConfig {
+    fn default() -> Self {
+        NodeConfig {
+            name: default_name(),
+            id: None,
+            profile: default_profile(),
+            workspace: default_workspace(),
+            session_dir: default_session_dir(),
+            llm_provider: default_llm_provider(),
+        }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            node: NodeConfig::default(),
+            profiles: std::collections::HashMap::new(),
+            redis: None,
+            ollama: None,
+            kafka: None,
+        }
+    }
+}
+
+/// Per-profile config — группы, бриджи, LLM, автономия
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ProfileConfig {
+    #[serde(default)]
+    pub llm_provider: String,
+    #[serde(default)]
+    pub llm_model: String,
+    #[serde(default)]
+    pub llm_url: String,
+    #[serde(default)]
+    pub bridges: Vec<String>,
+    #[serde(default)]
+    pub groups: Vec<String>,
+    #[serde(default)]
+    pub autonomy_level: u8,
+    #[serde(default)]
+    pub dtn_profile: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -60,6 +109,8 @@ pub struct KafkaTopics {
     pub agents: String,
 }
 
+fn default_profile() -> String { "default".into() }
+
 fn default_name() -> String { "waters-node".into() }
 fn default_workspace() -> String { ".".into() }
 fn default_session_dir() -> String { ".waters/sessions".into() }
@@ -83,10 +134,12 @@ impl Config {
             node: NodeConfig {
                 name: default_name(),
                 id: None,
+                profile: default_profile(),
                 workspace: default_workspace(),
                 session_dir: default_session_dir(),
                 llm_provider: default_llm_provider(),
             },
+            profiles: HashMap::new(),
             kafka: None,
             redis: None,
             ollama: Some(OllamaConfig {

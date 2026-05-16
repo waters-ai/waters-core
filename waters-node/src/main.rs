@@ -143,8 +143,12 @@ async fn main() -> Result<()> {
             }
             "voice" => {
                 let url = bcfg.config.get("url").cloned().unwrap_or_default();
-                bridge_pool.register(&bcfg.name,
-                    Box::new(bridge::VoiceBridge::new(&bcfg.name, &url)),
+                let mode = bcfg.config.get("mode").map(|s| s.as_str()).unwrap_or("stt");
+                let vb = match mode {
+                    "tts" => bridge::VoiceBridge::new_tts(&bcfg.name, &url),
+                    _ => bridge::VoiceBridge::new_stt(&bcfg.name, &url),
+                };
+                bridge_pool.register(&bcfg.name, Box::new(vb),
                     bridge::BridgeInfo::new(&bcfg.name, bridge::BridgeWeight::Heavy, 3, 500));
             }
             _ => tracing::warn!("Unknown bridge provider: {}", bcfg.provider),

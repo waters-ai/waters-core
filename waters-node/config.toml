@@ -1,6 +1,7 @@
 [node]
 name = "waters-node"
 id = ""
+profile = "default"
 workspace = "."
 session_dir = ".waters/sessions"
 llm_provider = "auto"
@@ -8,3 +9,21 @@ llm_provider = "auto"
 [ollama]
 url = "http://127.0.0.1:11434"
 model = "qwen2.5:14b"
+
+[profiles.default]
+llm_provider = "ollama"
+llm_model = "qwen2.5:14b"
+bridges = ["duckduckgo"]
+autonomy_level = 0
+
+[profiles.field]
+llm_provider = "ollama"
+llm_model = "qwen2.5:7b"
+autonomy_level = 2
+dtn_profile = "lunar"
+
+[profiles.server]
+llm_provider = "deepseek"
+llm_model = "deepseek-chat"
+bridges = ["duckduckgo", "mcp-nasa"]
+groups = ["meteorite-hunt"]
