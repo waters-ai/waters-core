@@ -42,6 +42,8 @@ pub async fn handle_slash(
             println!("  /task list [group] — list tasks");
             println!("  /task bind <id> bridge|db|mcp <name> — bind resource");
             println!("  /task done <id> — complete task");
+            println!("  /llm         — list available LLM providers");
+            println!("  /llm set <name> — switch active LLM");
             println!("  /group        — /group create/list/invite");
             println!("  /group create <name> — create group");
             println!("  /group invite <name> <node> — invite node to group");
@@ -325,6 +327,39 @@ pub async fn handle_slash(
                     agent_journal.log("system", "peer_approved", &peer.node_name);
                 } else {
                     println!("Invalid index.");
+                }
+            }
+        }
+        "llm" => {
+            if slash_arg.is_empty() {
+                let bridges = bridge_pool.list();
+                let llm_bridges: Vec<_> = bridges.iter().filter(|n| n.starts_with("llm-")).collect();
+                if llm_bridges.is_empty() {
+                    println!("No LLM bridges available.");
+                } else {
+                    println!("{}Available LLM providers:{}", BOLD, RESET);
+                    for name in &llm_bridges {
+                        let status = if bridge_pool.info.get(*name).map(|i| i.enabled).unwrap_or(false) { "✅" } else { "⛔" };
+                        println!("  {} {} — /llm set {}", status, name, name.strip_prefix("llm-").unwrap_or(name));
+                    }
+                }
+            } else {
+                let parts: Vec<&str> = slash_arg.splitn(2, ' ').collect();
+                if parts.len() >= 2 && parts[0] == "set" {
+                    let target = format!("llm-{}", parts[1]);
+                    if bridge_pool.bridges.contains_key(&target) {
+                        // Re-prioritize: set this one to priority 1, others to 5
+                        for name in bridge_pool.list() {
+                            if name.starts_with("llm-") {
+                                let prio = if name == target { 1 } else { 5 };
+                                bridge_pool.set_priority(&name, prio);
+                            }
+                        }
+                        println!("{}✓{} Switched to {}", GREEN, RESET, target);
+                    } else {
+                        println!("LLM '{}' not found. Available: {}", parts[1],
+                            bridge_pool.list().iter().filter(|n| n.starts_with("llm-")).map(|n| &n[4..]).collect::<Vec<_>>().join(", "));
+                    }
                 }
             }
         }

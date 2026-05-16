@@ -223,7 +223,7 @@ pub struct BridgesFile {
     #[serde(default)]
     pub bridges: Vec<BridgeConfig>,
     #[serde(default)]
-    pub llm: LlmBridgeConfig,
+    pub llm: LlmConfig,
     #[serde(default)]
     pub chat: ChatBridgeConfig,
     #[serde(default)]
@@ -234,17 +234,65 @@ pub struct BridgesFile {
     pub links: Vec<LinkProfile>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LlmBridgeConfig {
-    pub provider: String, pub model: String, pub url: String,
-    pub api_key: String, pub system_prompt: String,
+/// 3+1 LLM провайдера: 3 built-in + 1 пользовательский
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LlmConfig {
+    #[serde(default)]
+    pub providers: Vec<SingleLlmConfig>,
+    #[serde(default)]
+    pub custom: SingleLlmConfig,
+    #[serde(default = "default_active_llm")]
+    pub active: String,
 }
-impl Default for LlmBridgeConfig {
-    fn default() -> Self { LlmBridgeConfig {
-        provider: "ollama".into(), model: "qwen2.5:14b".into(),
-        url: "http://127.0.0.1:11434".into(), api_key: String::new(),
+
+fn default_active_llm() -> String { "ollama".into() }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SingleLlmConfig {
+    pub name: String,
+    pub provider: String,
+    pub model: String,
+    pub url: String,
+    pub api_key: String,
+    pub system_prompt: String,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+}
+
+fn default_enabled() -> bool { true }
+
+impl Default for SingleLlmConfig {
+    fn default() -> Self { SingleLlmConfig {
+        name: String::new(), provider: "ollama".into(),
+        model: "qwen2.5:14b".into(),
+        url: "http://127.0.0.1:11434".into(),
+        api_key: String::new(),
         system_prompt: "You are a helpful WATERS node assistant.".into(),
+        enabled: false,
     }}
+}
+
+impl SingleLlmConfig {
+    pub fn new(name: &str, provider: &str, model: &str, url: &str, api_key: &str) -> Self {
+        SingleLlmConfig {
+            name: name.to_string(), provider: provider.to_string(),
+            model: model.to_string(), url: url.to_string(),
+            api_key: api_key.to_string(),
+            system_prompt: "You are a helpful WATERS node assistant.".into(),
+            enabled: true,
+        }
+    }
+
+    pub fn is_available(&self) -> bool {
+        if !self.enabled { return false; }
+        match self.provider.as_str() {
+            "deepseek" => !self.api_key.is_empty(),
+            "ollama" => {
+                reqwest::blocking::get(format!("{}/api/tags", self.url)).is_ok()
+            }
+            _ => !self.url.is_empty(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -353,13 +401,16 @@ enum LlmProvider {
 }
 
 impl LlmBridge {
-    pub fn new(name: &str, cfg: &LlmBridgeConfig) -> Self {
+    pub fn name(&self) -> &str { &self.name }
+
+    pub fn new(cfg: &SingleLlmConfig) -> Self {
+        let name = format!("llm-{}", cfg.name);
         let provider = match cfg.provider.as_str() {
             "deepseek" => LlmProvider::DeepSeek { api_key: cfg.api_key.clone(), model: cfg.model.clone() },
             "openai" => LlmProvider::OpenAI { url: cfg.url.clone(), model: cfg.model.clone(), api_key: cfg.api_key.clone() },
             _ => LlmProvider::Ollama { url: cfg.url.clone(), model: cfg.model.clone() },
         };
-        LlmBridge { name: name.to_string(), provider, system_prompt: cfg.system_prompt.clone() }
+        LlmBridge { name, provider, system_prompt: cfg.system_prompt.clone() }
     }
 }
 

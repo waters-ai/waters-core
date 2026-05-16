@@ -101,14 +101,40 @@ async fn main() -> Result<()> {
         info!("Link profile loaded: {} ({} Kbps)", link.name, link.max_bandwidth_kbps);
     }
 
-    // Register LLM bridge
-    let llm_name = format!("llm-{}", bridges_file.llm.provider);
-    bridge_pool.register(
-        &llm_name,
-        Box::new(bridge::LlmBridge::new(&llm_name, &bridges_file.llm)),
-        bridge::BridgeInfo::new(&llm_name, bridge::BridgeWeight::Heavy, 1, 50),
-    );
-    let llm_display = format!("{}{}{}", GREEN, llm_name, RESET);
+    // Register LLM bridges (3 built-in + 1 custom)
+    let mut registered_llm = Vec::new();
+    // Built-in providers
+    let builtin_configs = vec![
+        bridge::SingleLlmConfig::new("deepseek", "deepseek", "deepseek-chat",
+            "https://api.deepseek.com", &std::env::var("DEEPSEEK_API_KEY").unwrap_or_default()),
+        bridge::SingleLlmConfig::new("ollama", "ollama", "qwen2.5:14b",
+            "http://127.0.0.1:11434", ""),
+        bridge::SingleLlmConfig::new("openai", "openai", "gpt-4o",
+            "https://api.openai.com", &std::env::var("OPENAI_API_KEY").unwrap_or_default()),
+    ];
+    for cfg in builtin_configs {
+        if cfg.is_available() {
+            let bridge = bridge::LlmBridge::new(&cfg);
+            let name = bridge.name().to_string();
+            bridge_pool.register(&name, Box::new(bridge),
+                bridge::BridgeInfo::new(&name, bridge::BridgeWeight::Heavy, 1, 50));
+            registered_llm.push(name);
+        }
+    }
+    // Custom provider from bridges.json
+    let custom = &bridges_file.llm.custom;
+    if custom.enabled && !custom.name.is_empty() && custom.is_available() {
+        let bridge = bridge::LlmBridge::new(custom);
+        let name = bridge.name().to_string();
+        bridge_pool.register(&name, Box::new(bridge),
+            bridge::BridgeInfo::new(&name, bridge::BridgeWeight::Heavy, 1, 50));
+        registered_llm.push(name);
+    }
+    let llm_display = if registered_llm.is_empty() {
+        format!("{}none{}", YELLOW, RESET)
+    } else {
+        format!("{}{} ({}){}", GREEN, registered_llm.join(", "), registered_llm.len(), RESET)
+    };
     print_node_info(&id_short, node.name(), &llm_display);
 
     // Register Chat bridge
@@ -130,16 +156,21 @@ async fn main() -> Result<()> {
         if !bcfg.enabled { continue; }
         match bcfg.provider.as_str() {
             "llm" => {
-                let llm_cfg = bridge::LlmBridgeConfig {
+                let llm_cfg = bridge::SingleLlmConfig {
+                    name: bcfg.name.clone(),
                     provider: bcfg.config.get("provider").cloned().unwrap_or_default(),
                     model: bcfg.config.get("model").cloned().unwrap_or_default(),
                     url: bcfg.config.get("url").cloned().unwrap_or_default(),
                     api_key: bcfg.config.get("api_key").cloned().unwrap_or_default(),
                     system_prompt: bcfg.config.get("system_prompt").cloned().unwrap_or_default(),
+                    enabled: true,
                 };
-                bridge_pool.register(&bcfg.name,
-                    Box::new(bridge::LlmBridge::new(&bcfg.name, &llm_cfg)),
-                    bridge::BridgeInfo::new(&bcfg.name, bridge::BridgeWeight::Heavy, 2, 50));
+                if llm_cfg.is_available() {
+                    let bridge = bridge::LlmBridge::new(&llm_cfg);
+                    let name = bridge.name().to_string();
+                    bridge_pool.register(&name, Box::new(bridge),
+                        bridge::BridgeInfo::new(&bcfg.name, bridge::BridgeWeight::Heavy, 2, 50));
+                }
             }
             "voice" => {
                 let url = bcfg.config.get("url").cloned().unwrap_or_default();

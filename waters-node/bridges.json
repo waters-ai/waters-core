@@ -1,23 +1,48 @@
 {
   "llm": {
-    "provider": "ollama",
-    "model": "qwen2.5:14b",
-    "url": "http://127.0.0.1:11434",
-    "api_key": "",
-    "system_prompt": "You are a helpful WATERS node assistant."
+    "providers": [
+      {
+        "name": "deepseek",
+        "provider": "deepseek",
+        "model": "deepseek-chat",
+        "url": "https://api.deepseek.com",
+        "api_key": "",
+        "enabled": true
+      },
+      {
+        "name": "ollama",
+        "provider": "ollama",
+        "model": "qwen2.5:14b",
+        "url": "http://127.0.0.1:11434",
+        "api_key": "",
+        "enabled": true
+      },
+      {
+        "name": "openai",
+        "provider": "openai",
+        "model": "gpt-4o",
+        "url": "https://api.openai.com",
+        "api_key": "",
+        "enabled": true
+      }
+    ],
+    "custom": {
+      "name": "",
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "url": "",
+      "api_key": "",
+      "system_prompt": "You are a helpful assistant.",
+      "enabled": false
+    },
+    "active": "ollama"
   },
   "chat": {
     "transport": "stdin",
     "token": ""
   },
   "voice": null,
-  "bridges": [
-    {
-      "name": "search-duckduckgo",
-      "provider": "search",
-      "transport": "http",
-      "config": {},
-      "enabled": false
-    }
-  ]
+  "mcp_servers": [],
+  "links": [],
+  "bridges": []
 }

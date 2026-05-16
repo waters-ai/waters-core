@@ -80,20 +80,30 @@ pub fn convert_tui_to_node(tui_name: &str, description: &str, bridges: &[String]
 }
 
 /// Ассистент переключается на внешний LLM ноды, если канал есть.
+/// Пробует LLM по приоритету (сначала priority 1 — активный пользовательский)
 /// Если внешнего LLM нет — использует свою бортовую (tiny 0.5B).
 pub fn assistant_chat(bridge_pool: &BridgePool, input: &str, session_mgr: &mut crate::session::SessionManager) -> Result<String> {
     session_mgr.add_message("user", input);
 
-    // Try external LLM bridges first
-    for name in bridge_pool.list() {
-        if name.starts_with("llm-") {
-            match bridge_pool.call(&name, input) {
-                Ok(r) => {
-                    session_mgr.add_message("assistant", &r);
-                    return Ok(r);
-                }
-                Err(_) => continue,
+    // Get LLM bridges sorted by priority (1 = highest)
+    let mut llm_bridges: Vec<(u8, String)> = bridge_pool.list().iter()
+        .filter(|n| n.starts_with("llm-"))
+        .filter_map(|n| {
+            let prio = bridge_pool.info.get(n).map(|i| i.priority).unwrap_or(5);
+            if bridge_pool.info.get(n).map(|i| i.enabled).unwrap_or(true) {
+                Some((prio, n.clone()))
+            } else { None }
+        })
+        .collect();
+    llm_bridges.sort_by_key(|(p, _)| *p);
+
+    for (_, name) in &llm_bridges {
+        match bridge_pool.call(name, input) {
+            Ok(r) => {
+                session_mgr.add_message("assistant", &r);
+                return Ok(r);
             }
+            Err(_) => continue,
         }
     }
 
