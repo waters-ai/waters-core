@@ -865,6 +865,26 @@
          - tui-cartographer: Qwen2.5-1.5B Q4_K_M (980MB)
          Каждый агент = скилы + бортовой журнал + своя маленькая LLM
 [2026-05-16T07:40:00Z] [NEXT]  Фаза 3: голосовые бриджи (Whisper MCP + TTS)
+[2026-05-16T08:30:00Z] [MCP]  MCP-серверы + Link Governor + lock/unlock:
+         - McpBridge: обёртка McpClient → BridgeProvider (через std::sync::Mutex)
+         - bridges.json: mcp_servers {command, args, tools, weight, bandwidth, priority}
+         - LinkProfile + LinkGovernor: автоуправление bandwidth
+         - Governor: locked bridges never offloaded (🔒)
+         - /priorities set/lock/unlock — управление приоритетами
+         - mcp.rs переписан на sync (std::process::Command вместо tokio)
+[2026-05-16T08:30:00Z] [DONE]  MCP + Governor + Lock собран и запушен
+[2026-05-16T09:00:00Z] [REFACTOR] Tools v2 — модульная структура + тесты + KvStore:
+         - tools/ модуль: mod.rs, file.rs, search.rs, shell.rs, git.rs
+         - read_file: PDF поддержка (pdftotext), write_file: backup
+         - list_dir: gitignore-aware, сортировка (dirs first)
+         - exec_shell: background tasks + timeout warning
+         - exec_shell_cancel: отмена фоновых задач
+         - web_search/fetch_url: timeout, user-agent
+         - grep_files: бинарник skip, >1MB skip
+         - 9 тестов (3 file, 1 search, 3 shell, 1 git, 1 utils)
+         - store.rs: KvStore (Redis или in-memory), feature-gate removed
+         - journal.rs: пишет в файл + KvStore одновременно
+         - ToolContext: kvstore: Option<Arc<KvStore>> для доступа инструментов
 [2026-05-16T08:10:00Z] [BUILD] Crash Recovery v1:
          - session.rs: save_checkpoint(), resume_from_checkpoint(), clear_checkpoint()
          - offline.rs: OfflineQueue (enqueue, read_all, flush)

@@ -1,108 +1,120 @@
-#![cfg(feature = "redis-storage")]
-
 use anyhow::Result;
-use redis::AsyncCommands;
-use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Mutex;
 use tracing::info;
 
-pub struct RedisStore {
-    client: redis::Client,
+/// Лёгкая бортовой Redis-подобное хранилище.
+/// Если Redis недоступен — работает как in-memory HashMap (для тестов и изоляции).
+/// Если Redis доступен — прозрачно использует его.
+
+#[derive(Debug)]
+pub struct KvStore {
+    redis_url: Option<String>,
+    redis_client: Option<redis::Client>,
+    memory: Mutex<HashMap<String, String>>,
+    connected: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoredSession {
-    pub session_id: String,
-    pub node_id: String,
-    pub data: String,
-    pub created_at: String,
-}
-
-impl RedisStore {
-    pub fn new(url: &str) -> Result<Self> {
-        let client = redis::Client::open(url)?;
-        info!("Redis connected: {}", url);
-        Ok(RedisStore { client })
+impl KvStore {
+    pub fn new(redis_url: Option<&str>) -> Self {
+        if let Some(url) = redis_url {
+            if let Ok(client) = redis::Client::open(url) {
+                if let Ok(mut conn) = client.get_connection() {
+                    if redis::cmd("PING").query::<String>(&mut conn).is_ok() {
+                        info!("KvStore connected to Redis: {}", url);
+                        return KvStore {
+                            redis_url: Some(url.to_string()),
+                            redis_client: Some(client),
+                            memory: Mutex::new(HashMap::new()),
+                            connected: true,
+                        };
+                    }
+                }
+            }
+            info!("KvStore Redis unavailable at {}, using in-memory", url);
+        }
+        KvStore { redis_url: None, redis_client: None, memory: Mutex::new(HashMap::new()), connected: false }
     }
 
-    pub async fn ping(&self) -> Result<()> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
-        redis::cmd("PING").query_async(&mut conn).await?;
+    pub fn is_connected(&self) -> bool { self.connected }
+
+    pub fn set(&self, key: &str, value: &str, ttl_secs: u64) -> Result<()> {
+        if let Some(ref client) = self.redis_client {
+            let mut conn = client.get_connection()?;
+            let _: () = redis::cmd("SETEX").arg(key).arg(ttl_secs as u64).arg(value).query(&mut conn)?;
+        } else {
+            self.memory.lock().unwrap().insert(key.to_string(), value.to_string());
+        }
         Ok(())
     }
 
-    pub async fn set(&self, key: &str, value: &str, ttl_secs: u64) -> Result<()> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let _: () = conn.set_ex(key, value, ttl_secs as usize).await?;
-        Ok(())
-    }
-
-    pub async fn get(&self, key: &str) -> Result<Option<String>> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let val: Option<String> = conn.get(key).await?;
-        Ok(val)
-    }
-
-    pub async fn publish(&self, channel: &str, message: &str) -> Result<()> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let _: () = conn.publish(channel, message).await?;
-        Ok(())
-    }
-
-    pub async fn subscribe(&self, channel: &str) -> Result<redis::PubSub> {
-        let conn = self.client.get_async_connection().await?;
-        let mut pubsub = conn.into_pubsub();
-        pubsub.subscribe(channel).await?;
-        Ok(pubsub)
-    }
-
-    pub async fn push_task(&self, queue: &str, task: &str) -> Result<()> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let _: () = conn.lpush(queue, task).await?;
-        Ok(())
-    }
-
-    pub async fn pop_task(&self, queue: &str, timeout_secs: u64) -> Result<Option<String>> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let result: Option<(String, String)> = conn.brpop(queue, timeout_secs as usize).await?;
-        Ok(result.map(|(_, item)| item))
-    }
-
-    pub async fn save_session(&self, session: &StoredSession) -> Result<()> {
-        let key = format!("session:{}", session.session_id);
-        let val = serde_json::to_string(session)?;
-        self.set(&key, &val, 86400).await
-    }
-
-    pub async fn load_session(&self, session_id: &str) -> Result<Option<StoredSession>> {
-        let key = format!("session:{}", session_id);
-        let val = self.get(&key).await?;
-        match val {
-            Some(v) => Ok(Some(serde_json::from_str(&v)?)),
-            None => Ok(None),
+    pub fn get(&self, key: &str) -> Result<Option<String>> {
+        if let Some(ref client) = self.redis_client {
+            let mut conn = client.get_connection()?;
+            let val: Option<String> = redis::cmd("GET").arg(key).query(&mut conn)?;
+            Ok(val)
+        } else {
+            Ok(self.memory.lock().unwrap().get(key).cloned())
         }
     }
 
-    pub async fn save_node_state(&self, node_id: &str, state: &str) -> Result<()> {
-        self.set(&format!("node:{}:state", node_id), state, 604800).await
-    }
-
-    pub async fn load_node_state(&self, node_id: &str) -> Result<Option<String>> {
-        self.get(&format!("node:{}:state", node_id)).await
-    }
-
-    pub async fn log_event(&self, agent_id: &str, event: &str) -> Result<()> {
-        let key = format!("log:{}", agent_id);
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let _: () = conn.lpush(&key, event).await?;
-        let _: () = conn.ltrim(&key, 0, 999).await?;
+    pub fn delete(&self, key: &str) -> Result<()> {
+        if let Some(ref client) = self.redis_client {
+            let mut conn = client.get_connection()?;
+            let _: () = redis::cmd("DEL").arg(key).query(&mut conn)?;
+        } else {
+            self.memory.lock().unwrap().remove(key);
+        }
         Ok(())
     }
 
-    pub async fn recent_logs(&self, agent_id: &str, count: usize) -> Result<Vec<String>> {
-        let key = format!("log:{}", agent_id);
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
-        let logs: Vec<String> = conn.lrange(&key, 0, count as isize - 1).await?;
-        Ok(logs)
+    pub fn list_keys(&self, prefix: &str) -> Result<Vec<String>> {
+        if let Some(ref client) = self.redis_client {
+            let mut conn = client.get_connection()?;
+            let keys: Vec<String> = redis::cmd("KEYS").arg(format!("{}*", prefix)).query(&mut conn)?;
+            Ok(keys)
+        } else {
+            let mem = self.memory.lock().unwrap();
+            Ok(mem.keys().filter(|k| k.starts_with(prefix)).cloned().collect())
+        }
+    }
+
+    /// Append to a list (journal-friendly)
+    pub fn list_append(&self, key: &str, value: &str, max_len: usize) -> Result<()> {
+        if let Some(ref client) = self.redis_client {
+            let mut conn = client.get_connection()?;
+            let _: () = redis::cmd("LPUSH").arg(key).arg(value).query(&mut conn)?;
+            let _: () = redis::cmd("LTRIM").arg(key).arg(0).arg(max_len as isize - 1).query(&mut conn)?;
+        } else {
+            let mut mem = self.memory.lock().unwrap();
+            let entry = mem.entry(key.to_string()).or_insert_with(String::new);
+            if !entry.is_empty() { entry.insert(0, '\n'); }
+            entry.insert_str(0, value);
+        }
+        Ok(())
+    }
+
+    /// Read recent items from a list
+    pub fn list_range(&self, key: &str, start: isize, stop: isize) -> Result<Vec<String>> {
+        if let Some(ref client) = self.redis_client {
+            let mut conn = client.get_connection()?;
+            let items: Vec<String> = redis::cmd("LRANGE").arg(key).arg(start).arg(stop).query(&mut conn)?;
+            Ok(items)
+        } else {
+            let mem = self.memory.lock().unwrap();
+            if let Some(val) = mem.get(key) {
+                Ok(val.lines().skip(start as usize).take((stop - start) as usize).map(String::from).collect())
+            } else { Ok(vec![]) }
+        }
+    }
+
+    /// Publish/subscribe for real-time events
+    pub fn publish(&self, channel: &str, message: &str) -> Result<()> {
+        if let Some(ref client) = self.redis_client {
+            let mut conn = client.get_connection()?;
+            let _: () = redis::cmd("PUBLISH").arg(channel).arg(message).query(&mut conn)?;
+        }
+        Ok(())
     }
 }

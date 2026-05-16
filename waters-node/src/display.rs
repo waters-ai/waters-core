@@ -29,7 +29,7 @@ pub fn print_node_info(id_short: &str, name: &str, llm_display: &str) {
     println!();
 }
 
-pub fn print_tools(tools: &[String]) {
+pub fn print_tools(tools: &[&str]) {
     println!("  {0}{1}Tools{2}{3}", BOLD, RESET, DIM, RESET);
     for t in tools {
         println!("    {}- {}{}{}", DIM, CYAN, t, RESET);
@@ -88,6 +88,7 @@ pub async fn demo_tools(tools: &Arc<crate::tools::ToolRegistry>, api_state: &Arc
     let ctx = crate::tools::ToolContext {
         workspace: ".".into(),
         session_path: ".waters/sessions".into(),
+        kvstore: None,
     };
     if let Ok(result) = tools.call("exec_shell", &ctx,
         serde_json::json!({"command": "echo '🌊 waters-node: network ready. Demo OK.'"}))

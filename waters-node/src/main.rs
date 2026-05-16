@@ -17,6 +17,7 @@ mod task;
 mod mode;
 mod agent;
 mod skill;
+mod store;
 mod bridge;
 mod journal;
 mod offline;
@@ -33,6 +34,7 @@ use bridge::BridgePool;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::info;
 
 use display::*;
 
@@ -93,19 +95,33 @@ async fn main() -> Result<()> {
     let bridges_file = bridge::BridgePool::load_config(&args.bridges);
     let mut bridge_pool = bridge::BridgePool::new();
 
+    // Load link profiles for DTN bandwidth management
+    for link in &bridges_file.links {
+        bridge_pool.governor.add_link(link.clone());
+        info!("Link profile loaded: {} ({} Kbps)", link.name, link.max_bandwidth_kbps);
+    }
+
     // Register LLM bridge
     let llm_name = format!("llm-{}", bridges_file.llm.provider);
-    bridge_pool.register(Box::new(bridge::LlmBridge::new(&llm_name, &bridges_file.llm)));
+    bridge_pool.register(
+        &llm_name,
+        Box::new(bridge::LlmBridge::new(&llm_name, &bridges_file.llm)),
+        bridge::BridgeInfo::new(&llm_name, bridge::BridgeWeight::Heavy, 1, 50),
+    );
     let llm_display = format!("{}{}{}", GREEN, llm_name, RESET);
     print_node_info(&id_short, node.name(), &llm_display);
 
     // Register Chat bridge
     match bridges_file.chat.transport.as_str() {
         "telegram" => {
-            bridge_pool.register(Box::new(bridge::ChatBridge::new_telegram("chat", &bridges_file.chat.token)));
+            bridge_pool.register("chat",
+                Box::new(bridge::ChatBridge::new_telegram("chat", &bridges_file.chat.token)),
+                bridge::BridgeInfo::new("chat", bridge::BridgeWeight::Light, 1, 5));
         }
         "stdin" | _ => {
-            bridge_pool.register(Box::new(bridge::ChatBridge::new_stdin("chat")));
+            bridge_pool.register("chat",
+                Box::new(bridge::ChatBridge::new_stdin("chat")),
+                bridge::BridgeInfo::new("chat", bridge::BridgeWeight::Light, 1, 5));
         }
     }
 
@@ -121,18 +137,42 @@ async fn main() -> Result<()> {
                     api_key: bcfg.config.get("api_key").cloned().unwrap_or_default(),
                     system_prompt: bcfg.config.get("system_prompt").cloned().unwrap_or_default(),
                 };
-                bridge_pool.register(Box::new(bridge::LlmBridge::new(&bcfg.name, &llm_cfg)));
+                bridge_pool.register(&bcfg.name,
+                    Box::new(bridge::LlmBridge::new(&bcfg.name, &llm_cfg)),
+                    bridge::BridgeInfo::new(&bcfg.name, bridge::BridgeWeight::Heavy, 2, 50));
             }
             "voice" => {
                 let url = bcfg.config.get("url").cloned().unwrap_or_default();
-                bridge_pool.register(Box::new(bridge::VoiceBridge::new(&bcfg.name, &url)));
+                bridge_pool.register(&bcfg.name,
+                    Box::new(bridge::VoiceBridge::new(&bcfg.name, &url)),
+                    bridge::BridgeInfo::new(&bcfg.name, bridge::BridgeWeight::Heavy, 3, 500));
             }
             _ => tracing::warn!("Unknown bridge provider: {}", bcfg.provider),
         }
     }
 
+    // Parse MCP servers and register each tool as a bridge
+    let mcp_client = Arc::new(std::sync::Mutex::new(mcp::McpClient::new()));
+    for mcp_cfg in &bridges_file.mcp_servers {
+        {
+            let mut client = mcp_client.lock().unwrap();
+            client.register(&mcp_cfg.name, "stdio", &mcp_cfg.command, &mcp_cfg.args);
+        }
+        let weight = if mcp_cfg.weight == "heavy" { bridge::BridgeWeight::Heavy } else { bridge::BridgeWeight::Light };
+        for tool in &mcp_cfg.tools {
+            let bridge_name = format!("{}-{}", mcp_cfg.name, tool);
+            bridge_pool.register(&bridge_name,
+                Box::new(bridge::McpBridge::new(&bridge_name, &mcp_cfg.name, tool, mcp_client.clone())),
+                bridge::BridgeInfo::new(&bridge_name, weight, mcp_cfg.priority, mcp_cfg.bandwidth_kbps));
+        }
+        info!("MCP server registered: {} ({} tools, {} Kbps, priority {})",
+            mcp_cfg.name, mcp_cfg.tools.len(), mcp_cfg.bandwidth_kbps, mcp_cfg.priority);
+    }
+
     // Register builtin search bridges
-    bridge_pool.register(Box::new(bridge::ChatBridge::new_stdin("duckduckgo")));
+    bridge_pool.register("duckduckgo",
+        Box::new(bridge::ChatBridge::new_stdin("duckduckgo")),
+        bridge::BridgeInfo::new("duckduckgo", bridge::BridgeWeight::Light, 3, 10));
 
     let mut skill_reg = skill::SkillRegistry::new();
     skill_reg.load_from(&std::path::Path::new("skills"));
@@ -141,10 +181,19 @@ async fn main() -> Result<()> {
         println!("  {0}{1}Skills{2}{3}   {4}{5}{6}", DIM, BOLD, RESET, DIM, CYAN, skill_count, RESET);
     }
 
+    // Initialize KvStore (Redis or in-memory)
+    let kvstore = {
+        let redis_url = std::env::var("REDIS_URL").ok();
+        Arc::new(store::KvStore::new(redis_url.as_deref()))
+    };
+    if kvstore.is_connected() {
+        println!("  {}KvStore{}   ✅ Redis connected", BOLD, RESET);
+    }
+
     let tools = Arc::new(tools::ToolRegistry::new());
     print_tools(&tools.list());
 
-    let agent_journal = journal::AgentJournal::new(&std::path::Path::new(".waters/logs"));
+    let agent_journal = journal::AgentJournal::new(&std::path::Path::new(".waters/logs"), Some(kvstore.clone()));
 
     let convo_path = PathBuf::from(".waters/profile.json");
     let mut convo = convo::Convo::load(&convo_path);
@@ -315,7 +364,7 @@ async fn main() -> Result<()> {
             handlers::handle_slash(
                 parts[0], parts.get(1).copied().unwrap_or(""),
                 cmd,
-                &mut mode_engine, &skill_reg, &bridge_pool,
+                &mut mode_engine, &skill_reg, &mut bridge_pool,
                 &gossip, &channel_mgr, &api_state, &agent_journal,
                 &mut subagents, &mut agent_mgr, &mut session_mgr,
                 &mut convo, &convo_path,
