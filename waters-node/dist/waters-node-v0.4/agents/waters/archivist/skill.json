@@ -1,0 +1,12 @@
+{
+  "name": "waters-archivist",
+  "version": "1.0.0",
+  "description": "Управление памятью группы: индексирует findings в ChromaDB, строит граф связей в LightRAG, поддерживает порядок в Redis. Фоновая работа, не требует участия пользователя.",
+  "category": "agents/waters",
+  "role": "archivist",
+  "llm": { "preferred": "qwen2.5:0.5b", "min": "0.5b" },
+  "bridges": [],
+  "tools": ["read_file","grep_files"],
+  "output_types": ["index","graph_update","vector","cleanup"],
+  "imported_from": null
+}

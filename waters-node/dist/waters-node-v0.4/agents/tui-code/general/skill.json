@@ -1,0 +1,12 @@
+{
+  "name": "tui-general",
+  "version": "1.0.0",
+  "description": "Универсальный агент. Может делать любые задачи: читать, писать, искать, запускать команды. Выбор по умолчанию, когда не подходит ни один другой.",
+  "category": "agents/tui-code",
+  "role": "general",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["mcp-nasa","duckduckgo"],
+  "tools": ["read_file","write_file","grep_files","web_search","exec_shell","fetch_url"],
+  "output_types": ["report","code","data"],
+  "imported_from": "tui"
+}

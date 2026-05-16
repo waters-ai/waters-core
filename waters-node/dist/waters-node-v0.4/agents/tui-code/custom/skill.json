@@ -1,0 +1,12 @@
+{
+  "name": "tui-custom",
+  "version": "1.0.0",
+  "description": "Специализированный агент с узким набором инструментов. Используется когда задача требует строго определённые инструменты и никакие другие.",
+  "category": "agents/tui-code",
+  "role": "custom",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": [],
+  "tools": ["read_file","grep_files"],
+  "output_types": ["custom","specialized"],
+  "imported_from": "tui"
+}

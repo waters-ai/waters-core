@@ -1,0 +1,10 @@
+{
+  "name": "general",
+  "version": "1.0.0",
+  "description": "Универсальный агент. Выполняет любые задачи пользователя.",
+  "author": "constructor",
+  "tags": ["general", "default"],
+  "dependencies": [],
+  "bridges": [],
+  "bookmarks": []
+}

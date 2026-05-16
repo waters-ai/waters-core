@@ -1,0 +1,12 @@
+{
+  "name": "waters-synthesizer",
+  "version": "1.0.0",
+  "description": "Синтез знаний: пишет отчёты, статьи, сводки. Объединяет findings из разных источников в связный документ. Понимает контекст группы, ссылается на evidence, формулирует выводы. Лучший LLM обязателен.",
+  "category": "agents/waters",
+  "role": "synthesizer",
+  "llm": { "preferred": "deepseek-v4-pro", "min": "0.5b" },
+  "bridges": ["mcp-nasa","mcp-spectra","mcp-trajectory"],
+  "tools": ["write_file","read_file","grep_files","web_search"],
+  "output_types": ["report","summary","article","synthesis"],
+  "imported_from": null
+}

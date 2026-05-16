@@ -1,0 +1,12 @@
+{
+  "name": "scout-us",
+  "version": "1.0.0",
+  "description": "Search in US/global internet segment. DuckDuckGo, English sources.",
+  "author": "constructor",
+  "tags": ["search", "us", "en"],
+  "dependencies": ["general"],
+  "bridges": [],
+  "bookmarks": [
+    {"description": "Search news EN", "test": "web_search('latest AI news', 'us')", "expected": "results > 0"}
+  ]
+}

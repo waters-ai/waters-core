@@ -1,0 +1,12 @@
+{
+  "name": "waters-video-editor",
+  "version": "1.0.0",
+  "description": "Видеомонтаж: склейка, цветокоррекция, переходы, наложение текста и графики. Работает с FFmpeg, DaVinci Resolve, OBS. Создаёт тизеры, нарезки, полноценные ролики. Поддерживает batch-обработку очереди clips.",
+  "category": "agents/waters",
+  "role": "video-editor",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "1.5b" },
+  "bridges": ["mcp-ffmpeg", "mcp-obs", "mcp-resolve"],
+  "tools": ["read_file", "write_file", "exec_shell", "fetch_url"],
+  "output_types": ["video", "clip", "timeline", "transition", "render"],
+  "imported_from": null
+}

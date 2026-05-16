@@ -1,0 +1,42 @@
+{
+  "name": "merged-waters-collector-waters-analyst",
+  "version": "1.0.0",
+  "description": "Объединение Сбор сырых данных из внешних источников: NASA API, веб-страницы, открытые базы. Не анализирует — собирает и возвращает структурированные данные с указанием источника и уверенности. и Анализ и классификация данных. Находит паттерны, классифицирует объекты, выявляет аномалии. Использует спектральные данные, траектории, числовые модели. Возвращает classification confidence.. Умеет: mcp-nasa, duckduckgo, mcp-spectra, mcp-trajectory. Вырос из: waters-collector + waters-analyst.",
+  "author": "merged",
+  "tags": [],
+  "dependencies": [
+    "waters-collector",
+    "waters-analyst"
+  ],
+  "bridges": [
+    "mcp-nasa",
+    "duckduckgo",
+    "mcp-spectra",
+    "mcp-trajectory"
+  ],
+  "bookmarks": [],
+  "category": "agents/merged",
+  "role": "merged",
+  "llm": {
+    "preferred": "deepseek-v4-flash",
+    "min": "0.5b",
+    "alternatives": []
+  },
+  "tools": [
+    "fetch_url",
+    "web_search",
+    "grep_files",
+    "exec_shell",
+    "read_file"
+  ],
+  "output_types": [
+    "raw_data",
+    "measurement",
+    "observation",
+    "classification",
+    "pattern",
+    "anomaly",
+    "trajectory"
+  ],
+  "imported_from": null
+}

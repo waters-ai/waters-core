@@ -1,0 +1,12 @@
+{
+  "name": "waters-analyst",
+  "version": "1.0.0",
+  "description": "Анализ и классификация данных. Находит паттерны, классифицирует объекты, выявляет аномалии. Использует спектральные данные, траектории, числовые модели. Возвращает classification confidence.",
+  "category": "agents/waters",
+  "role": "analyst",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["mcp-spectra","mcp-trajectory"],
+  "tools": ["grep_files","exec_shell","read_file"],
+  "output_types": ["classification","pattern","anomaly","trajectory"],
+  "imported_from": null
+}

@@ -1,0 +1,12 @@
+{
+  "name": "waters-scout",
+  "version": "1.0.0",
+  "description": "Разведка и поиск информации. Многоязычный поиск, сбор фактов, проверка источников. Возвращает evidence с цитатами и ссылками. Понимает русский, английский, китайский.",
+  "category": "agents/waters",
+  "role": "scout",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["duckduckgo","scout-yandex","scout-youtube"],
+  "tools": ["web_search","fetch_url","grep_files"],
+  "output_types": ["intel","evidence","sources","fact_check"],
+  "imported_from": null
+}

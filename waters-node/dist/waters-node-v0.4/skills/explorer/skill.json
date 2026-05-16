@@ -1,0 +1,10 @@
+{
+  "name": "explorer",
+  "version": "1.0.0",
+  "description": "Исследователь. Ищет, анализирует, собирает информацию из разных регионов.",
+  "author": "constructor",
+  "tags": ["search", "explore"],
+  "dependencies": ["general", "scout-ru", "scout-us", "scout-cn"],
+  "bridges": ["duckduckgo", "yandex.search", "baidu.search"],
+  "bookmarks": []
+}

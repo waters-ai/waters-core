@@ -1,0 +1,12 @@
+{
+  "name": "tui-reviewer",
+  "version": "1.0.0",
+  "description": "Ревью кода и данных. Проверяет на ошибки, оценивает качество, выставляет severity. Ничего не правит — только даёт заключение с evidence и рисками.",
+  "category": "agents/tui-code",
+  "role": "review",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["mcp-spectra"],
+  "tools": ["read_file","grep_files","list_dir"],
+  "output_types": ["review","audit","risk_assessment"],
+  "imported_from": "tui"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "waters-collector",
+  "version": "1.0.0",
+  "description": "Сбор сырых данных из внешних источников: NASA API, веб-страницы, открытые базы. Не анализирует — собирает и возвращает структурированные данные с указанием источника и уверенности.",
+  "category": "agents/waters",
+  "role": "collector",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["mcp-nasa","duckduckgo"],
+  "tools": ["fetch_url","web_search"],
+  "output_types": ["raw_data","measurement","observation"],
+  "imported_from": null
+}

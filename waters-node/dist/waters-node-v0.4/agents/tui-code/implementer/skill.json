@@ -1,0 +1,12 @@
+{
+  "name": "tui-implementer",
+  "version": "1.0.0",
+  "description": "Реализация изменений. Пишет код, создаёт файлы, применяет патчи. Работает строго по задаче, без лишних правок. Минимальное изменение — максимальный эффект.",
+  "category": "agents/tui-code",
+  "role": "implement",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["mcp-nasa"],
+  "tools": ["read_file","write_file","grep_files","exec_shell","fetch_url"],
+  "output_types": ["code","patch","implementation"],
+  "imported_from": "tui"
+}

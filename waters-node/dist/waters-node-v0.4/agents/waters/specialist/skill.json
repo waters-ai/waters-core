@@ -1,0 +1,12 @@
+{
+  "name": "waters-specialist",
+  "version": "1.0.0",
+  "description": "Специализированный агент под конкретную задачу из SKILL.md. Загружает кастомный skill с bridges, tools и промптом. Роль определяется содержимым skill.json.",
+  "category": "agents/waters",
+  "role": "specialist",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": [],
+  "tools": ["read_file","web_search","fetch_url"],
+  "output_types": ["custom","specialized","skill_driven"],
+  "imported_from": null
+}

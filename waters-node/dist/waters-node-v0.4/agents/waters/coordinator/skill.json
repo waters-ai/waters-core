@@ -1,0 +1,12 @@
+{
+  "name": "waters-coordinator",
+  "version": "1.0.0",
+  "description": "Оркестрация группы: распределяет задачи, следит за прогрессом, назначает агентов. Умеет agent_open, agent_eval, agent_close. Возвращает статус группы и план работ.",
+  "category": "agents/waters",
+  "role": "coordinator",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": [],
+  "tools": ["agent_open","agent_eval","agent_close"],
+  "output_types": ["order","status","plan","report"],
+  "imported_from": null
+}

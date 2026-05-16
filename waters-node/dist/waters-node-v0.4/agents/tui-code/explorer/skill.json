@@ -1,0 +1,12 @@
+{
+  "name": "tui-explorer",
+  "version": "1.0.0",
+  "description": "Быстрый поиск и исследование. Только чтение: файлы, код, веб-поиск. Ничего не меняет. Идеально для сбора информации без риска что-то сломать.",
+  "category": "agents/tui-code",
+  "role": "explore",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["duckduckgo"],
+  "tools": ["read_file","grep_files","web_search","fetch_url","list_dir"],
+  "output_types": ["intel","evidence","sources"],
+  "imported_from": "tui"
+}

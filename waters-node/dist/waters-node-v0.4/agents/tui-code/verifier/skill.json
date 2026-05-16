@@ -1,0 +1,12 @@
+{
+  "name": "tui-verifier",
+  "version": "1.0.0",
+  "description": "Проверка и тестирование. Запускает тесты, валидирует результаты, сообщает pass/fail с доказательствами. Не чинит ошибки — только находит и докладывает.",
+  "category": "agents/tui-code",
+  "role": "verify",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["mcp-trajectory"],
+  "tools": ["exec_shell","grep_files","read_file","list_dir"],
+  "output_types": ["test_report","validation","pass_fail"],
+  "imported_from": "tui"
+}

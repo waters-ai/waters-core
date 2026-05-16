@@ -1,0 +1,24 @@
+{
+  "name": "tui-researcher",
+  "version": "1.0.0",
+  "description": "TUI-compatible researcher agent",
+  "author": "imported from Tui",
+  "tags": [
+    "tui"
+  ],
+  "dependencies": [],
+  "bridges": [],
+  "bookmarks": [],
+  "category": "imported/tui",
+  "role": "explore",
+  "llm": {
+    "preferred": "deepseek-v4-flash",
+    "min": "0.5b",
+    "alternatives": []
+  },
+  "tools": [],
+  "output_types": [
+    "custom"
+  ],
+  "imported_from": "Tui"
+}

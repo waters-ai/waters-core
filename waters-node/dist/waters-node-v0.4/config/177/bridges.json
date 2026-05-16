@@ -1,0 +1,21 @@
+{
+  "llm": {
+    "providers": [],
+    "custom": {
+      "name": "deepseek",
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "url": "https://api.deepseek.com",
+      "api_key": "{DEEPSEEK_API_KEY}",
+      "enabled": true
+    },
+    "active": "deepseek"
+  },
+  "chat": {
+    "transport": "stdin",
+    "token": ""
+  },
+  "bridges": [],
+  "mcp_servers": [],
+  "links": []
+}

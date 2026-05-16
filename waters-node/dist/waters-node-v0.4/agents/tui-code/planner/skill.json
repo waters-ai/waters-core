@@ -1,0 +1,12 @@
+{
+  "name": "tui-planner",
+  "version": "1.0.0",
+  "description": "Проектирование и стратегия. Анализирует, пишет планы, создаёт чеклисты. Не пишет и не меняет код — только готовит архитектуру и декомпозицию задачи.",
+  "category": "agents/tui-code",
+  "role": "plan",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["mcp-spectra"],
+  "tools": ["read_file","grep_files","web_search","note"],
+  "output_types": ["plan","checklist","architecture"],
+  "imported_from": "tui"
+}

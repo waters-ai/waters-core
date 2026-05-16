@@ -1,0 +1,12 @@
+{
+  "name": "waters-lab-operator",
+  "version": "1.0.0",
+  "description": "Управление лабораторными приборами: спектрометры, микроскопы, осциллографы, мультиметры, pH-метры, термокамеры. Сбор показаний, калибровка, логирование. Работает через MCP-мосты к USB/GPIB/Ethernet-приборам.",
+  "category": "agents/waters",
+  "role": "lab-operator",
+  "llm": { "preferred": "deepseek-v4-flash", "min": "0.5b" },
+  "bridges": ["mcp-spectrometer", "mcp-oscilloscope", "mcp-microscope", "mcp-sensors", "mcp-gpib"],
+  "tools": ["read_file", "write_file", "exec_shell", "fetch_url"],
+  "output_types": ["measurement", "spectrum", "micrograph", "calibration", "timeseries", "log"],
+  "imported_from": null
+}
