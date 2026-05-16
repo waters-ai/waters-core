@@ -840,6 +840,15 @@
          - Cargo.toml, task modes (Plan/Execute/Stop), agent cargo (OnboardLlm)
          - dist/ в репозитории: dist/linux/ + dist/windows/
          - README.md с инструкцией по развёртыванию
+[2026-05-16T07:30:00Z] [REFACTOR] main.rs → display.rs + handlers.rs + tui_agent.rs
+         - main.rs: 760 → 275 строк (init + loop, dispatch)
+         - display.rs: ANSI, banner, demo_response, demo_tools
+         - handlers.rs: handle_slash + handle_natural + handle_convo
+         - tui_agent.rs: 10 builtin TUI-агентов (tui- префикс)
+         - AgentJsonMessage: JSON-формат для коммуникации агентов
+         - Agent struct: добавлены personal_resources, active_skill
+         - Все warnings: 56 (dead code, не влияет на работу)
+[2026-05-16T07:30:00Z] [DONE]  v0.3.0 — refactored build
 [2026-05-16T06:30:00Z] [STATE] Проект: waters-node, переход к сборке
 [2026-05-16T06:30:00Z] [PLAN]  План:
           1. Создать Cargo.toml для waters-node (отсутствует в репозитории)

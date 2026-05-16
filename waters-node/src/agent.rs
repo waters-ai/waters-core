@@ -6,8 +6,10 @@ use tracing::info;
 pub struct Agent {
     pub name: String,
     pub role: String,
-    pub agent_type: String,   // "personal" or "shared"
+    pub agent_type: String,
     pub owner_node: String,
+    pub personal_resources: Vec<String>,
+    pub active_skill: Option<String>,
     pub status: String,
 }
 
@@ -30,6 +32,8 @@ impl AgentManager {
             role: role.to_string(),
             agent_type: agent_type.to_string(),
             owner_node: owner.to_string(),
+            personal_resources: Vec::new(),
+            active_skill: None,
             status: "idle".into(),
         };
         self.mine.insert(name.to_string(), agent);
@@ -42,6 +46,8 @@ impl AgentManager {
             role: role.to_string(),
             agent_type: agent_type.to_string(),
             owner_node: peer_node.to_string(),
+            personal_resources: Vec::new(),
+            active_skill: None,
             status: "idle".into(),
         };
         self.from_peers.insert(format!("{}@{}", name, peer_node), agent);
