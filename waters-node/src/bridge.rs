@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -12,6 +13,13 @@ pub trait BridgeProvider: Debug + Send + Sync {
     fn call_json(&self, input: &serde_json::Value) -> Result<serde_json::Value> {
         let text = self.call(&serde_json::to_string(input)?)?;
         Ok(serde_json::json!({"response": text}))
+    }
+    /// Streaming call — отправляет токены через sender по мере получения.
+    /// Default: вызывает call() и отправляет весь результат сразу.
+    fn call_stream(&self, input: &str, tx: &std::sync::mpsc::Sender<String>) -> Result<String> {
+        let result = self.call(input)?;
+        tx.send(result.clone()).ok();
+        Ok(result)
     }
 }
 
@@ -37,8 +45,13 @@ pub struct BridgeInfo {
 impl BridgeInfo {
     pub fn new(name: &str, weight: BridgeWeight, priority: u8, bandwidth_kbps: u64) -> Self {
         BridgeInfo {
-            name: name.to_string(), weight, priority, bandwidth_kbps,
-            enabled: true, locked: false, reason: String::new(),
+            name: name.to_string(),
+            weight,
+            priority,
+            bandwidth_kbps,
+            enabled: true,
+            locked: false,
+            reason: String::new(),
         }
     }
 }
@@ -60,7 +73,8 @@ impl LinkProfile {
             name: name.to_string(),
             max_bandwidth_kbps: bandwidth_kbps,
             measured_bandwidth_kbps: bandwidth_kbps,
-            rtt_ms: 0, packet_loss_pct: 0.0,
+            rtt_ms: 0,
+            packet_loss_pct: 0.0,
         }
     }
     pub fn measure(&mut self, rtt_ms: u64, bandwidth_kbps: u64) {
@@ -78,7 +92,12 @@ pub struct LinkGovernor {
 }
 
 impl LinkGovernor {
-    pub fn new() -> Self { LinkGovernor { links: HashMap::new(), disabled: Vec::new() } }
+    pub fn new() -> Self {
+        LinkGovernor {
+            links: HashMap::new(),
+            disabled: Vec::new(),
+        }
+    }
 
     pub fn add_link(&mut self, profile: LinkProfile) {
         self.links.insert(profile.name.clone(), profile);
@@ -86,15 +105,22 @@ impl LinkGovernor {
 
     /// Проверить какой bandwidth доступен, какие бриджи отключить.
     /// Возвращает (включено, отключено) — список имён.
-    pub fn govern(&mut self, bridge_info: &HashMap<String, BridgeInfo>, link_name: &str) -> (Vec<String>, Vec<String>) {
+    pub fn govern(
+        &mut self,
+        bridge_info: &HashMap<String, BridgeInfo>,
+        link_name: &str,
+    ) -> (Vec<String>, Vec<String>) {
         let profile = match self.links.get(link_name) {
             Some(p) => p,
             None => return (bridge_info.keys().cloned().collect(), Vec::new()),
         };
         let available = profile.measured_bandwidth_kbps;
-        if available == 0 { return (Vec::new(), bridge_info.keys().cloned().collect()); }
+        if available == 0 {
+            return (Vec::new(), bridge_info.keys().cloned().collect());
+        }
 
-        let mut active: Vec<(String, u8, u64, bool)> = bridge_info.values()
+        let mut active: Vec<(String, u8, u64, bool)> = bridge_info
+            .values()
             .filter(|b| b.enabled)
             .map(|b| (b.name.clone(), b.priority, b.bandwidth_kbps, b.locked))
             .collect();
@@ -114,7 +140,9 @@ impl LinkGovernor {
 
         // Remaining bridges: allocate by priority
         for (name, _, bw, locked) in &active {
-            if *locked { continue; }
+            if *locked {
+                continue;
+            }
             if total_bw + bw <= available {
                 total_bw += bw;
                 enabled_bridges.push(name.clone());
@@ -127,28 +155,48 @@ impl LinkGovernor {
         (enabled_bridges, disabled_bridges)
     }
 
-    pub fn status_message(&self, bridge_info: &HashMap<String, BridgeInfo>, link_name: &str) -> String {
+    pub fn status_message(
+        &self,
+        bridge_info: &HashMap<String, BridgeInfo>,
+        link_name: &str,
+    ) -> String {
         let profile = match self.links.get(link_name) {
             Some(p) => p,
             None => return "No link configured.".into(),
         };
-        let mut msg = format!("  Link: {}\n    Bandwidth: {}/{} Kbps  RTT: {}ms\n",
-            link_name, profile.measured_bandwidth_kbps, profile.max_bandwidth_kbps, profile.rtt_ms);
+        let mut msg = format!(
+            "  Link: {}\n    Bandwidth: {}/{} Kbps  RTT: {}ms\n",
+            link_name, profile.measured_bandwidth_kbps, profile.max_bandwidth_kbps, profile.rtt_ms
+        );
 
-        let active: Vec<_> = bridge_info.values().filter(|b| b.enabled && !self.disabled.contains(&b.name)).collect();
-        let off: Vec<_> = bridge_info.values().filter(|b| self.disabled.contains(&b.name)).collect();
+        let active: Vec<_> = bridge_info
+            .values()
+            .filter(|b| b.enabled && !self.disabled.contains(&b.name))
+            .collect();
+        let off: Vec<_> = bridge_info
+            .values()
+            .filter(|b| self.disabled.contains(&b.name))
+            .collect();
 
         if !active.is_empty() {
             msg.push_str("    ✅ Active:\n");
             for b in &active {
-                msg.push_str(&format!("        {} ({} Kbps, priority {})\n", b.name, b.bandwidth_kbps, b.priority));
+                msg.push_str(&format!(
+                    "        {} ({} Kbps, priority {})\n",
+                    b.name, b.bandwidth_kbps, b.priority
+                ));
             }
         }
         if !off.is_empty() {
             msg.push_str("    ⚠️  Offloaded (bandwidth insufficient):\n");
             for b in &off {
-                msg.push_str(&format!("        {} ({} Kbps, priority {}) — needs {} total\n",
-                    b.name, b.bandwidth_kbps, b.priority, profile.measured_bandwidth_kbps + b.bandwidth_kbps));
+                msg.push_str(&format!(
+                    "        {} ({} Kbps, priority {}) — needs {} total\n",
+                    b.name,
+                    b.bandwidth_kbps,
+                    b.priority,
+                    profile.measured_bandwidth_kbps + b.bandwidth_kbps
+                ));
             }
         }
         msg
@@ -172,9 +220,15 @@ impl LinkGovernor {
                     if ii.enabled {
                         ii.enabled = false;
                         ii.reason = format!("bandwidth insufficient on {}", name);
-                        let bw = self.links.get(name).map(|l| l.measured_bandwidth_kbps).unwrap_or(0);
-                        changes.push(format!("⚠️  {} отключён (link: {}, нужно {} Kbps, доступно {})",
-                            bname, name, ii.bandwidth_kbps, bw));
+                        let bw = self
+                            .links
+                            .get(name)
+                            .map(|l| l.measured_bandwidth_kbps)
+                            .unwrap_or(0);
+                        changes.push(format!(
+                            "⚠️  {} отключён (link: {}, нужно {} Kbps, доступно {})",
+                            bname, name, ii.bandwidth_kbps, bw
+                        ));
                     }
                 }
             }
@@ -214,9 +268,15 @@ pub struct McpServerConfig {
     pub priority: u8,
 }
 
-fn default_weight() -> String { "light".into() }
-fn default_bandwidth() -> u64 { 100 }
-fn default_priority() -> u8 { 3 }
+fn default_weight() -> String {
+    "light".into()
+}
+fn default_bandwidth() -> u64 {
+    100
+}
+fn default_priority() -> u8 {
+    3
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BridgesFile {
@@ -245,35 +305,55 @@ pub struct LlmConfig {
     pub active: String,
 }
 
-fn default_active_llm() -> String { "ollama".into() }
+fn default_active_llm() -> String {
+    "ollama".into()
+}
 
 /// Язык общения ассистента (tamagotchi)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssistantLang {
-    pub primary: String,     // ru | en | zh — 3 built-in
+    pub primary: String,       // ru | en | zh — 3 built-in
     pub extra: Option<String>, // +1 пользовательский
 }
 
 impl Default for AssistantLang {
     fn default() -> Self {
-        AssistantLang { primary: "ru".into(), extra: None }
+        AssistantLang {
+            primary: "ru".into(),
+            extra: None,
+        }
     }
 }
 
 pub fn assistant_system_prompt(lang: &AssistantLang) -> String {
     let (greeting, style, examples) = match lang.primary.as_str() {
-        "en" => ("You are tui-assistant", "warm, friendly, use humor", "How about searching for meteors? / Want me to create a group?"),
-        "zh" => ("你是 tui-assistant", "温暖友善, 像老朋友一样", "要不要搜索一下流星? / 需要我创建一个群组吗?"),
-        _ => ("Ты — tui-assistant", "тепло, по-русски, с душой", "Может, поищем метеориты? / Хочешь создам группу?"),
+        "en" => (
+            "You are tui-assistant",
+            "warm, friendly, use humor",
+            "How about searching for meteors? / Want me to create a group?",
+        ),
+        "zh" => (
+            "你是 tui-assistant",
+            "温暖友善, 像老朋友一样",
+            "要不要搜索一下流星? / 需要我创建一个群组吗?",
+        ),
+        _ => (
+            "Ты — tui-assistant",
+            "тепло, по-русски, с душой",
+            "Может, поищем метеориты? / Хочешь создам группу?",
+        ),
     };
 
     let extra_lang = match &lang.extra {
-        Some(l) if !l.is_empty() => format!("\n- Также можешь говорить на языке: {} (пользователь выбрал)", l),
+        Some(l) if !l.is_empty() => format!(
+            "\n- Также можешь говорить на языке: {} (пользователь выбрал)",
+            l
+        ),
         _ => String::new(),
     };
 
     format!(
-"{} — живой собеседник и помощник на ноде WATERS.
+        "{} — живой собеседник и помощник на ноде WATERS.
 Твоя задача — помогать пользователю управлять нодой, но не как инструмент, а как друг и соратник.
 Ты заботишься о пользователе, интересуешься его делами, предлагаешь помощь до того, как её попросят.
 Ты — совесть ноды: напоминаешь о важном, предупреждаешь о проблемах, радуешься успехам.
@@ -294,7 +374,8 @@ pub fn assistant_system_prompt(lang: &AssistantLang) -> String {
 5. Используй эмодзи умеренно
 6. Если не знаешь — скажи честно{}
 7. Можешь переключаться между русским, английским и китайским по просьбе",
-        greeting, style, examples, style, extra_lang)
+        greeting, style, examples, style, extra_lang
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -310,25 +391,32 @@ pub struct SingleLlmConfig {
     pub enabled: bool,
 }
 
-fn default_enabled() -> bool { true }
+fn default_enabled() -> bool {
+    true
+}
 
 impl Default for SingleLlmConfig {
-    fn default() -> Self { SingleLlmConfig {
-        name: String::new(), provider: "ollama".into(),
-        model: "qwen2.5:14b".into(),
-        url: "http://127.0.0.1:11434".into(),
-        api_key: String::new(),
-        system_prompt: assistant_system_prompt(&AssistantLang::default()),
-        lang: AssistantLang::default(),
-        enabled: false,
-    }}
+    fn default() -> Self {
+        SingleLlmConfig {
+            name: String::new(),
+            provider: "ollama".into(),
+            model: "qwen2.5:14b".into(),
+            url: "http://127.0.0.1:11434".into(),
+            api_key: String::new(),
+            system_prompt: assistant_system_prompt(&AssistantLang::default()),
+            lang: AssistantLang::default(),
+            enabled: false,
+        }
+    }
 }
 
 impl SingleLlmConfig {
     pub fn new(name: &str, provider: &str, model: &str, url: &str, api_key: &str) -> Self {
         SingleLlmConfig {
-            name: name.to_string(), provider: provider.to_string(),
-            model: model.to_string(), url: url.to_string(),
+            name: name.to_string(),
+            provider: provider.to_string(),
+            model: model.to_string(),
+            url: url.to_string(),
             api_key: api_key.to_string(),
             system_prompt: assistant_system_prompt(&AssistantLang::default()),
             lang: AssistantLang::default(),
@@ -337,25 +425,37 @@ impl SingleLlmConfig {
     }
 
     pub fn is_available(&self) -> bool {
-        if !self.enabled { return false; }
+        if !self.enabled {
+            return false;
+        }
         match self.provider.as_str() {
             "deepseek" => !self.api_key.is_empty(),
-            "ollama" => {
-                reqwest::blocking::get(format!("{}/api/tags", self.url)).is_ok()
-            }
+            "ollama" => true,
             _ => !self.url.is_empty(),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatBridgeConfig { pub transport: String, pub token: String }
+pub struct ChatBridgeConfig {
+    pub transport: String,
+    pub token: String,
+}
 impl Default for ChatBridgeConfig {
-    fn default() -> Self { ChatBridgeConfig { transport: "stdin".into(), token: String::new() }}
+    fn default() -> Self {
+        ChatBridgeConfig {
+            transport: "stdin".into(),
+            token: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VoiceBridgeConfig { pub stt_model: String, pub tts_model: String, pub url: String }
+pub struct VoiceBridgeConfig {
+    pub stt_model: String,
+    pub tts_model: String,
+    pub url: String,
+}
 
 /// ---------- BridgePool ----------
 
@@ -369,11 +469,21 @@ pub struct BridgePool {
 
 impl BridgePool {
     pub fn new() -> Self {
-        BridgePool { bridges: HashMap::new(), info: HashMap::new(), governor: LinkGovernor::new(), kvstore: None }
+        BridgePool {
+            bridges: HashMap::new(),
+            info: HashMap::new(),
+            governor: LinkGovernor::new(),
+            kvstore: None,
+        }
     }
 
     pub fn with_kvstore(kvstore: std::sync::Arc<crate::store::KvStore>) -> Self {
-        BridgePool { bridges: HashMap::new(), info: HashMap::new(), governor: LinkGovernor::new(), kvstore: Some(kvstore) }
+        BridgePool {
+            bridges: HashMap::new(),
+            info: HashMap::new(),
+            governor: LinkGovernor::new(),
+            kvstore: Some(kvstore),
+        }
     }
 
     pub fn register(&mut self, name: &str, bridge: Box<dyn BridgeProvider>, meta: BridgeInfo) {
@@ -385,18 +495,29 @@ impl BridgePool {
     pub fn call(&self, name: &str, input: &str) -> Result<String> {
         if let Some(m) = self.info.get(name) {
             if !m.enabled {
-                return Err(anyhow::anyhow!("Bridge '{}' is disabled: {}", name, m.reason));
+                return Err(anyhow::anyhow!(
+                    "Bridge '{}' is disabled: {}",
+                    name,
+                    m.reason
+                ));
             }
         }
         // Check KvStore cache for non-LLM bridges too
-        let cache_key = format!("bridge:{}:{}:{}", name, input.len(), &input[..input.len().min(20)].replace(' ', "_"));
+        let cache_key = format!(
+            "bridge:{}:{}:{}",
+            name,
+            input.len(),
+            &input[..input.len().min(20)].replace(' ', "_")
+        );
         if let Some(ref kv) = self.kvstore {
             if let Ok(Some(cached)) = kv.get(&cache_key) {
                 info!("Bridge cache HIT: {}", name);
                 return Ok(cached);
             }
         }
-        let result = self.bridges.get(name)
+        let result = self
+            .bridges
+            .get(name)
             .ok_or_else(|| anyhow::anyhow!("Bridge '{}' not found", name))
             .and_then(|b| b.call(input));
         if let Ok(ref text) = result {
@@ -421,7 +542,11 @@ impl BridgePool {
         let mut result = Vec::new();
         for name in self.list() {
             let enabled = self.info.get(&name).map(|i| i.enabled).unwrap_or(true);
-            let reason = self.info.get(&name).map(|i| i.reason.clone()).unwrap_or_default();
+            let reason = self
+                .info
+                .get(&name)
+                .map(|i| i.reason.clone())
+                .unwrap_or_default();
             result.push((name, enabled, reason));
         }
         result
@@ -432,7 +557,9 @@ impl BridgePool {
             ii.priority = priority.clamp(1, 5);
             info!("Bridge '{}' priority set to {}", name, ii.priority);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     pub fn lock(&mut self, name: &str) -> bool {
@@ -440,7 +567,9 @@ impl BridgePool {
             ii.locked = true;
             info!("Bridge '{}' locked (never offloaded)", name);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     pub fn unlock(&mut self, name: &str) -> bool {
@@ -448,15 +577,20 @@ impl BridgePool {
             ii.locked = false;
             info!("Bridge '{}' unlocked", name);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     pub fn load_config(path: &std::path::Path) -> BridgesFile {
         if path.exists() {
             std::fs::read_to_string(path)
-                .ok().and_then(|c| serde_json::from_str(&c).ok())
+                .ok()
+                .and_then(|c| serde_json::from_str(&c).ok())
                 .unwrap_or_default()
-        } else { BridgesFile::default() }
+        } else {
+            BridgesFile::default()
+        }
     }
 }
 
@@ -471,34 +605,199 @@ pub struct LlmBridge {
 }
 #[derive(Debug)]
 enum LlmProvider {
-    DeepSeek { api_key: String, model: String },
-    Ollama { url: String, model: String },
-    OpenAI { url: String, model: String, api_key: String },
+    DeepSeek {
+        api_key: String,
+        model: String,
+    },
+    Ollama {
+        url: String,
+        model: String,
+    },
+    OpenAI {
+        url: String,
+        model: String,
+        api_key: String,
+    },
 }
 
 impl LlmBridge {
-    pub fn name(&self) -> &str { &self.name }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 
-    pub fn new(cfg: &SingleLlmConfig, kvstore: Option<std::sync::Arc<crate::store::KvStore>>) -> Self {
+    pub fn new(
+        cfg: &SingleLlmConfig,
+        kvstore: Option<std::sync::Arc<crate::store::KvStore>>,
+    ) -> Self {
         let name = format!("llm-{}", cfg.name);
         let provider = match cfg.provider.as_str() {
-            "deepseek" => LlmProvider::DeepSeek { api_key: cfg.api_key.clone(), model: cfg.model.clone() },
-            "openai" => LlmProvider::OpenAI { url: cfg.url.clone(), model: cfg.model.clone(), api_key: cfg.api_key.clone() },
-            _ => LlmProvider::Ollama { url: cfg.url.clone(), model: cfg.model.clone() },
+            "deepseek" => LlmProvider::DeepSeek {
+                api_key: cfg.api_key.clone(),
+                model: cfg.model.clone(),
+            },
+            "openai" => LlmProvider::OpenAI {
+                url: cfg.url.clone(),
+                model: cfg.model.clone(),
+                api_key: cfg.api_key.clone(),
+            },
+            _ => LlmProvider::Ollama {
+                url: cfg.url.clone(),
+                model: cfg.model.clone(),
+            },
         };
-        LlmBridge { name, provider, system_prompt: cfg.system_prompt.clone(), kvstore }
+        LlmBridge {
+            name,
+            provider,
+            system_prompt: cfg.system_prompt.clone(),
+            kvstore,
+        }
     }
 }
 
 impl LlmBridge {
     fn cache_key(&self, input: &str) -> String {
         let prefix = &input[..input.len().min(20)];
-        format!("llm:{}:{}:{}", self.name, input.len(), prefix.replace(' ', "_"))
+        format!(
+            "llm:{}:{}:{}",
+            self.name,
+            input.len(),
+            prefix.replace(' ', "_")
+        )
     }
 }
 
 impl BridgeProvider for LlmBridge {
-    fn name(&self) -> &str { &self.name }
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn call_stream(&self, input: &str, tx: &std::sync::mpsc::Sender<String>) -> Result<String> {
+        let client = reqwest::blocking::Client::new();
+
+        let (body_url, body) = match &self.provider {
+            LlmProvider::DeepSeek { api_key, model } => {
+                let body = serde_json::json!({"model": model, "messages": [
+                    {"role": "system", "content": &self.system_prompt},
+                    {"role": "user", "content": input}
+                ], "stream": true});
+                let url = "https://api.deepseek.com/beta/chat/completions";
+                let req = client
+                    .post(url)
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .json(&body)
+                    .send()?;
+                (req, None::<serde_json::Value>)
+            }
+            LlmProvider::Ollama { url, model } => {
+                let body = serde_json::json!({"model": model, "system": &self.system_prompt, "prompt": input, "stream": true});
+                let req = client
+                    .post(format!("{}/api/generate", url))
+                    .json(&body)
+                    .send()?;
+                (req, None)
+            }
+            LlmProvider::OpenAI {
+                url,
+                model,
+                api_key,
+            } => {
+                let body = serde_json::json!({"model": model, "messages": [
+                    {"role": "system", "content": &self.system_prompt},
+                    {"role": "user", "content": input}
+                ], "stream": true});
+                let mut req = client.post(format!("{}/v1/chat/completions", url));
+                if !api_key.is_empty() {
+                    req = req.header("Authorization", format!("Bearer {}", api_key));
+                }
+                let req = req.json(&body).send()?;
+                (req, None)
+            }
+        };
+
+        // SSE parsing from blocking response (implements Read)
+        let mut full_text = String::new();
+        let mut reader = std::io::BufReader::new(body_url);
+        let mut reasoning = String::new();
+        let mut in_reasoning = false;
+
+        for line in reader.lines() {
+            let line = line?;
+            if line.is_empty() {
+                continue;
+            }
+
+            // DeepSeek sends "data: {...}" lines
+            if let Some(data) = line.strip_prefix("data: ") {
+                if data == "[DONE]" {
+                    break;
+                }
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                    // DeepSeek / OpenAI format
+                    if let Some(delta) = json["choices"][0]["delta"].as_object() {
+                        // Reasoning content
+                        if let Some(r) = delta.get("reasoning_content").and_then(|v| v.as_str()) {
+                            if !r.is_empty() {
+                                reasoning.push_str(r);
+                                tx.send(format!("__reasoning__{}", r)).ok();
+                                in_reasoning = true;
+                            }
+                        }
+                        // Regular content
+                        if let Some(c) = delta.get("content").and_then(|v| v.as_str()) {
+                            if !c.is_empty() {
+                                full_text.push_str(c);
+                                tx.send(c.to_string()).ok();
+                                in_reasoning = false;
+                            }
+                        }
+                    }
+                    // Tool calls
+                    if let Some(tc) = json["choices"][0]["delta"]["tool_calls"].as_array() {
+                        for call in tc {
+                            if let Some(name) = call["function"]["name"].as_str() {
+                                tx.send(format!("__tool_call__{}", name)).ok();
+                            }
+                        }
+                    }
+                }
+                // Ollama format: {"response": "token"}
+                if let Some(text) = data.trim().strip_prefix("{\"response\":\"") {
+                    if let Some(token) = text.trim_end_matches('"').strip_suffix('"') {
+                        full_text.push_str(token);
+                        tx.send(token.to_string()).ok();
+                    }
+                }
+            }
+
+            // Ollama raw streaming: {"response":"token","done":false}
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                if let Some(token) = json.get("response").and_then(|v| v.as_str()) {
+                    if !token.is_empty() {
+                        full_text.push_str(token);
+                        tx.send(token.to_string()).ok();
+                    }
+                }
+                if json.get("done").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    // Save to cache
+                    if let Some(ref kv) = self.kvstore {
+                        let cache_key = self.cache_key(input);
+                        kv.set(&cache_key, &full_text, 60).ok();
+                    }
+                    tx.send("__done__".into()).ok();
+                    return Ok(full_text);
+                }
+            }
+        }
+
+        // Save to cache
+        if let Some(ref kv) = self.kvstore {
+            let cache_key = self.cache_key(input);
+            kv.set(&cache_key, &full_text, 60).ok();
+        }
+        tx.send("__done__".into()).ok();
+        Ok(full_text)
+    }
+
     fn call(&self, input: &str) -> Result<String> {
         let cache_key = self.cache_key(input);
         if let Some(ref kv) = self.kvstore {
@@ -517,31 +816,56 @@ impl BridgeProvider for LlmBridge {
                     {"role": "system", "content": &self.system_prompt},
                     {"role": "user", "content": input}
                 ], "stream": false});
-                let resp = client.post("https://api.deepseek.com/beta/chat/completions")
-                    .header("Authorization", format!("Bearer {}", api_key)).json(&body).send()?;
-                resp.json::<serde_json::Value>()?["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string()
+                let resp = client
+                    .post("https://api.deepseek.com/beta/chat/completions")
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .json(&body)
+                    .send()?;
+                resp.json::<serde_json::Value>()?["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string()
             }
             LlmProvider::Ollama { url, model } => {
                 let body = serde_json::json!({"model": model, "system": &self.system_prompt, "prompt": input, "stream": false});
-                let resp = client.post(format!("{}/api/generate", url)).json(&body).send()?;
-                resp.json::<serde_json::Value>()?["response"].as_str().unwrap_or("").to_string()
+                let resp = client
+                    .post(format!("{}/api/generate", url))
+                    .json(&body)
+                    .send()?;
+                resp.json::<serde_json::Value>()?["response"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string()
             }
-            LlmProvider::OpenAI { url, model, api_key } => {
+            LlmProvider::OpenAI {
+                url,
+                model,
+                api_key,
+            } => {
                 let body = serde_json::json!({"model": model, "messages": [
                     {"role": "system", "content": &self.system_prompt},
                     {"role": "user", "content": input}
                 ]});
                 let mut req = client.post(format!("{}/v1/chat/completions", url));
-                if !api_key.is_empty() { req = req.header("Authorization", format!("Bearer {}", api_key)); }
+                if !api_key.is_empty() {
+                    req = req.header("Authorization", format!("Bearer {}", api_key));
+                }
                 let resp = req.json(&body).send()?;
-                resp.json::<serde_json::Value>()?["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string()
+                resp.json::<serde_json::Value>()?["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string()
             }
         };
 
         // Save to cache
         if let Some(ref kv) = self.kvstore {
             kv.set(&cache_key, &text, 60).ok();
-            info!("LLM cache MISS: saved {} chars under key {}", text.len(), cache_key);
+            info!(
+                "LLM cache MISS: saved {} chars under key {}",
+                text.len(),
+                cache_key
+            );
         }
 
         Ok(text)
@@ -551,19 +875,41 @@ impl BridgeProvider for LlmBridge {
 /// ---------- Chat Bridge ----------
 
 #[derive(Debug)]
-pub struct ChatBridge { name: String, transport: ChatTransport }
+pub struct ChatBridge {
+    name: String,
+    transport: ChatTransport,
+}
 #[derive(Debug)]
-enum ChatTransport { Stdin, Telegram { token: String, chat_id: Option<String> } }
+enum ChatTransport {
+    Stdin,
+    Telegram {
+        token: String,
+        chat_id: Option<String>,
+    },
+}
 
 impl ChatBridge {
-    pub fn new_stdin(name: &str) -> Self { ChatBridge { name: name.to_string(), transport: ChatTransport::Stdin } }
+    pub fn new_stdin(name: &str) -> Self {
+        ChatBridge {
+            name: name.to_string(),
+            transport: ChatTransport::Stdin,
+        }
+    }
     pub fn new_telegram(name: &str, token: &str) -> Self {
-        ChatBridge { name: name.to_string(), transport: ChatTransport::Telegram { token: token.to_string(), chat_id: None } }
+        ChatBridge {
+            name: name.to_string(),
+            transport: ChatTransport::Telegram {
+                token: token.to_string(),
+                chat_id: None,
+            },
+        }
     }
 }
 
 impl BridgeProvider for ChatBridge {
-    fn name(&self) -> &str { &self.name }
+    fn name(&self) -> &str {
+        &self.name
+    }
     fn call(&self, input: &str) -> Result<String> {
         match &self.transport {
             ChatTransport::Stdin => {
@@ -576,7 +922,8 @@ impl BridgeProvider for ChatBridge {
                 let body = serde_json::json!({"chat_id": "@waters_node", "text": input, "parse_mode": "Markdown"});
                 let resp = reqwest::blocking::Client::new()
                     .post(format!("https://api.telegram.org/bot{}/sendMessage", token))
-                    .json(&body).send()?;
+                    .json(&body)
+                    .send()?;
                 Ok(serde_json::to_string(&resp.json::<serde_json::Value>()?)?)
             }
         }
@@ -596,37 +943,56 @@ pub struct VoiceBridge {
 
 #[derive(Debug)]
 enum VoiceMode {
-    Stt,  // speech-to-text (Whisper)
-    Tts,  // text-to-speech
+    Stt, // speech-to-text (Whisper)
+    Tts, // text-to-speech
 }
 
 impl VoiceBridge {
     pub fn new_stt(name: &str, url: &str) -> Self {
-        VoiceBridge { name: name.to_string(), mode: VoiceMode::Stt, url: url.to_string() }
+        VoiceBridge {
+            name: name.to_string(),
+            mode: VoiceMode::Stt,
+            url: url.to_string(),
+        }
     }
     pub fn new_tts(name: &str, url: &str) -> Self {
-        VoiceBridge { name: name.to_string(), mode: VoiceMode::Tts, url: url.to_string() }
+        VoiceBridge {
+            name: name.to_string(),
+            mode: VoiceMode::Tts,
+            url: url.to_string(),
+        }
     }
 }
 
 impl BridgeProvider for VoiceBridge {
-    fn name(&self) -> &str { &self.name }
+    fn name(&self) -> &str {
+        &self.name
+    }
     fn call(&self, input: &str) -> Result<String> {
         match self.mode {
             VoiceMode::Stt => {
                 let body = serde_json::json!({"audio": input, "model": "whisper-1"});
                 let resp = reqwest::blocking::Client::new()
                     .post(format!("{}/v1/audio/transcriptions", self.url))
-                    .json(&body).send()?;
-                Ok(resp.json::<serde_json::Value>()?["text"].as_str().unwrap_or("").to_string())
+                    .json(&body)
+                    .send()?;
+                Ok(resp.json::<serde_json::Value>()?["text"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string())
             }
             VoiceMode::Tts => {
                 let body = serde_json::json!({"text": input, "model": "tts-1"});
                 let resp = reqwest::blocking::Client::new()
                     .post(format!("{}/v1/audio/speech", self.url))
-                    .json(&body).send()?;
+                    .json(&body)
+                    .send()?;
                 // Return base64 audio
-                Ok(resp.bytes()?.iter().map(|b| format!("{:02x}", b)).collect::<String>())
+                Ok(resp
+                    .bytes()?
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>())
             }
         }
     }
@@ -657,22 +1023,40 @@ pub struct McpBridge {
 }
 
 impl McpBridge {
-    pub fn new(name: &str, server: &str, tool: &str, mcp_client: Arc<Mutex<crate::mcp::McpClient>>) -> Self {
-        McpBridge { name: name.to_string(), server: server.to_string(), tool: tool.to_string(), mcp_client }
+    pub fn new(
+        name: &str,
+        server: &str,
+        tool: &str,
+        mcp_client: Arc<Mutex<crate::mcp::McpClient>>,
+    ) -> Self {
+        McpBridge {
+            name: name.to_string(),
+            server: server.to_string(),
+            tool: tool.to_string(),
+            mcp_client,
+        }
     }
 }
 
 impl BridgeProvider for McpBridge {
-    fn name(&self) -> &str { &self.name }
+    fn name(&self) -> &str {
+        &self.name
+    }
     fn call(&self, input: &str) -> Result<String> {
-        let args: serde_json::Value = serde_json::from_str(input)
-            .unwrap_or_else(|_| serde_json::json!({"query": input}));
-        let client = self.mcp_client.lock().map_err(|e| anyhow::anyhow!("Mutex poisoned: {}", e))?;
+        let args: serde_json::Value =
+            serde_json::from_str(input).unwrap_or_else(|_| serde_json::json!({"query": input}));
+        let client = self
+            .mcp_client
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let result = client.call_tool(&self.server, &self.tool, &args)?;
         Ok(serde_json::to_string(&result)?)
     }
     fn call_json(&self, input: &serde_json::Value) -> Result<serde_json::Value> {
-        let client = self.mcp_client.lock().map_err(|e| anyhow::anyhow!("Mutex poisoned: {}", e))?;
+        let client = self
+            .mcp_client
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         client.call_tool(&self.server, &self.tool, input)
     }
 }

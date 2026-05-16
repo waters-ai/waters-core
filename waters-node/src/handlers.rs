@@ -1,16 +1,17 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::bridge::BridgePool;
 use crate::convo::ConvoAction;
 use crate::display::*;
+use crate::store::KvStore;
 
 pub async fn handle_slash(
     slash_cmd: &str, slash_arg: &str,
     cmd: &str,
     mode_engine: &mut crate::mode::ModeEngine,
-    skill_reg: &crate::skill::SkillRegistry,
+    skill_reg: &mut crate::skill::SkillRegistry,
     bridge_pool: &mut BridgePool,
     gossip: &crate::gossip::GossipEngine,
     channel_mgr: &Arc<Mutex<crate::channel::ChannelManager>>,
@@ -25,6 +26,8 @@ pub async fn handle_slash(
     group_mgr: &mut crate::group::GroupManager,
     node: &mut crate::node::Node,
     state_path: &PathBuf,
+    kvstore: &Arc<KvStore>,
+    reviewer: &crate::agent_rating::AgentReviewer,
 ) -> Result<bool, anyhow::Error> {
     match slash_cmd {
         "help" | "h" => {
@@ -69,15 +72,187 @@ pub async fn handle_slash(
             println!("  /tui-agents   — list builtin TUI-converted agents");
             println!("  /exit         — shutdown");
         }
-        "skills" => {
+        "skills" | "agents" => {
             let list = skill_reg.list();
             if list.is_empty() {
                 println!("No skills loaded.");
             } else {
-                println!("{}Skills ({}):{}", BOLD, list.len(), RESET);
+                println!("{}Skills|Agents ({}):{}", BOLD, list.len(), RESET);
                 for s in &list {
-                    let tags = s.manifest.tags.join(", ");
-                    println!("  {} v{} — {} [{}]", s.manifest.name, s.manifest.version, s.manifest.description, tags);
+                    println!("  {}", s.summary_for_llm());
+                }
+                println!();
+                println!("  Сводка для LLM:");
+                println!("{}", skill_reg.summary_for_llm());
+                println!();
+                println!("  /agents suggest — LLM предложит объединение");
+                println!("  /merge <name1> <name2> — объединить двух агентов");
+            }
+        }
+        "suggest" => {
+            let list = skill_reg.list();
+            if list.len() < 2 {
+                println!("Нужно хотя бы 2 агента для объединения.");
+            } else {
+                println!("{}LLM, проанализируй агентов и предложи объединение:{}", BOLD, RESET);
+                println!("{}", skill_reg.summary_for_llm());
+                println!();
+                println!("Каких двух (или более) агентов можно объединить?");
+                println!("Каким будет третий, объединённый агент?");
+                println!("Какие знания он унаследует от каждого?");
+            }
+        }
+        "merge" if !slash_arg.is_empty() => {
+            let parts: Vec<&str> = slash_arg.splitn(2, ' ').collect();
+            if parts.len() < 2 {
+                println!("Usage: /merge <name1> <name2>");
+            } else {
+                let name1 = parts[0];
+                let name2 = parts[1];
+                match crate::skill::merge_agents(skill_reg, name1, name2, &Path::new("agents")) {
+                    Ok(merged_name) => {
+                        println!("{}✅ Слияние завершено!{}", GREEN, RESET);
+                        println!("  Новый агент: {}", merged_name);
+                        println!("  /skills — посмотреть всех агентов");
+                        agent_journal.log("system", "agent_merged", &format!("{} + {} → {}", name1, name2, merged_name));
+                    }
+                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                }
+            }
+        }
+        "import" if !slash_arg.is_empty() => {
+            let path = Path::new(slash_arg);
+            if !path.exists() {
+                println!("Файл не найден: {}", slash_arg);
+            } else {
+                match crate::bridge_agent::import_agent(path, &Path::new("agents")) {
+                    Ok(name) => {
+                        println!("{}✅ Импортирован агент '{}'{}", GREEN, name, RESET);
+                        // Перезагружаем реестр
+                        skill_reg.load_from(&Path::new("agents"));
+                    }
+                    Err(e) => println!("{}Ошибка импорта: {}{}", YELLOW, e, RESET),
+                }
+            }
+        }
+        "import-dir" if !slash_arg.is_empty() => {
+            let path = Path::new(slash_arg);
+            if !path.exists() || !path.is_dir() {
+                println!("Директория не найдена: {}", slash_arg);
+            } else {
+                match crate::bridge_agent::import_directory(path, &Path::new("agents")) {
+                    Ok(names) => {
+                        println!("{}✅ Импортировано {} агентов{}", GREEN, names.len(), RESET);
+                        for n in &names { println!("  - {}", n); }
+                        skill_reg.load_from(&Path::new("agents"));
+                    }
+                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                }
+            }
+        }
+        "export" if !slash_arg.is_empty() => {
+            let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+            if parts.len() < 2 {
+                println!("Usage: /export <agent_name> <format> [dir]");
+                println!("  formats: tui, claude, cursor, waters");
+            } else {
+                let name = parts[0];
+                let fmt_str = parts[1];
+                let out_dir = if parts.len() >= 3 { Path::new(parts[2]) } else { Path::new("export") };
+
+                let format = match fmt_str.to_lowercase().as_str() {
+                    "tui" => crate::bridge_agent::AgentFormat::Tui,
+                    "claude" => crate::bridge_agent::AgentFormat::Claude,
+                    "cursor" => crate::bridge_agent::AgentFormat::Cursor,
+                    "waters" => crate::bridge_agent::AgentFormat::Waters,
+                    _ => { println!("Unknown format: {}. Use: tui, claude, cursor, waters", fmt_str); return Ok(true); }
+                };
+
+                if let Some(skill) = skill_reg.get(name) {
+                    match crate::bridge_agent::export_agent(&skill.manifest, &skill.prompt, format, out_dir) {
+                        Ok(path) => println!("{}✅ Экспортирован '{}' в {:?}{}", GREEN, name, path, RESET),
+                        Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                    }
+                } else {
+                    println!("Агент '{}' не найден. /skills — список", name);
+                }
+            }
+        }
+        "import-llm" => {
+            println!("{}LLM проанализируй файлы и предложи импорт:{}", BOLD, RESET);
+            println!("  /import <file> — импорт одного файла");
+            println!("  /import-dir <dir> — массовый импорт из папки");
+            println!("  /export <name> tui|claude|cursor|waters [dir] — экспорт");
+        }
+        "rating" => {
+            if slash_arg.is_empty() {
+                println!("{}Рейтинг агентов:{}", BOLD, RESET);
+                println!("{}", reviewer.rating_summary_for_llm());
+                println!();
+                println!("  /rating <name> — рейтинг конкретного агента");
+                println!("  /rate <name> <score> [review] — оценить агента");
+            } else if let Some(skill) = skill_reg.get(slash_arg) {
+                let rating = reviewer.get_rating(&skill.manifest.name).unwrap_or_default();
+                println!("{}Рейтинг '{}':{}", BOLD, slash_arg, RESET);
+                println!("  {}", rating.display());
+                if let Ok(Some(report)) = reviewer.get_security_report(&skill.manifest.name) {
+                    println!("  Досмотр: {} ({} checks)", if report.passed { "✅" } else { "❌" }, report.checks.len());
+                }
+            } else {
+                println!("Агент '{}' не найден.", slash_arg);
+            }
+        }
+        "rate" if !slash_arg.is_empty() => {
+            let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+            if parts.len() < 2 {
+                println!("Usage: /rate <name> <score> [review]");
+            } else {
+                let name = parts[0];
+                let score: f64 = parts[1].parse().unwrap_or(3.0);
+                let review = if parts.len() >= 3 { parts[2] } else { "" };
+                match reviewer.rate_agent(name, score, review) {
+                    Ok(rating) => println!("{}✅ '{}' оценён: {}{}", GREEN, name, rating.display(), RESET),
+                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                }
+            }
+        }
+        "screen" if !slash_arg.is_empty() => {
+            if let Some(skill) = skill_reg.get(slash_arg) {
+                match reviewer.screen_agent(&skill.manifest.name, &skill.manifest, &skill.prompt) {
+                    Ok(report) => {
+                        println!("{}🔍 Досмотр '{}':{}", BOLD, slash_arg, RESET);
+                        println!("  Статус: {}", if report.passed { "✅ ПРОШЁЛ" } else { "❌ НЕ ПРОШЁЛ" });
+                        for check in &report.checks {
+                            let icon = if check.passed { "✅" } else { "⚠️" };
+                            println!("  {} {} — {}", icon, check.name, check.detail);
+                        }
+                        if !report.warnings.is_empty() {
+                            println!("  {}⚠️ Предупреждения ({}):{}", YELLOW, report.warnings.len(), RESET);
+                            for w in &report.warnings {
+                                println!("    ⚠ {}", w);
+                            }
+                        }
+                        if !report.failures.is_empty() {
+                            println!("  {}❌ Ошибки ({}):{}", YELLOW, report.failures.len(), RESET);
+                            for f in &report.failures {
+                                println!("    ❌ {}", f);
+                            }
+                        }
+                    }
+                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                }
+            } else {
+                println!("Агент '{}' не найден.", slash_arg);
+            }
+        }
+        "top" => {
+            let top = reviewer.top_agents(10).unwrap_or_default();
+            if top.is_empty() {
+                println!("Нет рейтингов.");
+            } else {
+                println!("{}🏆 Топ агентов:{}", BOLD, RESET);
+                for (i, r) in top.iter().enumerate() {
+                    println!("  {}. {} — {}", i + 1, r.agent_name, r.display());
                 }
             }
         }
@@ -139,13 +314,13 @@ pub async fn handle_slash(
             }
         }
         "agent" => {
-            let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+            let parts: Vec<&str> = slash_arg.splitn(4, ' ').collect();
             if parts.len() >= 3 && parts[0] == "create" {
                 let name = parts[1];
                 let skill_name = parts[2];
                 let node = if parts.len() >= 4 { parts[3] } else { "local" };
                 if let Some(skill) = skill_reg.get(skill_name) {
-                    subagents.spawn(skill_name);
+                    let _ = subagents.agent_open(skill_name, skill_name, "auto", 0, "local");
                     agent_journal.log(name, "created", &format!("skill={}, node={}", skill_name, node));
                     agent_mgr.add(name, &skill.manifest.description, "delegated", node);
                     println!("{}✓{} Agent '{}' created with skill '{}' on node '{}'", GREEN, RESET, name, skill_name, node);
@@ -277,7 +452,7 @@ pub async fn handle_slash(
             println!("{}✓{} Connected to {}", GREEN, RESET, slash_arg);
         }
         "chat" if !slash_arg.is_empty() => {
-            match crate::tui_agent::assistant_chat(bridge_pool, slash_arg, session_mgr) {
+            match crate::tui_agent::assistant_chat(bridge_pool, kvstore, 0, slash_arg, "cli") {
                 Ok(r) => println!("{}", r),
                 Err(_) => { convo.handle(slash_arg); }
             }
@@ -502,6 +677,7 @@ pub async fn handle_natural(
     agent_mgr: &crate::agent::AgentManager,
     group_mgr: &crate::group::GroupManager,
     skill_reg: &crate::skill::SkillRegistry,
+    kvstore: &Arc<KvStore>,
 ) -> Result<bool, anyhow::Error> {
     match cmd {
         "exit" | "quit" | "q" => {
@@ -579,14 +755,14 @@ pub async fn handle_natural(
         }
         _ if cmd.to_lowercase().starts_with("chat ") => {
             let text = cmd[5..].trim();
-            match crate::tui_agent::assistant_chat(bridge_pool, text, session_mgr) {
+            match crate::tui_agent::assistant_chat(bridge_pool, kvstore, 0, text, "cli") {
                 Ok(r) => println!("{}", r),
                 Err(_) => demo_response(text),
             }
         }
         _ => {
             let text = cmd;
-            match crate::tui_agent::assistant_chat(bridge_pool, text, session_mgr) {
+            match crate::tui_agent::assistant_chat(bridge_pool, kvstore, 0, text, "cli") {
                 Ok(r) => println!("{}", r),
                 Err(_) => {
                     match convo.handle(cmd) {

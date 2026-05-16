@@ -3,7 +3,11 @@ mod node;
 mod tools;
 mod session;
 mod subagent;
+mod bridge_agent;
+mod agent_rating;
+mod media_bridge;
 mod mcp;
+mod mcp_server;
 mod autonomy;
 mod dtn;
 mod cargo;
@@ -122,7 +126,9 @@ async fn main() -> Result<()> {
             "https://api.openai.com", &std::env::var("OPENAI_API_KEY").unwrap_or_default()),
     ];
     for cfg in builtin_configs {
-        if cfg.is_available() {
+        let available = cfg.name == "deepseek" && !cfg.api_key.is_empty()
+            || cfg.name == "ollama";
+        if available {
             let bridge = bridge::LlmBridge::new(&cfg, kvstore_ref.clone());
             let name = bridge.name().to_string();
             bridge_pool.register(&name, Box::new(bridge),
@@ -132,7 +138,7 @@ async fn main() -> Result<()> {
     }
     // Custom provider from bridges.json
     let custom = &bridges_file.llm.custom;
-    if custom.enabled && !custom.name.is_empty() && custom.is_available() {
+    if custom.enabled && !custom.name.is_empty() && (!custom.api_key.is_empty() || custom.url.is_empty()) {
         let bridge = bridge::LlmBridge::new(custom, kvstore_ref.clone());
         let name = bridge.name().to_string();
         bridge_pool.register(&name, Box::new(bridge),
@@ -187,7 +193,7 @@ async fn main() -> Result<()> {
                     lang,
                     enabled: true,
                 };
-                if llm_cfg.is_available() {
+                if llm_cfg.enabled && !llm_cfg.name.is_empty() {
                     let bridge = bridge::LlmBridge::new(&llm_cfg, kvstore_ref.clone());
                     let name = bridge.name().to_string();
                     bridge_pool.register(&name, Box::new(bridge),
@@ -244,20 +250,18 @@ async fn main() -> Result<()> {
         Box::new(bridge::ChatBridge::new_stdin("duckduckgo")),
         bridge::BridgeInfo::new("duckduckgo", bridge::BridgeWeight::Light, 3, 10));
 
+    // Media bridge (NDI / OBS / RTMP / HDMI)
+    let media_config = serde_json::json!({});
+    let media_mixer = Arc::new(media_bridge::setup_media_bridges(
+        &media_config, &mut bridge_pool, kvstore.clone(),
+    ));
+
     let mut skill_reg = skill::SkillRegistry::new();
     skill_reg.load_from(&std::path::Path::new("skills"));
+    skill_reg.load_from(&std::path::Path::new("agents"));
     if skill_reg.list().len() > 0 {
         let skill_count = skill_reg.list().len();
         println!("  {0}{1}Skills{2}{3}   {4}{5}{6}", DIM, BOLD, RESET, DIM, CYAN, skill_count, RESET);
-    }
-
-    // Initialize KvStore (Redis or in-memory)
-    let kvstore = {
-        let redis_url = std::env::var("REDIS_URL").ok();
-        Arc::new(store::KvStore::new(redis_url.as_deref()))
-    };
-    if kvstore.is_connected() {
-        println!("  {}KvStore{}   ✅ Redis connected", BOLD, RESET);
     }
 
     let tools = Arc::new(tools::ToolRegistry::new());
@@ -301,16 +305,34 @@ async fn main() -> Result<()> {
     let mut mode_engine = mode::ModeEngine::new();
     let mut task_mgr = task::TaskManager::new();
     let mut agent_mgr = agent::AgentManager::new();
-    let mut subagents = subagent::SubAgentManager::new();
+    let mut subagents = subagent::SubAgentManager::new(kvstore.clone());
+    let reviewer = agent_rating::AgentReviewer::new(kvstore.clone(), Arc::new(subagents.clone()));
     let start = std::time::Instant::now();
 
-    let api_state = Arc::new(api::ApiState::new(node.id(), node.name()));
+    let api_state = {
+        let mut state = api::ApiState::new(node.id(), node.name());
+        state.kvstore = Some(kvstore.clone());
+        Arc::new(state)
+    };
     let api_state_clone = api_state.clone();
     let api_port = args.port;
     tokio::spawn(async move {
         let _ = api::serve(api_port, api_state_clone).await;
     });
     print_api_info(api_port);
+
+    // MCP-сервер агентов (порт = HTTP порт + 100)
+    let mcp_port = args.port + 100;
+    let mcp_skills = Arc::new(skill_reg.clone());
+    let mcp_kvstore = kvstore.clone();
+    let mcp_subagents = Arc::new(subagents.clone());
+    tokio::spawn(async move {
+        let server = mcp_server::McpServer::new(mcp_port, mcp_kvstore, mcp_skills, mcp_subagents);
+        if let Err(e) = server.serve().await {
+            tracing::warn!("MCP server stopped: {}", e);
+        }
+    });
+    println!("  {}MCP Agent API  {}tcp://localhost:{}{}", DIM, CYAN, mcp_port, RESET);
 
     let channel_path = PathBuf::from(".waters/channels");
     let channel_mgr = Arc::new(Mutex::new(channel::ChannelManager::new(&channel_path, node.id())));
@@ -434,11 +456,12 @@ async fn main() -> Result<()> {
             handlers::handle_slash(
                 parts[0], parts.get(1).copied().unwrap_or(""),
                 cmd,
-                &mut mode_engine, &skill_reg, &mut bridge_pool,
+                &mut mode_engine, &mut skill_reg, &mut bridge_pool,
                 &gossip, &channel_mgr, &api_state, &agent_journal,
                 &mut subagents, &mut agent_mgr, &mut session_mgr,
                 &mut convo, &convo_path,
                 &mut task_mgr, &mut group_mgr, &mut node, &state_path,
+                &kvstore, &reviewer,
             ).await?
         } else {
             handlers::handle_natural(
@@ -447,6 +470,7 @@ async fn main() -> Result<()> {
                 &bridge_pool, &mut session_mgr, &mut node, &id_short, api_port,
                 uptime, &state_path, &mut convo, &convo_path,
                 &task_mgr, &agent_mgr, &group_mgr, &skill_reg,
+                &kvstore,
             ).await?
         };
 

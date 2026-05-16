@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 use crate::bridge::{BridgePool, BridgeProvider};
 use crate::cargo::OnboardLlm;
+use crate::store::KvStore;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TuiAgent {
@@ -34,7 +34,12 @@ pub struct AgentJsonMessage {
 }
 
 impl TuiAgent {
-    pub fn new(tui_name: &str, description: &str, bridges: &[String], onboard: Option<OnboardLlm>) -> Self {
+    pub fn new(
+        tui_name: &str,
+        description: &str,
+        bridges: &[String],
+        onboard: Option<OnboardLlm>,
+    ) -> Self {
         TuiAgent {
             name: format!("tui-{}", tui_name),
             source: "tui".into(),
@@ -42,14 +47,22 @@ impl TuiAgent {
                 tui_name: tui_name.to_string(),
                 description: description.to_string(),
                 bridges: bridges.to_vec(),
-                prompt: format!("You are a TUI-converted agent '{}'. {}", tui_name, description),
+                prompt: format!(
+                    "You are a TUI-converted agent '{}'. {}",
+                    tui_name, description
+                ),
             },
             json_capable: true,
             onboard_llm: onboard,
         }
     }
 
-    pub fn to_json_message(&self, msg_type: &str, payload: serde_json::Value, confidence: Option<f64>) -> AgentJsonMessage {
+    pub fn to_json_message(
+        &self,
+        msg_type: &str,
+        payload: serde_json::Value,
+        confidence: Option<f64>,
+    ) -> AgentJsonMessage {
         AgentJsonMessage {
             agent: self.name.clone(),
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -73,54 +86,129 @@ impl TuiAgent {
     }
 }
 
-pub fn convert_tui_to_node(tui_name: &str, description: &str, bridges: &[String], onboard: Option<OnboardLlm>) -> (TuiAgent, crate::agent::Agent) {
+pub fn convert_tui_to_node(
+    tui_name: &str,
+    description: &str,
+    bridges: &[String],
+    onboard: Option<OnboardLlm>,
+) -> (TuiAgent, crate::agent::Agent) {
     let agent = TuiAgent::new(tui_name, description, bridges, onboard);
     let node_agent = agent.to_agent_entry();
     (agent, node_agent)
 }
 
-/// Ассистент переключается на внешний LLM ноды, если канал есть.
-/// Пробует LLM по приоритету (сначала priority 1 — активный пользовательский)
-/// Если внешнего LLM нет — использует свою бортовую (tiny 0.5B).
-pub fn assistant_chat(bridge_pool: &BridgePool, input: &str, session_mgr: &mut crate::session::SessionManager) -> Result<String> {
-    session_mgr.add_message("user", input);
-
-    // Get LLM bridges sorted by priority (1 = highest)
-    let mut llm_bridges: Vec<(u8, String)> = bridge_pool.list().iter()
+fn assistant_stream_redis(
+    bridge_pool: &BridgePool,
+    kvstore: &KvStore,
+    group_id: u8,
+    input: &str,
+    session_id: &str,
+) -> Result<String> {
+    let mut llm_bridges: Vec<(u8, String)> = bridge_pool
+        .list()
+        .iter()
         .filter(|n| n.starts_with("llm-"))
         .filter_map(|n| {
             let prio = bridge_pool.info.get(n).map(|i| i.priority).unwrap_or(5);
             if bridge_pool.info.get(n).map(|i| i.enabled).unwrap_or(true) {
                 Some((prio, n.clone()))
-            } else { None }
+            } else {
+                None
+            }
         })
         .collect();
     llm_bridges.sort_by_key(|(p, _)| *p);
 
+    let stream_channel = format!("channel:stream:{}", session_id);
+    let stream_key = format!("stream:tokens:{}", session_id);
+
+    for (_, name) in &llm_bridges {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let input2 = input.to_string();
+        let bridge_name = name.clone();
+
+        if let Some(bridge) = bridge_pool.get(&bridge_name) {
+            bridge.call_stream(&input2, &tx).ok();
+        }
+
+        let mut full = String::new();
+        let mut reasoning = String::new();
+        let mut tool_ev = String::new();
+
+        for token in rx {
+            if token == "__done__" {
+                break;
+            }
+
+            let (event_type, display_text) = if let Some(r) = token.strip_prefix("__reasoning__") {
+                reasoning.push_str(r);
+                ("reasoning", r.to_string())
+            } else if token.starts_with("__tool_call__") {
+                tool_ev = token[13..].to_string();
+                ("tool_call", token[13..].to_string())
+            } else {
+                full.push_str(&token);
+                ("token", token.clone())
+            };
+
+            let payload = serde_json::json!({
+                "type": event_type,
+                "content": display_text,
+                "ts": chrono::Utc::now().to_rfc3339(),
+            });
+
+            if kvstore.is_connected() {
+                let _ = kvstore
+                    .group_db(group_id)
+                    .publish(&stream_channel, &payload.to_string());
+                let _ = kvstore.xadd(
+                    &stream_key,
+                    &[("type", event_type), ("content", &display_text)],
+                    10000,
+                );
+            }
+        }
+
+        if !full.is_empty() {
+            let done_msg =
+                serde_json::json!({"type": "done", "ts": chrono::Utc::now().to_rfc3339()});
+            let _ = kvstore.publish(&stream_channel, &done_msg.to_string());
+            return Ok(full);
+        }
+    }
+
     for (_, name) in &llm_bridges {
         match bridge_pool.call(name, input) {
             Ok(r) => {
-                session_mgr.add_message("assistant", &r);
                 return Ok(r);
             }
             Err(_) => continue,
         }
     }
 
-    // Fallback: use assistant's onboard via chat bridge
     if let Some(bridge) = bridge_pool.get("chat") {
-        let reply = bridge.call(input).unwrap_or_else(|_| {
-            "I'm here to help! Try: задачи, агенты, группы, help".into()
-        });
-        session_mgr.add_message("assistant", &reply);
-        return Ok(reply);
+        bridge
+            .call(input)
+            .or_else(|_| Ok("Assistant ready.".into()))
+    } else {
+        Ok("Assistant ready.".into())
     }
-
-    session_mgr.add_message("assistant", "Assistant ready.");
-    Ok("Assistant ready.".into())
 }
 
-/// 6 агентов (1 ассистент + 5 специалистов), каждый со своим бортовым LLM
+pub fn assistant_chat(
+    bridge_pool: &BridgePool,
+    kvstore: &KvStore,
+    group_id: u8,
+    input: &str,
+    session_id: &str,
+) -> Result<String> {
+    let result = assistant_stream_redis(bridge_pool, kvstore, group_id, input, session_id)?;
+    if kvstore.is_connected() {
+        let _ = kvstore.hset("session:log", session_id, &result);
+    }
+    Ok(result)
+}
+
 pub fn builtin_tui_agents() -> Vec<TuiAgent> {
     vec![
         TuiAgent::new(
