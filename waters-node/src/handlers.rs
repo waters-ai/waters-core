@@ -34,13 +34,15 @@ pub async fn handle_slash(
             println!("  /bridges    — list bridges");
             println!("  /agent      — /agent create <name> <skill> <node_id>");
             println!("  /status     — node status");
+            println!("  /approvals  — show pending peer approval requests");
+            println!("  /approve    — /approve <idx> to accept peer");
+            println!("  /reject     — /reject <idx> to deny peer");
             println!("  /mode       — switch mode (plan/execute/stop/log)");
             println!("  /chat       — send message: /chat <text>");
             println!("  /connect    — connect to peer: /connect <ip>");
             println!("  /sessions   — list sessions");
             println!("  /json       — output JSON format");
             println!("  /tui-agents — list builtin TUI-converted agents");
-            println!("  /bridges    — show all registered bridges");
             println!("  /exit       — shutdown");
         }
         "skills" => {
@@ -118,6 +120,49 @@ pub async fn handle_slash(
                     println!("{}✓{} Session resumed: {}", GREEN, RESET, slash_arg);
                 } else {
                     println!("Session '{}' not found.", slash_arg);
+                }
+            }
+        }
+        "approvals" => {
+            let pending = gossip.pending_list().await;
+            if pending.is_empty() {
+                println!("No pending peer approvals.");
+            } else {
+                println!("{}Pending approvals ({}):{}", BOLD, pending.len(), RESET);
+                for (i, p) in pending.iter().enumerate() {
+                    println!("  [{}] {} from {} — groups: {:?}",
+                        i, p.node_name, p.address, p.groups);
+                    println!("       /approve {} or /reject {}", i, i);
+                }
+            }
+        }
+        "approve" if !slash_arg.is_empty() => {
+            if let Ok(idx) = slash_arg.parse::<usize>() {
+                if let Some(peer) = gossip.approve_pending(idx).await {
+                    // Try to connect to the approved peer
+                    let addr = if peer.address.contains(":") {
+                        let parts: Vec<&str> = peer.address.rsplitn(2, ':').collect();
+                        let port_part = parts[0];
+                        // The address format is IP:PORT from the TCP connection
+                        format!("{}:{}", peer.address.trim_end_matches(&format!(":{}", port_part)), port_part)
+                    } else {
+                        peer.address.clone()
+                    };
+                    println!("{}✓{} Approved {} — connecting...", GREEN, RESET, peer.node_name);
+                    gossip.direct_sync(&addr, channel_mgr.clone()).await.ok();
+                    agent_journal.log("system", "peer_approved", &peer.node_name);
+                } else {
+                    println!("Invalid index.");
+                }
+            }
+        }
+        "reject" if !slash_arg.is_empty() => {
+            if let Ok(idx) = slash_arg.parse::<usize>() {
+                if let Some(peer) = gossip.reject_pending(idx).await {
+                    println!("{}✗{} Rejected {} from {}", YELLOW, RESET, peer.node_name, peer.address);
+                    agent_journal.log("system", "peer_rejected", &peer.node_name);
+                } else {
+                    println!("Invalid index.");
                 }
             }
         }

@@ -13,6 +13,16 @@ use crate::channel::ChannelManager;
 const MAX_PEERS: usize = 6;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingPeer {
+    pub node_id: String,
+    pub node_name: String,
+    pub address: String,
+    pub groups: Vec<String>,
+    pub token: String,
+    pub arrived_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerInfo {
     pub node_id: String,
     pub node_name: String,
@@ -30,14 +40,17 @@ pub struct GossipEngine {
     node_name: String,
     port: u16,
     peers: Arc<Mutex<HashMap<String, PeerInfo>>>,
-    groups: Arc<Mutex<Vec<(String, String)>>>, // (group_name, token)
+    groups: Arc<Mutex<Vec<(String, String)>>>,
     chan_list: Arc<Mutex<Vec<String>>>,
+    pub pending_peers: Arc<Mutex<Vec<PendingPeer>>>,
 }
 
 impl GossipEngine {
     pub fn new(node_id: &str, node_name: &str, port: u16) -> Self {
+        let pending_peers = Arc::new(Mutex::new(Vec::new()));
         GossipEngine {
             node_id: node_id.to_string(),
+            pending_peers,
             node_name: node_name.to_string(),
             port,
             peers: Arc::new(Mutex::new(HashMap::new())),
@@ -70,14 +83,14 @@ impl GossipEngine {
         self.chan_list.lock().await.clone()
     }
 
-    fn clone_state(&self) -> (String, String, u16, Arc<Mutex<HashMap<String, PeerInfo>>>, Arc<Mutex<Vec<String>>>, Arc<Mutex<Vec<(String, String)>>>) {
-        (self.node_id.clone(), self.node_name.clone(), self.port, self.peers.clone(), self.chan_list.clone(), self.groups.clone())
+    fn clone_state(&self) -> (String, String, u16, Arc<Mutex<HashMap<String, PeerInfo>>>, Arc<Mutex<Vec<String>>>, Arc<Mutex<Vec<(String, String)>>>, Arc<Mutex<Vec<PendingPeer>>>) {
+        (self.node_id.clone(), self.node_name.clone(), self.port, self.peers.clone(), self.chan_list.clone(), self.groups.clone(), self.pending_peers.clone())
     }
 
     // ─── mDNS ────────────────────────────────────────
 
     pub async fn start_mdns_listener(&self) -> anyhow::Result<()> {
-        let (node_id, _, _, peers, _, _) = self.clone_state();
+        let (node_id, _, _, peers, _, _, _) = self.clone_state();
         let bind: SocketAddr = format!("0.0.0.0:{}", self.port + 1).parse()?;
         let socket = tokio::net::UdpSocket::bind(bind).await?;
 
@@ -99,7 +112,7 @@ impl GossipEngine {
     }
 
     pub async fn start_mdns_broadcast(&self, interval: u64) -> anyhow::Result<()> {
-        let (node_id, node_name, port, _, chan_list, groups) = self.clone_state();
+        let (node_id, node_name, port, _, chan_list, groups, _) = self.clone_state();
         let bind: SocketAddr = format!("0.0.0.0:{}", port + 2).parse()?;
         let socket = tokio::net::UdpSocket::bind(bind).await?;
         socket.set_broadcast(true)?;
@@ -133,7 +146,7 @@ impl GossipEngine {
     // ─── TCP listener ────────────────────────────────
 
     pub async fn start_tcp_listener(&self, mgr: Arc<Mutex<ChannelManager>>) -> anyhow::Result<()> {
-        let (node_id, node_name, port, peers, chan_list, groups) = self.clone_state();
+        let (node_id, node_name, port, peers, chan_list, groups, pending_peers) = self.clone_state();
         let bind: SocketAddr = format!("0.0.0.0:{}", port + 3).parse()?;
         let listener = TcpListener::bind(bind).await?;
 
@@ -147,8 +160,9 @@ impl GossipEngine {
                         let cl = chan_list.clone();
                         let cm = mgr.clone();
                         let gs = groups.clone();
+                        let pp = pending_peers.clone();
                         tokio::spawn(async move {
-                            handle_incoming(stream, addr, &nid, &nn, &p, &cl, &cm, &gs).await.ok();
+                            handle_incoming(stream, addr, &nid, &nn, &p, &cl, &cm, &gs, &pp).await.ok();
                         });
                     }
                     Err(e) => warn!("TCP accept: {}", e),
@@ -162,7 +176,7 @@ impl GossipEngine {
     // ─── Periodic gossip ─────────────────────────────
 
     pub async fn start_periodic_sync(&self, mgr: Arc<Mutex<ChannelManager>>, interval: u64) {
-        let (node_id, node_name, _, peers, chan_list, groups) = self.clone_state();
+        let (node_id, node_name, _, peers, chan_list, groups, _) = self.clone_state();
 
         tokio::spawn(async move {
             loop {
@@ -193,6 +207,31 @@ impl GossipEngine {
         sync_with_peer(addr, &self.node_id, &self.node_name, &self.peers, &self.chan_list, &mgr, &self.groups).await
     }
 
+    /// Get pending peers awaiting approval
+    pub async fn pending_list(&self) -> Vec<PendingPeer> {
+        self.pending_peers.lock().await.clone()
+    }
+
+    /// Approve a pending peer by index
+    pub async fn approve_pending(&self, idx: usize) -> Option<PendingPeer> {
+        let mut pps = self.pending_peers.lock().await;
+        if idx < pps.len() {
+            Some(pps.remove(idx))
+        } else {
+            None
+        }
+    }
+
+    /// Reject a pending peer by index
+    pub async fn reject_pending(&self, idx: usize) -> Option<PendingPeer> {
+        let mut pps = self.pending_peers.lock().await;
+        if idx < pps.len() {
+            Some(pps.remove(idx))
+        } else {
+            None
+        }
+    }
+
     pub fn peer_count(&self) -> usize {
         self.peers.try_lock().map(|p| p.len()).unwrap_or(0)
     }
@@ -205,12 +244,13 @@ impl GossipEngine {
 // ─── Incoming handler ───────────────────────────────
 
 async fn handle_incoming(
-    mut stream: TcpStream, _addr: SocketAddr,
+    mut stream: TcpStream, addr: SocketAddr,
     node_id: &str, node_name: &str,
     peers: &Arc<Mutex<HashMap<String, PeerInfo>>>,
     _chan_list: &Arc<Mutex<Vec<String>>>,
     mgr: &Arc<Mutex<ChannelManager>>,
     groups: &Arc<Mutex<Vec<(String, String)>>>,
+    pending_peers: &Arc<Mutex<Vec<PendingPeer>>>,
 ) -> anyhow::Result<()> {
     let (reader, mut writer) = tokio::io::split(stream);
     let mut lines = BufReader::new(reader).lines();
@@ -227,20 +267,26 @@ async fn handle_incoming(
                         .unwrap_or_default();
                     let their_token = msg["token"].as_str().unwrap_or("").to_string();
 
-                    // Check token if group access required
-                    let gs = groups.lock().await;
-                    let access_ok = if their_token.is_empty() || gs.is_empty() {
-                        true  // no access control configured
-                    } else {
-                        gs.iter().any(|(_, t)| t == &their_token)
-                    };
+                    // Chat approval: if groups exist, require user approval
+                    {
+                        let gs = groups.lock().await;
+                        if !gs.is_empty() {
+                            let pending = PendingPeer {
+                                node_id: pid.clone(),
+                                node_name: pname.clone(),
+                                address: addr.to_string(),
+                                groups: their_groups.clone(),
+                                token: their_token.clone(),
+                                arrived_at: chrono::Utc::now().to_rfc3339(),
+                            };
+                            pending_peers.lock().await.push(pending);
 
-                    if !access_ok {
-                        warn!("Access denied for {} from {} (bad token)", pname, _addr);
-                        let deny = serde_json::json!({"event": "access_denied", "reason": "invalid_token"});
-                        let data = serde_json::to_vec(&deny)?;
-                        writer.write_all(&data).await?;
-                        continue;
+                            info!("Approval needed: {} from {} wants to join", pname, addr);
+                            let wait = serde_json::json!({"event": "awaiting_approval", "node_id": pid, "reason": "admin_approval_required"});
+                            let data = serde_json::to_vec(&wait)?;
+                            writer.write_all(&data).await?;
+                            continue;
+                        }
                     }
 
                     // Check max peers
@@ -253,13 +299,13 @@ async fn handle_incoming(
                         continue;
                     }
 
-                    info!("Handshake from {} ({}) groups: {:?}", pname, _addr, their_groups);
+                    info!("Handshake from {} ({}) groups: {:?}", pname, addr, their_groups);
 
                     let peer_info = PeerInfo {
                         node_id: pid.clone(),
                         node_name: pname.clone(),
                         version: "0.2.0".into(),
-                        addresses: vec![_addr.to_string()],
+                        addresses: vec![addr.to_string()],
                         channels: vec![],
                         groups: their_groups,
                         token: their_token,
@@ -267,7 +313,6 @@ async fn handle_incoming(
                         uptime: 0,
                     };
                     peers.lock().await.insert(pid.clone(), peer_info);
-                    drop(gs);
 
                     let cm_guard = mgr.lock().await;
                     let all_channels = cm_guard.list();
