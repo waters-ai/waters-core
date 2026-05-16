@@ -2,14 +2,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::bridge::BridgePool;
 use crate::convo::ConvoAction;
 use crate::display::*;
 
 pub async fn handle_slash(
-    slash_cmd: &str, slash_arg: &str, cmd: &str,
+    slash_cmd: &str, slash_arg: &str,
+    cmd: &str,
     mode_engine: &mut crate::mode::ModeEngine,
     skill_reg: &crate::skill::SkillRegistry,
-    bridge_reg: &crate::bridge::BridgeRegistry,
+    bridge_pool: &BridgePool,
     gossip: &crate::gossip::GossipEngine,
     channel_mgr: &Arc<Mutex<crate::channel::ChannelManager>>,
     api_state: &Arc<crate::api::ApiState>,
@@ -17,7 +19,6 @@ pub async fn handle_slash(
     subagents: &mut crate::subagent::SubAgentManager,
     agent_mgr: &mut crate::agent::AgentManager,
     session_mgr: &mut crate::session::SessionManager,
-    llm_client: &Option<crate::llm::LlmClient>,
     convo: &mut crate::convo::Convo,
     convo_path: &PathBuf,
     task_mgr: &crate::task::TaskManager,
@@ -30,17 +31,16 @@ pub async fn handle_slash(
             println!("{}Slash commands:{}", BOLD, RESET);
             println!("  /help       — this help");
             println!("  /skills     — list skills");
-            println!("  /models     — list available models (nodes)");
-            println!("  /agent      — /agent create <name> <skill> <node_id>");
             println!("  /bridges    — list bridges");
+            println!("  /agent      — /agent create <name> <skill> <node_id>");
             println!("  /status     — node status");
             println!("  /mode       — switch mode (plan/execute/stop/log)");
-            println!("  /connect    — connect to peer: /connect <ip>");
             println!("  /chat       — send message: /chat <text>");
+            println!("  /connect    — connect to peer: /connect <ip>");
             println!("  /sessions   — list sessions");
-            println!("  /resume     — resume session: /resume <id>");
             println!("  /json       — output JSON format");
             println!("  /tui-agents — list builtin TUI-converted agents");
+            println!("  /bridges    — show all registered bridges");
             println!("  /exit       — shutdown");
         }
         "skills" => {
@@ -51,34 +51,15 @@ pub async fn handle_slash(
                 println!("{}Skills ({}):{}", BOLD, list.len(), RESET);
                 for s in &list {
                     let tags = s.manifest.tags.join(", ");
-                    let deps = s.manifest.dependencies.join(", ");
-                    println!("  {} v{} — {}", s.manifest.name, s.manifest.version, s.manifest.description);
-                    if !deps.is_empty() { println!("    deps: {}", deps); }
-                    if !tags.is_empty() { println!("    tags: {}", tags); }
-                    if !s.manifest.bookmarks.is_empty() {
-                        println!("    tests: {}", s.manifest.bookmarks.len());
-                    }
+                    println!("  {} v{} — {} [{}]", s.manifest.name, s.manifest.version, s.manifest.description, tags);
                 }
             }
         }
-        "models" => {
-            let peers = gossip.list_peers().await;
-            println!("{}Available models (nodes):{}", BOLD, RESET);
-            println!("  {} — local (this node){}",
-                if llm_client.is_some() { "✅" } else { "⬜" },
-                if llm_client.is_some() { " active" } else { "" });
-            for p in &peers {
-                println!("  {} — {} ({})", "⬜", p.node_name, p.node_id);
-            }
-            println!("\nUsage: /agent create <name> <skill> <node_id>");
-        }
         "bridges" => {
-            let list = bridge_reg.list();
-            println!("{}Bridges:{}", BOLD, RESET);
-            for b in &list {
-                let icon = if b.connected { "✅" } else { "⬜" };
-                let keys = if b.config_keys.is_empty() { "free".into() } else { b.config_keys.join(", ") };
-                println!("  {} {} — {} [{}]", icon, b.name, b.description, keys);
+            let names = bridge_pool.list();
+            println!("{}Bridges ({}){}", BOLD, names.len(), RESET);
+            for name in &names {
+                println!("  ✅ {} — via bridge", name);
             }
         }
         "agent" => {
@@ -98,8 +79,6 @@ pub async fn handle_slash(
                 }
             } else {
                 println!("Usage: /agent create <name> <skill> <node_id>");
-                println!("  /models — show available nodes");
-                println!("  /skills — show available skills");
             }
         }
         "mode" => {
@@ -120,16 +99,13 @@ pub async fn handle_slash(
         }
         "chat" if !slash_arg.is_empty() => {
             session_mgr.add_message("user", slash_arg);
-            if let Some(ref l) = llm_client {
-                let mut ci = crate::chat::ChatInterface::new(l.clone(), &*session_mgr);
-                match ci.process(slash_arg).await {
-                    Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
-                    Err(e) => println!("Error: {}", e),
+            match bridge_pool.call("llm-ollama", slash_arg)
+                .or_else(|_| bridge_pool.call("llm-deepseek", slash_arg))
+            {
+                Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
+                Err(_) => {
+                    convo.handle(slash_arg);
                 }
-            } else {
-                if let Some(reply) = handle_convo(convo, convo_path, slash_arg, task_mgr, agent_mgr, group_mgr, gossip, skill_reg, bridge_reg, node, state_path, session_mgr).await {
-                    println!("{}", reply);
-                } else { return Ok(false); }
             }
         }
         "sessions" | "resume" => {
@@ -151,7 +127,8 @@ pub async fn handle_slash(
             }
         }
         "json" => {
-            println!("{{\"mode\":\"json\",\"status\":\"ok\",\"node\":\"{}\"}}", node.name());
+            println!("{{\"mode\":\"json\",\"status\":\"ok\",\"node\":\"{}\",\"bridges\":{}}}",
+                node.name(), serde_json::to_string(&bridge_pool.list()).unwrap_or_default());
         }
         "tui-agents" => {
             let agents = crate::tui_agent::builtin_tui_agents();
@@ -180,7 +157,7 @@ pub async fn handle_natural(
     channel_mgr: &Arc<Mutex<crate::channel::ChannelManager>>,
     api_state: &Arc<crate::api::ApiState>,
     agent_journal: &crate::journal::AgentJournal,
-    llm_client: &Option<crate::llm::LlmClient>,
+    bridge_pool: &BridgePool,
     session_mgr: &mut crate::session::SessionManager,
     node: &mut crate::node::Node,
     id_short: &str,
@@ -193,7 +170,6 @@ pub async fn handle_natural(
     agent_mgr: &crate::agent::AgentManager,
     group_mgr: &crate::group::GroupManager,
     skill_reg: &crate::skill::SkillRegistry,
-    bridge_reg: &crate::bridge::BridgeRegistry,
 ) -> Result<bool, anyhow::Error> {
     match cmd {
         "exit" | "quit" | "q" => {
@@ -209,15 +185,12 @@ pub async fn handle_natural(
             println!("  find              — discover peers");
             println!("  status            — node info");
             println!("  connect <ip>      — join a peer");
-            println!("  dashboard         — open {}http://localhost:{}{}", CYAN, api_port, RESET);
+            println!("  dashboard         — open http://localhost:{}", api_port);
             println!("  exit              — shutdown");
-            println!();
-            println!("{}Examples:{}", DIM, RESET);
-            println!("  chat create group kapelka for audit");
-            println!("  chat find all explorer nodes in the network");
         }
         "status" => {
             let peers = gossip.list_peers().await;
+            let bridges = bridge_pool.list();
             println!("{0}Mode:{1}      {2}", BOLD, RESET, mode_engine.current);
             println!("{0}Node:{1}      {2}{3}{4}  ({5})", BOLD, RESET, CYAN, id_short, RESET, node.name());
             println!("{}Uptime:{}   {}s", BOLD, RESET, uptime);
@@ -225,12 +198,11 @@ pub async fn handle_natural(
             for p in &peers {
                 println!("  {}→{} {}{}{}", DIM, RESET, CYAN, p.node_name, RESET);
             }
-            println!("{}LLM:{}     {}", BOLD, RESET, if llm_client.is_some() { "connected" } else { "none" });
+            println!("{}Bridges:{} {}", BOLD, RESET, bridges.len());
+            for b in &bridges {
+                println!("  ✅ {}", b);
+            }
             println!("{}API:{}     {}{}{}", BOLD, RESET, CYAN, format!("http://localhost:{}", api_port), RESET);
-            let agent_list = agent_journal.list_agents();
-            println!("{}Journals:{} {} agents logged", DIM, RESET, agent_list.len());
-            let cmds = mode_engine.available_commands();
-            println!("{}Commands:{} {}", DIM, RESET, cmds.join(", "));
         }
         "find" | "nodes" => {
             let peers = gossip.list_peers().await;
@@ -247,7 +219,6 @@ pub async fn handle_natural(
         }
         "dashboard" => {
             println!("Opening {}http://localhost:{}{}", CYAN, api_port, RESET);
-            println!("  (open in your browser)");
         }
         _ if cmd.to_lowercase().starts_with("режим ") => {
             let mode_name = cmd[6..].trim();
@@ -270,40 +241,33 @@ pub async fn handle_natural(
         _ if cmd.to_lowercase().starts_with("chat ") => {
             let text = cmd[5..].trim();
             session_mgr.add_message("user", text);
-            if let Some(ref l) = llm_client {
-                let mut ci = crate::chat::ChatInterface::new(l.clone(), &*session_mgr);
-                match ci.process(text).await {
-                    Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
-                    Err(e) => println!("Error: {}", e),
-                }
-            } else {
-                demo_response(text);
+            match bridge_pool.call("llm-ollama", text)
+                .or_else(|_| bridge_pool.call("llm-deepseek", text))
+            {
+                Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
+                Err(_) => demo_response(text),
             }
         }
         _ => {
-            if let Some(ref l) = llm_client {
-                session_mgr.add_message("user", cmd);
-                let mut ci = crate::chat::ChatInterface::new(l.clone(), &*session_mgr);
-                match ci.process(cmd).await {
-                    Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
-                    Err(_) => {
-                        match convo.handle(cmd) {
-                            ConvoAction::Exit => {
-                                println!("Shutting down...");
-                                session_mgr.save()?;
-                                convo.save(convo_path);
-                                node.save_state(state_path)?;
-                                return Ok(false);
-                            }
-                            ConvoAction::Response(text) => println!("{}", text),
-                            _ => {},
+            let text = cmd;
+            session_mgr.add_message("user", text);
+            match bridge_pool.call("llm-ollama", text)
+                .or_else(|_| bridge_pool.call("llm-deepseek", text))
+            {
+                Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
+                Err(_) => {
+                    match convo.handle(cmd) {
+                        ConvoAction::Exit => {
+                            println!("Shutting down...");
+                            session_mgr.save()?;
+                            convo.save(convo_path);
+                            node.save_state(state_path)?;
+                            return Ok(false);
                         }
+                        ConvoAction::Response(text) => println!("{}", text),
+                        _ => {}
                     }
                 }
-            } else {
-                if let Some(reply) = handle_convo(convo, convo_path, cmd, task_mgr, agent_mgr, group_mgr, gossip, skill_reg, bridge_reg, node, state_path, session_mgr).await {
-                    println!("{}", reply);
-                } else { return Ok(false); }
             }
         }
     }
@@ -314,7 +278,7 @@ pub async fn handle_convo(
     convo: &mut crate::convo::Convo, convo_path: &PathBuf, input: &str,
     task_mgr: &crate::task::TaskManager, agent_mgr: &crate::agent::AgentManager,
     group_mgr: &crate::group::GroupManager, gossip: &crate::gossip::GossipEngine,
-    skill_reg: &crate::skill::SkillRegistry, bridge_reg: &crate::bridge::BridgeRegistry,
+    skill_reg: &crate::skill::SkillRegistry, _bridge_pool: &BridgePool,
     node: &mut crate::node::Node, state_path: &PathBuf,
     session_mgr: &mut crate::session::SessionManager,
 ) -> Option<String> {
@@ -344,11 +308,12 @@ pub async fn handle_convo(
             }
             let mut reply = "📋 Задачи:\n".to_string();
             for t in &tasks {
-                let agent = t.assigned_to.as_deref().unwrap_or("—");
-                let node = t.assigned_node.as_deref().unwrap_or("");
-                reply.push_str(&format!("  [{}] {} [mode:{:?}] — {} (назначен: {}{})\n",
-                    &t.id[..t.id.len().min(8)], t.title, t.mode, t.status, agent,
-                    if node.is_empty() { "".into() } else { format!(" @{}", node) }));
+                reply.push_str(&format!("  [{}] {} [mode:{:?}] — {}",
+                    &t.id[..t.id.len().min(8)], t.title, t.mode, t.status));
+                if let Some(ref agent) = t.assigned_to {
+                    reply.push_str(&format!(" (назначен: {})", agent));
+                }
+                reply.push('\n');
             }
             return Some(reply);
         }
@@ -380,18 +345,6 @@ pub async fn handle_convo(
             for g in &groups {
                 reply.push_str(&format!("  {} ({} участников, {} каналов, {})\n",
                     g.name, g.members.len(), g.channels.len(), g.visibility));
-                if !g.shared_skills.is_empty() {
-                    reply.push_str(&format!("    скилы: {}\n",
-                        g.shared_skills.iter().map(|s| &s.name).cloned().collect::<Vec<_>>().join(", ")));
-                }
-                if !g.shared_bridges.is_empty() {
-                    reply.push_str(&format!("    поиск: {}\n",
-                        g.shared_bridges.iter().map(|b| &b.name).cloned().collect::<Vec<_>>().join(", ")));
-                }
-                if !g.shared_services.is_empty() {
-                    reply.push_str(&format!("    сервисы: {}\n",
-                        g.shared_services.iter().map(|s| &s.name).cloned().collect::<Vec<_>>().join(", ")));
-                }
             }
             return Some(reply);
         }
@@ -411,31 +364,24 @@ pub async fn handle_convo(
             let tasks = task_mgr.list().await;
             let done = tasks.iter().filter(|t| t.status == "done").count();
             let open = tasks.iter().filter(|t| t.status == "open").count();
-            let assigned = tasks.iter().filter(|t| t.status == "assigned").count();
             let agents_mine = agent_mgr.list_mine().len();
             let agents_peers = agent_mgr.list_from_peers().len();
             let peers = gossip.list_peers().await.len();
-            let skills = skill_reg.list().len();
+            let bridges = _bridge_pool.list().len();
             let tui_count = crate::tui_agent::builtin_tui_agents().len();
 
             let mut reply = format!("📊 Отчёт ноды {}:\n", convo.profile.name);
-            reply.push_str(&format!("  Задачи: {} всего ({} выполнено, {} в работе, {} открыто)\n",
-                tasks.len(), done, assigned, open));
-            reply.push_str(&format!("  Агенты: {} своих + {} из других нод ({} TUI-конвертированных)\n", agents_mine, agents_peers, tui_count));
+            reply.push_str(&format!("  Задачи: {} всего ({} выполнено, {} открыто)\n", tasks.len(), done, open));
+            reply.push_str(&format!("  Агенты: {} своих + {} из других нод ({} TUI)\n", agents_mine, agents_peers, tui_count));
             reply.push_str(&format!("  Ноды: {} подключено\n", peers));
-            reply.push_str(&format!("  Скилы: {} загружено\n", skills));
+            reply.push_str(&format!("  Бриджи: {} зарегистрировано\n", bridges));
             return Some(reply);
         }
         ConvoAction::Setup => {
             let mut reply = "⚙️ Настройки ноды:\n".to_string();
             reply.push_str(&format!("  Имя: {}\n", convo.profile.name));
             reply.push_str(&format!("  NodeID: {}\n", node.id()));
-            reply.push_str("  Бриджи:\n");
-            for b in bridge_reg.list() {
-                let icon = if b.connected { "✅" } else { "⬜" };
-                let keys = if b.config_keys.is_empty() { "бесплатно".into() } else { b.config_keys.join(", ") };
-                reply.push_str(&format!("    {} {} — {} [{}]\n", icon, b.name, b.description, keys));
-            }
+            reply.push_str(&format!("  Бриджи: {}\n", _bridge_pool.list().join(", ")));
             reply.push_str(&format!("  TUI-агентов: {} встроено\n", crate::tui_agent::builtin_tui_agents().len()));
             return Some(reply);
         }

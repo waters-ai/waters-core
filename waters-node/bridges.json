@@ -1,0 +1,23 @@
+{
+  "llm": {
+    "provider": "ollama",
+    "model": "qwen2.5:14b",
+    "url": "http://127.0.0.1:11434",
+    "api_key": "",
+    "system_prompt": "You are a helpful WATERS node assistant."
+  },
+  "chat": {
+    "transport": "stdin",
+    "token": ""
+  },
+  "voice": null,
+  "bridges": [
+    {
+      "name": "search-duckduckgo",
+      "provider": "search",
+      "transport": "http",
+      "config": {},
+      "enabled": false
+    }
+  ]
+}

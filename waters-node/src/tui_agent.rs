@@ -1,11 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+use crate::cargo::OnboardLlm;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TuiAgent {
     pub name: String,
     pub source: String,
     pub native_skill: TuiSkillWrapper,
     pub json_capable: bool,
+    pub onboard_llm: Option<OnboardLlm>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,7 +30,7 @@ pub struct AgentJsonMessage {
 }
 
 impl TuiAgent {
-    pub fn new(tui_name: &str, description: &str, bridges: &[String]) -> Self {
+    pub fn new(tui_name: &str, description: &str, bridges: &[String], onboard: Option<OnboardLlm>) -> Self {
         TuiAgent {
             name: format!("tui-{}", tui_name),
             source: "tui".into(),
@@ -38,6 +41,7 @@ impl TuiAgent {
                 prompt: format!("You are a TUI-converted agent '{}'. {}", tui_name, description),
             },
             json_capable: true,
+            onboard_llm: onboard,
         }
     }
 
@@ -65,23 +69,44 @@ impl TuiAgent {
     }
 }
 
-pub fn convert_tui_to_node(tui_name: &str, description: &str, bridges: &[String]) -> (TuiAgent, crate::agent::Agent) {
-    let agent = TuiAgent::new(tui_name, description, bridges);
+pub fn convert_tui_to_node(tui_name: &str, description: &str, bridges: &[String], onboard: Option<OnboardLlm>) -> (TuiAgent, crate::agent::Agent) {
+    let agent = TuiAgent::new(tui_name, description, bridges, onboard);
     let node_agent = agent.to_agent_entry();
     (agent, node_agent)
 }
 
+/// 5 агентов, каждый со своим бортовым LLM
 pub fn builtin_tui_agents() -> Vec<TuiAgent> {
     vec![
-        TuiAgent::new("scout-us", "US/global search via DuckDuckGo", &["duckduckgo".into()]),
-        TuiAgent::new("scout-ru", "Russian search via Yandex", &["yandex.search".into()]),
-        TuiAgent::new("scout-cn", "Chinese search via Baidu", &["baidu.search".into()]),
-        TuiAgent::new("explorer", "General exploration and data collection", &["duckduckgo".into()]),
-        TuiAgent::new("analyst", "Data analysis and pattern recognition", &[] as &[String]),
-        TuiAgent::new("writer", "Content writing and summarization", &[] as &[String]),
-        TuiAgent::new("astronomer", "Astronomical observation and meteor tracking", &["mcp-nasa".into()]),
-        TuiAgent::new("geologist", "Geological analysis of celestial bodies", &[] as &[String]),
-        TuiAgent::new("cartographer", "Mapping and trajectory calculation", &["mcp-trajectory".into()]),
-        TuiAgent::new("inspector", "Quality assurance and validation", &[] as &[String]),
+        TuiAgent::new(
+            "scout-us",
+            "US/global search via DuckDuckGo",
+            &["duckduckgo".into()],
+            Some(OnboardLlm { model: "qwen2.5:1.5b".into(), quant: "Q4_K_M".into(), ctx_size: 4096, size_mb: 980 }),
+        ),
+        TuiAgent::new(
+            "explorer",
+            "General exploration and data collection, onboard LLM for field work",
+            &["duckduckgo".into(), "mcp-nasa".into()],
+            Some(OnboardLlm { model: "qwen2.5:1.5b".into(), quant: "Q4_K_M".into(), ctx_size: 4096, size_mb: 980 }),
+        ),
+        TuiAgent::new(
+            "analyst",
+            "Data analysis and pattern recognition, deep reasoning onboard",
+            &[] as &[String],
+            Some(OnboardLlm { model: "qwen2.5:3b".into(), quant: "Q4_K_M".into(), ctx_size: 8192, size_mb: 1800 }),
+        ),
+        TuiAgent::new(
+            "geologist",
+            "Geological analysis of celestial bodies, spectral data processing",
+            &[] as &[String],
+            Some(OnboardLlm { model: "gemma-2b".into(), quant: "Q4_K_M".into(), ctx_size: 4096, size_mb: 1200 }),
+        ),
+        TuiAgent::new(
+            "cartographer",
+            "Mapping, trajectory calculation, spatial reasoning",
+            &["mcp-trajectory".into()],
+            Some(OnboardLlm { model: "qwen2.5:1.5b".into(), quant: "Q4_K_M".into(), ctx_size: 4096, size_mb: 980 }),
+        ),
     ]
 }

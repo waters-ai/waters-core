@@ -1,92 +1,316 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Debug;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use tracing::info;
+
+pub trait BridgeProvider: Debug + Send + Sync {
+    fn name(&self) -> &str;
+    fn call(&self, input: &str) -> Result<String>;
+    fn call_json(&self, input: &serde_json::Value) -> Result<serde_json::Value> {
+        let text = self.call(&serde_json::to_string(input)?)?;
+        Ok(serde_json::json!({"response": text}))
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Bridge {
+pub struct BridgeConfig {
     pub name: String,
-    pub description: String,
-    pub connected: bool,
-    pub config_keys: Vec<String>,
-    pub region: String,
+    pub provider: String,
+    pub transport: String,
+    #[serde(default)]
+    pub config: HashMap<String, String>,
+    #[serde(default)]
+    pub enabled: bool,
 }
 
-impl Bridge {
-    pub fn new(name: &str, desc: &str, region: &str, keys: Vec<&str>) -> Self {
-        Bridge {
-            name: name.to_string(),
-            description: desc.to_string(),
-            connected: false,
-            config_keys: keys.iter().map(|s| s.to_string()).collect(),
-            region: region.to_string(),
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BridgesFile {
+    #[serde(default)]
+    pub bridges: Vec<BridgeConfig>,
+    #[serde(default)]
+    pub llm: LlmBridgeConfig,
+    #[serde(default)]
+    pub chat: ChatBridgeConfig,
+    #[serde(default)]
+    pub voice: Option<VoiceBridgeConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmBridgeConfig {
+    pub provider: String,
+    pub model: String,
+    pub url: String,
+    pub api_key: String,
+    pub system_prompt: String,
+}
+
+impl Default for LlmBridgeConfig {
+    fn default() -> Self {
+        LlmBridgeConfig {
+            provider: "ollama".into(),
+            model: "qwen2.5:14b".into(),
+            url: "http://127.0.0.1:11434".into(),
+            api_key: String::new(),
+            system_prompt: "You are a helpful WATERS node assistant.".into(),
         }
     }
 }
 
-pub struct BridgeRegistry {
-    pub bridges: HashMap<String, Bridge>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatBridgeConfig {
+    pub transport: String,
+    pub token: String,
 }
 
-impl BridgeRegistry {
+impl Default for ChatBridgeConfig {
+    fn default() -> Self {
+        ChatBridgeConfig {
+            transport: "stdin".into(),
+            token: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceBridgeConfig {
+    pub stt_model: String,
+    pub tts_model: String,
+    pub url: String,
+}
+
+pub struct BridgePool {
+    pub bridges: HashMap<String, Box<dyn BridgeProvider>>,
+}
+
+impl Debug for BridgePool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BridgePool")
+            .field("bridges", &self.bridges.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
+impl BridgePool {
     pub fn new() -> Self {
-        let mut bridges = HashMap::new();
-        for b in Self::list_available() {
-            bridges.insert(b.name.clone(), b);
+        BridgePool {
+            bridges: HashMap::new(),
         }
-        BridgeRegistry { bridges }
     }
 
-    pub fn list_available() -> Vec<Bridge> {
-        vec![
-            Bridge::new("duckduckgo", "Поиск без ключа, все регионы", "all", vec![]),
-            Bridge::new("yandex.search", "Поиск по RU-сегменту (ключ Yandex.XML)", "ru", vec!["api_key", "user"]),
-            Bridge::new("yandex.gpt", "AI-валидация RU (ключ YandexGPT)", "ru", vec!["api_key"]),
-            Bridge::new("baidu.search", "Поиск по CN-сегменту (ключ Baidu)", "cn", vec!["api_key"]),
-            Bridge::new("notebooklm", "Google NotebookLM валидация (cookie)", "all", vec!["cookie"]),
-            Bridge::new("telegram", "Telegram бот (bot token)", "all", vec!["token"]),
-        Bridge::new("notebooklm", "Google NotebookLM — AI валидация", "all", vec!["cookie"]),
-        Bridge::new("obsidian", "Obsidian vault — заметки и база знаний", "all", vec!["vault_path"]),
-        Bridge::new("chromadb", "ChromaDB — векторная память (238 hub)", "all", vec!["url"]),
-        Bridge::new("lightrag", "LightRAG — граф знаний", "all", vec!["url"]),
-        ]
+    pub fn register(&mut self, bridge: Box<dyn BridgeProvider>) {
+        let name = bridge.name().to_string();
+        info!("Bridge registered: {}", name);
+        self.bridges.insert(name, bridge);
     }
 
-    pub fn connect(&mut self, name: &str, config: HashMap<String, String>) -> bool {
-        if let Some(bridge) = self.bridges.get_mut(name) {
-            // Проверяем что все ключи предоставлены
-            for key in &bridge.config_keys {
-                if !config.contains_key(key) {
-                    return false;
-                }
+    pub fn call(&self, name: &str, input: &str) -> Result<String> {
+        self.bridges.get(name)
+            .ok_or_else(|| anyhow::anyhow!("Bridge '{}' not found", name))
+            .and_then(|b| b.call(input))
+    }
+
+    pub fn call_json(&self, name: &str, input: &serde_json::Value) -> Result<serde_json::Value> {
+        self.bridges.get(name)
+            .ok_or_else(|| anyhow::anyhow!("Bridge '{}' not found", name))
+            .and_then(|b| b.call_json(input))
+    }
+
+    pub fn get(&self, name: &str) -> Option<&Box<dyn BridgeProvider>> {
+        self.bridges.get(name)
+    }
+
+    pub fn list(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.bridges.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
+    pub fn load_config(path: &std::path::Path) -> BridgesFile {
+        if path.exists() {
+            std::fs::read_to_string(path)
+                .ok()
+                .and_then(|c| serde_json::from_str(&c).ok())
+                .unwrap_or_default()
+        } else {
+            BridgesFile::default()
+        }
+    }
+}
+
+/// LLM as a bridge
+#[derive(Debug)]
+pub struct LlmBridge {
+    name: String,
+    provider: LlmProvider,
+    system_prompt: String,
+}
+
+#[derive(Debug)]
+enum LlmProvider {
+    DeepSeek { api_key: String, model: String },
+    Ollama { url: String, model: String },
+    OpenAI { url: String, model: String, api_key: String },
+}
+
+impl LlmBridge {
+    pub fn new(name: &str, cfg: &LlmBridgeConfig) -> Self {
+        let provider = match cfg.provider.as_str() {
+            "deepseek" => LlmProvider::DeepSeek {
+                api_key: cfg.api_key.clone(),
+                model: cfg.model.clone(),
+            },
+            "openai" => LlmProvider::OpenAI {
+                url: cfg.url.clone(),
+                model: cfg.model.clone(),
+                api_key: cfg.api_key.clone(),
+            },
+            _ => LlmProvider::Ollama {
+                url: cfg.url.clone(),
+                model: cfg.model.clone(),
+            },
+        };
+        LlmBridge {
+            name: name.to_string(),
+            provider,
+            system_prompt: cfg.system_prompt.clone(),
+        }
+    }
+}
+
+impl BridgeProvider for LlmBridge {
+    fn name(&self) -> &str { &self.name }
+
+    fn call(&self, input: &str) -> Result<String> {
+        let client = reqwest::blocking::Client::new();
+        match &self.provider {
+            LlmProvider::DeepSeek { api_key, model } => {
+                let body = serde_json::json!({
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": &self.system_prompt},
+                        {"role": "user", "content": input}
+                    ],
+                    "stream": false
+                });
+                let resp = client
+                    .post("https://api.deepseek.com/beta/chat/completions")
+                    .header("Authorization", format!("Bearer {}", api_key))
+                    .json(&body)
+                    .send()?;
+                let result: serde_json::Value = resp.json()?;
+                Ok(result["choices"][0]["message"]["content"]
+                    .as_str().unwrap_or("").to_string())
             }
-            bridge.connected = true;
-            true
-        } else {
-            false
+            LlmProvider::Ollama { url, model } => {
+                let body = serde_json::json!({
+                    "model": model,
+                    "system": &self.system_prompt,
+                    "prompt": input,
+                    "stream": false
+                });
+                let resp = client
+                    .post(format!("{}/api/generate", url))
+                    .json(&body)
+                    .send()?;
+                let result: serde_json::Value = resp.json()?;
+                Ok(result["response"].as_str().unwrap_or("").to_string())
+            }
+            LlmProvider::OpenAI { url, model, api_key } => {
+                let body = serde_json::json!({
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": &self.system_prompt},
+                        {"role": "user", "content": input}
+                    ]
+                });
+                let mut req = client
+                    .post(format!("{}/v1/chat/completions", url));
+                if !api_key.is_empty() {
+                    req = req.header("Authorization", format!("Bearer {}", api_key));
+                }
+                let resp = req.json(&body).send()?;
+                let result: serde_json::Value = resp.json()?;
+                Ok(result["choices"][0]["message"]["content"]
+                    .as_str().unwrap_or("").to_string())
+            }
         }
     }
+}
 
-    pub fn disconnect(&mut self, name: &str) -> bool {
-        if let Some(bridge) = self.bridges.get_mut(name) {
-            bridge.connected = false;
-            true
-        } else {
-            false
+/// Chat as a bridge (stdin / telegram)
+#[derive(Debug)]
+pub struct ChatBridge {
+    name: String,
+    transport: ChatTransport,
+}
+
+#[derive(Debug)]
+enum ChatTransport {
+    Stdin,
+    Telegram { token: String, chat_id: Option<String> },
+}
+
+impl ChatBridge {
+    pub fn new_stdin(name: &str) -> Self {
+        ChatBridge { name: name.to_string(), transport: ChatTransport::Stdin }
+    }
+
+    pub fn new_telegram(name: &str, token: &str) -> Self {
+        ChatBridge { name: name.to_string(), transport: ChatTransport::Telegram { token: token.to_string(), chat_id: None } }
+    }
+}
+
+impl BridgeProvider for ChatBridge {
+    fn name(&self) -> &str { &self.name }
+
+    fn call(&self, input: &str) -> Result<String> {
+        match &self.transport {
+            ChatTransport::Stdin => {
+                println!("{}", input);
+                let mut line = String::new();
+                std::io::stdin().read_line(&mut line)?;
+                Ok(line.trim().to_string())
+            }
+            ChatTransport::Telegram { token, chat_id: _ } => {
+                let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
+                let body = serde_json::json!({
+                    "chat_id": "@waters_node",
+                    "text": input,
+                    "parse_mode": "Markdown"
+                });
+                let client = reqwest::blocking::Client::new();
+                let resp = client.post(&url).json(&body).send()?;
+                let result: serde_json::Value = resp.json()?;
+                Ok(serde_json::to_string(&result)?)
+            }
         }
     }
+}
 
-    pub fn is_connected(&self, name: &str) -> bool {
-        self.bridges.get(name).map(|b| b.connected).unwrap_or(false)
+/// Voice bridge (Whisper STT stub)
+#[derive(Debug)]
+pub struct VoiceBridge {
+    name: String,
+    url: String,
+}
+
+impl VoiceBridge {
+    pub fn new(name: &str, url: &str) -> Self {
+        VoiceBridge { name: name.to_string(), url: url.to_string() }
     }
+}
 
-    pub fn list(&self) -> Vec<&Bridge> {
-        self.bridges.values().collect()
-    }
+impl BridgeProvider for VoiceBridge {
+    fn name(&self) -> &str { &self.name }
 
-    pub fn list_connected(&self) -> Vec<&Bridge> {
-        self.bridges.values().filter(|b| b.connected).collect()
-    }
-
-    pub fn list_by_region(&self, region: &str) -> Vec<&Bridge> {
-        self.bridges.values().filter(|b| b.region == region || b.region == "all").collect()
+    fn call(&self, input: &str) -> Result<String> {
+        let body = serde_json::json!({"audio": input, "model": "whisper-1"});
+        let resp = reqwest::blocking::Client::new()
+            .post(format!("{}/v1/audio/transcriptions", self.url))
+            .json(&body)
+            .send()?;
+        let result: serde_json::Value = resp.json()?;
+        Ok(result["text"].as_str().unwrap_or("").to_string())
     }
 }

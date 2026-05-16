@@ -3,12 +3,10 @@ mod node;
 mod tools;
 mod session;
 mod subagent;
-mod llm;
 mod mcp;
 mod autonomy;
 mod dtn;
 mod cargo;
-mod chat;
 mod api;
 mod channel;
 mod group;
@@ -27,6 +25,7 @@ mod tui_agent;
 
 use anyhow::Result;
 use clap::Parser;
+use bridge::BridgePool;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -38,6 +37,8 @@ use display::*;
 struct Args {
     #[arg(short, long, default_value = "config.toml")]
     config: PathBuf,
+    #[arg(short, long, default_value = "bridges.json")]
+    bridges: PathBuf,
     #[arg(short, long)]
     verbose: bool,
     #[arg(long)]
@@ -83,26 +84,62 @@ async fn main() -> Result<()> {
     print_banner(env!("CARGO_PKG_VERSION"));
 
     let id_short = node.id()[..8].to_string();
-    let (llm_client, llm_name) = demo::deepseek_or_ollama().await;
-    let llm_display = if llm_client.is_some() {
-        format!("{}{}{}", GREEN, llm_name, RESET)
-    } else {
-        format!("{}{}{}", YELLOW, llm_name, RESET)
-    };
+
+    // Init BridgePool from bridges.json
+    let bridges_file = bridge::BridgePool::load_config(&args.bridges);
+    let mut bridge_pool = bridge::BridgePool::new();
+
+    // Register LLM bridge
+    let llm_name = format!("llm-{}", bridges_file.llm.provider);
+    bridge_pool.register(Box::new(bridge::LlmBridge::new(&llm_name, &bridges_file.llm)));
+    let llm_display = format!("{}{}{}", GREEN, llm_name, RESET);
     print_node_info(&id_short, node.name(), &llm_display);
+
+    // Register Chat bridge
+    match bridges_file.chat.transport.as_str() {
+        "telegram" => {
+            bridge_pool.register(Box::new(bridge::ChatBridge::new_telegram("chat", &bridges_file.chat.token)));
+        }
+        "stdin" | _ => {
+            bridge_pool.register(Box::new(bridge::ChatBridge::new_stdin("chat")));
+        }
+    }
+
+    // Register custom bridges from config
+    for bcfg in &bridges_file.bridges {
+        if !bcfg.enabled { continue; }
+        match bcfg.provider.as_str() {
+            "llm" => {
+                let llm_cfg = bridge::LlmBridgeConfig {
+                    provider: bcfg.config.get("provider").cloned().unwrap_or_default(),
+                    model: bcfg.config.get("model").cloned().unwrap_or_default(),
+                    url: bcfg.config.get("url").cloned().unwrap_or_default(),
+                    api_key: bcfg.config.get("api_key").cloned().unwrap_or_default(),
+                    system_prompt: bcfg.config.get("system_prompt").cloned().unwrap_or_default(),
+                };
+                bridge_pool.register(Box::new(bridge::LlmBridge::new(&bcfg.name, &llm_cfg)));
+            }
+            "voice" => {
+                let url = bcfg.config.get("url").cloned().unwrap_or_default();
+                bridge_pool.register(Box::new(bridge::VoiceBridge::new(&bcfg.name, &url)));
+            }
+            _ => tracing::warn!("Unknown bridge provider: {}", bcfg.provider),
+        }
+    }
+
+    // Register builtin search bridges
+    bridge_pool.register(Box::new(bridge::ChatBridge::new_stdin("duckduckgo")));
 
     let mut skill_reg = skill::SkillRegistry::new();
     skill_reg.load_from(&std::path::Path::new("skills"));
     if skill_reg.list().len() > 0 {
         let skill_count = skill_reg.list().len();
-        let skill_msg = format!("{}Skills{}", BOLD, RESET);
-        println!("  {0}{1}{2}   {3}{4}{5}", DIM, skill_msg, RESET, CYAN, skill_count, RESET);
+        println!("  {0}{1}Skills{2}{3}   {4}{5}{6}", DIM, BOLD, RESET, DIM, CYAN, skill_count, RESET);
     }
 
     let tools = Arc::new(tools::ToolRegistry::new());
     print_tools(&tools.list());
 
-    let mut bridge_reg = bridge::BridgeRegistry::new();
     let agent_journal = journal::AgentJournal::new(&std::path::Path::new(".waters/logs"));
 
     let convo_path = PathBuf::from(".waters/profile.json");
@@ -176,10 +213,8 @@ async fn main() -> Result<()> {
         println!("{}╔══════════════════════════════════════╗{}", CYAN, RESET);
         println!("{}║    waters-node DEMO                  ║{}", CYAN, RESET);
         println!("{}╚══════════════════════════════════════╝{}", CYAN, RESET);
-        if let Some(ref l) = llm_client {
-            for line in &demo::demo_conversation(l).await {
-                println!("{}", line);
-            }
+        if bridge_pool.get("llm-ollama").is_some() || bridge_pool.get("llm-deepseek").is_some() {
+            demo::demo_conversation(&bridge_pool).await;
         } else {
             demo::print_no_llm_help();
         }
@@ -190,27 +225,25 @@ async fn main() -> Result<()> {
     // One-shot mode
     if let Some(prompt_text) = args.prompt {
         session_mgr.add_message("user", &prompt_text);
-        if let Some(ref l) = llm_client {
-            let mut ch = chat::ChatInterface::new(l.clone(), &session_mgr);
-            match ch.process(&prompt_text).await {
-                Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
-                Err(e) => tracing::error!("Chat error: {}", e),
-            }
-        } else {
-            demo_response(&prompt_text);
+        match bridge_pool.call("llm-ollama", &prompt_text)
+            .or_else(|_| bridge_pool.call("llm-deepseek", &prompt_text))
+        {
+            Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
+            Err(_) => demo_response(&prompt_text),
         }
         session_mgr.save()?;
         return Ok(());
     }
 
     // Interactive mode
+    let has_llm = bridge_pool.list().iter().any(|n| n.starts_with("llm-"));
     if !convo.profile.greeted || convo.profile.name.is_empty() {
         print_welcome();
         println!("{}", convo.greet());
         println!("(напиши своё имя и нажми Enter)");
     } else {
         print_ready();
-        if llm_client.is_some() {
+        if has_llm {
             println!(" Try:");
             println!("  {0}chat ...{1}   — LLM command", DIM, RESET);
         } else {
@@ -247,19 +280,19 @@ async fn main() -> Result<()> {
             handlers::handle_slash(
                 parts[0], parts.get(1).copied().unwrap_or(""),
                 cmd,
-                &mut mode_engine, &skill_reg, &bridge_reg,
+                &mut mode_engine, &skill_reg, &bridge_pool,
                 &gossip, &channel_mgr, &api_state, &agent_journal,
                 &mut subagents, &mut agent_mgr, &mut session_mgr,
-                &llm_client, &mut convo, &convo_path,
+                &mut convo, &convo_path,
                 &task_mgr, &group_mgr, &mut node, &state_path,
             ).await?
         } else {
             handlers::handle_natural(
                 cmd,
                 &mut mode_engine, &gossip, &channel_mgr, &api_state, &agent_journal,
-                &llm_client, &mut session_mgr, &mut node, &id_short, api_port,
+                &bridge_pool, &mut session_mgr, &mut node, &id_short, api_port,
                 uptime, &state_path, &mut convo, &convo_path,
-                &task_mgr, &agent_mgr, &group_mgr, &skill_reg, &bridge_reg,
+                &task_mgr, &agent_mgr, &group_mgr, &skill_reg,
             ).await?
         };
 

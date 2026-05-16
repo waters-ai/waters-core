@@ -849,6 +849,22 @@
          - Agent struct: добавлены personal_resources, active_skill
          - Все warnings: 56 (dead code, не влияет на работу)
 [2026-05-16T07:30:00Z] [DONE]  v0.3.0 — refactored build
+[2026-05-16T07:40:00Z] [ARCH]  BridgeProvider trait — архитектура перестроена:
+         - bridge.rs переписан: BridgeProvider trait + LlmBridge + ChatBridge + VoiceBridge
+         - llm.rs удалён → LlmBridge в bridge.rs (DeepSeek/Ollama/OpenAI)
+         - chat.rs удалён → ChatBridge в bridge.rs (stdin/Telegram)
+         - bridges.json: LLM, chat, voice конфигурация
+         - main.rs: BridgePool управляет всеми бриджами
+         - handlers.rs: использует bridge_pool.call() вместо старого ChatInterface
+         - demo.rs: использует bridge_pool.call() вместо LlmClient
+[2026-05-16T07:40:00Z] [AGENT] 5 TUI-агентов с бортовыми LLM:
+         - tui-scout-us: Qwen2.5-1.5B Q4_K_M (980MB)
+         - tui-explorer: Qwen2.5-1.5B Q4_K_M (980MB)
+         - tui-analyst: Qwen2.5-3B Q4_K_M (1.8GB)
+         - tui-geologist: Gemma-2B Q4_K_M (1.2GB)
+         - tui-cartographer: Qwen2.5-1.5B Q4_K_M (980MB)
+         Каждый агент = скилы + бортовой журнал + своя маленькая LLM
+[2026-05-16T07:40:00Z] [NEXT]  Фаза 3: голосовые бриджи (Whisper MCP + TTS)
 [2026-05-16T06:30:00Z] [STATE] Проект: waters-node, переход к сборке
 [2026-05-16T06:30:00Z] [PLAN]  План:
           1. Создать Cargo.toml для waters-node (отсутствует в репозитории)

@@ -8,7 +8,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 
-use crate::channel::{ChannelManager, ChannelMessage};
+use crate::channel::ChannelManager;
 
 const MAX_PEERS: usize = 6;
 
