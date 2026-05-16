@@ -11,7 +11,7 @@ pub async fn handle_slash(
     cmd: &str,
     mode_engine: &mut crate::mode::ModeEngine,
     skill_reg: &crate::skill::SkillRegistry,
-    bridge_pool: &BridgePool,
+    bridge_pool: &mut BridgePool,
     gossip: &crate::gossip::GossipEngine,
     channel_mgr: &Arc<Mutex<crate::channel::ChannelManager>>,
     api_state: &Arc<crate::api::ApiState>,
@@ -22,28 +22,38 @@ pub async fn handle_slash(
     convo: &mut crate::convo::Convo,
     convo_path: &PathBuf,
     task_mgr: &crate::task::TaskManager,
-    group_mgr: &crate::group::GroupManager,
+    group_mgr: &mut crate::group::GroupManager,
     node: &mut crate::node::Node,
     state_path: &PathBuf,
 ) -> Result<bool, anyhow::Error> {
     match slash_cmd {
         "help" | "h" => {
             println!("{}Slash commands:{}", BOLD, RESET);
-            println!("  /help       — this help");
-            println!("  /skills     — list skills");
-            println!("  /bridges    — list bridges");
-            println!("  /agent      — /agent create <name> <skill> <node_id>");
-            println!("  /status     — node status");
-            println!("  /approvals  — show pending peer approval requests");
-            println!("  /approve    — /approve <idx> to accept peer");
-            println!("  /reject     — /reject <idx> to deny peer");
-            println!("  /mode       — switch mode (plan/execute/stop/log)");
-            println!("  /chat       — send message: /chat <text>");
-            println!("  /connect    — connect to peer: /connect <ip>");
-            println!("  /sessions   — list sessions");
-            println!("  /json       — output JSON format");
-            println!("  /tui-agents — list builtin TUI-converted agents");
-            println!("  /exit       — shutdown");
+            println!("  /help         — this help");
+            println!("  /skills       — list skills");
+            println!("  /bridges      — list bridges with status");
+            println!("  /priorities   — show/change bridge priorities");
+            println!("  /priorities set <name> <1-5> — set priority");
+            println!("  /priorities lock <name> — lock bridge (never offloaded)");
+            println!("  /priorities unlock <name> — unlock bridge");
+            println!("  /group        — /group create/list/invite");
+            println!("  /group create <name> — create group");
+            println!("  /group invite <name> <node> — invite node to group");
+            println!("  /group mode <name> storm|hunt|synthesis|focus|watch — set group mode");
+            println!("  /group next <name> — advance to next lifecycle mode");
+            println!("  /agent        — /agent create <name> <skill> <node_id>");
+            println!("  /status       — node status");
+            println!("  /approvals    — show pending peer approval requests");
+            println!("  /approve      — /approve <idx> to accept peer");
+            println!("  /reject       — /reject <idx> to deny peer");
+            println!("  /mode         — switch node mode (plan/execute/stop/log)");
+            println!("  /groupmode    — switch group mode (storm/hunt/synthesis/focus/watch)");
+            println!("  /chat         — send message: /chat <text>");
+            println!("  /connect      — connect to peer: /connect <ip>");
+            println!("  /sessions     — list sessions");
+            println!("  /json         — output JSON format");
+            println!("  /tui-agents   — list builtin TUI-converted agents");
+            println!("  /exit         — shutdown");
         }
         "skills" => {
             let list = skill_reg.list();
@@ -58,10 +68,60 @@ pub async fn handle_slash(
             }
         }
         "bridges" => {
-            let names = bridge_pool.list();
-            println!("{}Bridges ({}){}", BOLD, names.len(), RESET);
-            for name in &names {
-                println!("  ✅ {} — via bridge", name);
+            let bridges = bridge_pool.list_with_status();
+            println!("{}Bridges ({}){}", BOLD, bridges.len(), RESET);
+            for (name, enabled, reason) in &bridges {
+                let icon = if *enabled { "✅" } else { "⛔" };
+                if *enabled {
+                    println!("  {} {}", icon, name);
+                } else {
+                    println!("  {} {} — {}", icon, name, reason);
+                }
+            }
+        }
+        "priorities" => {
+            if slash_arg.is_empty() {
+                // Show all bridges with priorities and status
+                let bridges = bridge_pool.list_with_status();
+                let mut msg = format!("{}Bridge priorities:{}", BOLD, RESET);
+                for (name, enabled, reason) in &bridges {
+                    let info = bridge_pool.info.get(name);
+                    let prio = info.map(|i| i.priority).unwrap_or(3);
+                    let bw = info.map(|i| i.bandwidth_kbps).unwrap_or(0);
+                    let icon = if *enabled { "✅" } else { "⛔" };
+                    msg.push_str(&format!("\n  {} {} — priority {}, {} Kbps", icon, name, prio, bw));
+                    if !reason.is_empty() {
+                        msg.push_str(&format!(" ({})", reason));
+                    }
+                }
+                // Show governor status
+                for (link_name, _) in &bridge_pool.governor.links {
+                    msg.push_str(&format!("\n{}", bridge_pool.governor.status_message(&bridge_pool.info, link_name)));
+                }
+                println!("{}", msg);
+            } else {
+                // /priorities set <name> <priority>
+                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+                if parts.len() >= 3 && parts[0] == "set" {
+                    let name = parts[1];
+                    if let Ok(prio) = parts[2].parse::<u8>() {
+                        if bridge_pool.set_priority(name, prio) {
+                            println!("{}✓{} Bridge '{}' priority set to {}", GREEN, RESET, name, prio);
+                            let changes = bridge_pool.governor.autoadjust(&mut bridge_pool.info);
+                            for c in &changes { println!("  {}", c); }
+                        } else { println!("Bridge '{}' not found.", name); }
+                    }
+                } else if parts.len() >= 2 && parts[0] == "lock" {
+                    let name = parts[1];
+                    if bridge_pool.lock(name) {
+                        println!("{}🔒{} Bridge '{}' locked — never offloaded", GREEN, RESET, name);
+                    } else { println!("Bridge '{}' not found.", name); }
+                } else if parts.len() >= 2 && parts[0] == "unlock" {
+                    let name = parts[1];
+                    if bridge_pool.unlock(name) {
+                        println!("{}🔓{} Bridge '{}' unlocked", YELLOW, RESET, name);
+                    } else { println!("Bridge '{}' not found.", name); }
+                }
             }
         }
         "agent" => {
@@ -82,6 +142,63 @@ pub async fn handle_slash(
             } else {
                 println!("Usage: /agent create <name> <skill> <node_id>");
             }
+        }
+        "group" => {
+            let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+            if parts.len() >= 2 && parts[0] == "create" {
+                let name = parts[1];
+                match group_mgr.create(name, "open") {
+                    Ok(info) => {
+                        println!("{}✓{} Group '{}' created (mode: {})", GREEN, RESET, name, info.mode);
+                        gossip.add_group(name, &info.token).await;
+                    }
+                    Err(e) => println!("Error: {}", e),
+                }
+            } else if parts.len() >= 2 && parts[0] == "list" {
+                let groups = group_mgr.list();
+                if groups.is_empty() { println!("No groups."); }
+                else {
+                    println!("{}Groups:{}", BOLD, RESET);
+                    for g in &groups {
+                        println!("  {} — {} ({} members) [mode: {}]",
+                            g.name, g.visibility, g.members.len(), g.mode);
+                    }
+                }
+            } else if parts.len() >= 3 && parts[0] == "invite" {
+                let name = parts[1];
+                let node = parts[2];
+                match group_mgr.add_member(name, node, "member") {
+                    Ok(_) => println!("{}✓{} Node {} invited to group '{}'", GREEN, RESET, node, name),
+                    Err(e) => println!("Error: {}", e),
+                }
+            } else if parts.len() >= 3 && parts[0] == "mode" {
+                let name = parts[1];
+                if let Some(mode) = crate::group::GroupMode::parse(parts[2]) {
+                    match group_mgr.set_mode(name, mode) {
+                        Ok(m) => println!("{}✓{} Group '{}' mode: {}", GREEN, RESET, name, m),
+                        Err(e) => println!("Error: {}", e),
+                    }
+                } else { println!("Modes: storm, hunt, synthesis, focus, watch"); }
+            } else if parts.len() >= 2 && parts[0] == "next" {
+                let name = parts[1];
+                match group_mgr.advance_mode(name) {
+                    Ok(m) => println!("{}→{} Group '{}' advanced to {}", GREEN, RESET, name, m),
+                    Err(e) => println!("Error: {}", e),
+                }
+            } else { println!("Usage: /group create|list|invite|mode|next"); }
+        }
+        "groupmode" => {
+            if let Some(mode) = crate::group::GroupMode::parse(slash_arg) {
+                // Apply to the first available group, or all groups
+                let names = group_mgr.list_names();
+                if names.is_empty() { println!("No groups available."); }
+                else {
+                    for name in &names {
+                        group_mgr.set_mode(name, mode).ok();
+                    }
+                    println!("{}✓{} Group mode set to {} for {} groups", GREEN, RESET, mode, names.len());
+                }
+            } else { println!("Modes: storm, hunt, synthesis, focus, watch"); }
         }
         "mode" => {
             if let Some(new_mode) = crate::mode::ModeEngine::parse_mode(slash_arg) {
@@ -241,6 +358,13 @@ pub async fn handle_natural(
             println!("{}Bridges:{} {}", BOLD, RESET, bridges.len());
             for b in &bridges {
                 println!("  ✅ {}", b);
+            }
+            let groups = group_mgr.list();
+            if !groups.is_empty() {
+                println!("{}Groups:{}", BOLD, RESET);
+                for g in &groups {
+                    println!("  {} [{}] — {} members", g.name, g.mode, g.members.len());
+                }
             }
             println!("{}API:{}     {}{}{}", BOLD, RESET, CYAN, format!("http://localhost:{}", api_port), RESET);
         }

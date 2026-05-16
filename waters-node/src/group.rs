@@ -1,20 +1,106 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 use tokio::sync::mpsc;
 use tracing::info;
+
+/// Режимы групповой работы (GROUP_MODES.md)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GroupMode {
+    Storm,      // параллельная работа, макс скорость
+    Hunt,       // итеративный поиск, усиление лучшего направления
+    Synthesis,  // глубокий анализ, синтез findings
+    Focus,      // один исполнитель, остальные read-only
+    Watch,      // фоновый мониторинг, триггер → Storm
+}
+
+impl fmt::Display for GroupMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GroupMode::Storm => write!(f, "⚡ Storm"),
+            GroupMode::Hunt => write!(f, "🎯 Hunt"),
+            GroupMode::Synthesis => write!(f, "🔬 Synthesis"),
+            GroupMode::Focus => write!(f, "🎯 Focus"),
+            GroupMode::Watch => write!(f, "👁 Watch"),
+        }
+    }
+}
+
+impl GroupMode {
+    pub fn parse(input: &str) -> Option<GroupMode> {
+        let lower = input.to_lowercase();
+        if lower.contains("storm") || lower.contains("шторм") { Some(GroupMode::Storm) }
+        else if lower.contains("hunt") || lower.contains("охот") { Some(GroupMode::Hunt) }
+        else if lower.contains("synthesis") || lower.contains("синтез") || lower.contains("анализ") { Some(GroupMode::Synthesis) }
+        else if lower.contains("focus") || lower.contains("фокус") { Some(GroupMode::Focus) }
+        else if lower.contains("watch") || lower.contains("дежур") || lower.contains("watch") { Some(GroupMode::Watch) }
+        else { None }
+    }
+
+    pub fn next_after_completion(&self) -> GroupMode {
+        match self {
+            GroupMode::Watch => GroupMode::Storm,
+            GroupMode::Storm => GroupMode::Hunt,
+            GroupMode::Hunt => GroupMode::Synthesis,
+            GroupMode::Synthesis => GroupMode::Focus,
+            GroupMode::Focus => GroupMode::Watch,
+        }
+    }
+}
+
+/// Групповые ресурсы (SECTION 4 GROUP_MODES.md)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GroupResources {
+    pub llm_budget: HashMap<String, LlmAllocation>,
+    pub active_bridges: Vec<String>,
+    pub databases: Vec<DbConnection>,
+    pub agents: Vec<AgentAssignment>,
+    pub task_storage: Option<StorageConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmAllocation {
+    pub node_id: String,
+    pub model: String,
+    pub priority: u8,
+    pub boost: bool,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentAssignment {
+    pub agent_id: String,
+    pub node_id: String,
+    pub role_in_task: String,
+    pub personal_resources: Vec<String>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbConnection {
+    pub name: String,
+    pub db_type: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageConfig {
+    pub storage_type: String,
+    pub uri: String,
+}
 
 /// Сообщение в групповом mpsc канале
 #[derive(Debug, Clone)]
 pub struct GroupMessage {
     pub from_node: String,
-    pub msg_type: String,  // "skill_shared" | "agent_shared" | "task" | "chat"
+    pub msg_type: String,
     pub content: String,
 }
 
 /// Ресурс группы (скил или агент, разрешённый как общий)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedResource {
-    pub resource_type: String,  // "skill" | "agent"
+    pub resource_type: String,
     pub name: String,
     pub owner_node: String,
     pub description: String,
@@ -33,18 +119,20 @@ pub struct GroupInfo {
     pub name: String,
     pub visibility: String,
     pub token: String,
+    pub mode: GroupMode,
     pub created_at: String,
     pub created_by: String,
     pub members: Vec<Member>,
     pub channels: Vec<String>,
+    pub resources: GroupResources,
     #[serde(default)]
     pub shared_skills: Vec<SharedResource>,
     #[serde(default)]
     pub shared_agents: Vec<SharedResource>,
     #[serde(default)]
-    pub shared_bridges: Vec<SharedResource>,      // поиск: duckduckgo, yandex, baidu
+    pub shared_bridges: Vec<SharedResource>,
     #[serde(default)]
-    pub shared_services: Vec<SharedResource>,      // сервисы: notebooklm, obsidian, chromadb
+    pub shared_services: Vec<SharedResource>,
 }
 
 /// Группа с mpsc каналом для in-process общения
@@ -102,6 +190,7 @@ impl GroupManager {
             name: name.to_string(),
             visibility: visibility.to_string(),
             token: token.clone(),
+            mode: GroupMode::Watch,
             created_at: now.clone(),
             created_by: self.node_id.clone(),
             members: vec![Member {
@@ -113,6 +202,7 @@ impl GroupManager {
                 format!("{}.commands", name),
                 format!("{}.data", name),
             ],
+            resources: GroupResources::default(),
             shared_skills: vec![],
             shared_agents: vec![],
             shared_bridges: vec![],
@@ -260,6 +350,30 @@ impl GroupManager {
     /// Получить tx канал группы (для клонирования в sub-agent'ы)
     pub fn get_tx(&self, group: &str) -> Option<mpsc::Sender<GroupMessage>> {
         self.groups.get(group).map(|g| g.tx.clone())
+    }
+
+    /// Set group mode (Storm/Hunt/Synthesis/Focus/Watch)
+    pub fn set_mode(&mut self, group: &str, mode: GroupMode) -> anyhow::Result<GroupMode> {
+        let g = self.groups.get_mut(group)
+            .ok_or_else(|| anyhow::anyhow!("Group '{}' not found", group))?;
+        let old = g.info.mode;
+        g.info.mode = mode;
+        info!("Group '{}' mode: {} → {}", group, old, mode);
+        let msg = GroupMessage {
+            from_node: self.node_id.clone(),
+            msg_type: "mode_change".into(),
+            content: format!("{} → {}", old, mode),
+        };
+        let _ = g.tx.try_send(msg);
+        Ok(mode)
+    }
+
+    /// Advance to next mode in lifecycle (Watch→Storm→Hunt→Synthesis→Focus→Watch)
+    pub fn advance_mode(&mut self, group: &str) -> anyhow::Result<GroupMode> {
+        let mode = self.groups.get(group).map(|g| g.info.mode)
+            .ok_or_else(|| anyhow::anyhow!("Group '{}' not found", group))?;
+        let next = mode.next_after_completion();
+        self.set_mode(group, next)
     }
 
     pub fn add_member(&mut self, group: &str, node_id: &str, role: &str) -> anyhow::Result<()> {
