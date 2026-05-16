@@ -75,9 +75,15 @@ pub fn convert_tui_to_node(tui_name: &str, description: &str, bridges: &[String]
     (agent, node_agent)
 }
 
-/// 5 агентов, каждый со своим бортовым LLM
+/// 6 агентов (1 ассистент + 5 специалистов), каждый со своим бортовым LLM
 pub fn builtin_tui_agents() -> Vec<TuiAgent> {
     vec![
+        TuiAgent::new(
+            "assistant",
+            "Node setup assistant — conversational, helps manage tasks, agents, groups, bridges, settings",
+            &["chat".into()],
+            Some(OnboardLlm { model: "qwen2.5:1.5b".into(), quant: "Q4_K_M".into(), ctx_size: 4096, size_mb: 980 }),
+        ),
         TuiAgent::new(
             "scout-us",
             "US/global search via DuckDuckGo",
