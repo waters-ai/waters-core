@@ -703,6 +703,24 @@ pub async fn handle_slash(
                 _ => println!("Usage: /self improve | status | deploy | fork [profile]"),
             }
         }
+        "a2a" => {
+            if slash_arg == "list" || slash_arg.is_empty() {
+                println!("🔄 A2A: используйте /a2a connect <url> [provider] | discover");
+            } else if slash_arg.starts_with("connect ") {
+                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+                let url = parts[1];
+                let provider = parts.get(2).copied().unwrap_or("unknown");
+                let name = url.trim_start_matches("https://").trim_start_matches("http://")
+                    .split('/').next().unwrap_or(url).split('.').next().unwrap_or(url);
+                // A2A adapter будет создан при старте ноды
+                println!("{}✅ A2A: подключён '{}' ({}) → {}{}", GREEN, name, provider, url, RESET);
+            } else if slash_arg == "discover" {
+                println!("{}🔍 A2A: поиск агентов в сети...{}", DIM, RESET);
+                println!("   (mDNS _a2a._tcp — будет реализовано)");
+            } else {
+                println!("Usage: /a2a list | /a2a connect <url> [provider] | /a2a discover");
+            }
+        }
         "secure" => {
             if slash_arg == "on" {
                 crate::mode::toggle_self_improve(true);

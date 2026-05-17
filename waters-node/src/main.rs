@@ -32,6 +32,7 @@ pub mod self_diagnose;
 pub mod task_chain;
 pub mod self_deploy;
 pub mod fork_agent;
+pub mod a2a;
 mod store;
 mod bridge;
 mod journal;
