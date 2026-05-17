@@ -1392,3 +1392,106 @@ impl BridgeProvider for MqttBridge {
         }
     }
 }
+
+/// ---------- LLM Router — умная маршрутизация и кэширование запросов ----------
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone)]
+struct CachedResponse {
+    response: String,
+    expires_at: u64,
+    model: String,
+    hit_count: u64,
+}
+
+pub struct LlmRouter {
+    cache: Mutex<HashMap<String, CachedResponse>>,
+    kvstore: Option<std::sync::Arc<crate::store::KvStore>>,
+    cache_ttl_secs: u64,
+    simple_prefixes: Vec<String>, // запросы, которые можно отдать Ollama
+}
+
+impl LlmRouter {
+    pub fn new(kvstore: Option<std::sync::Arc<crate::store::KvStore>>) -> Self {
+        LlmRouter {
+            cache: Mutex::new(HashMap::new()),
+            kvstore,
+            cache_ttl_secs: 3600, // 1 час вместо 60 секунд
+            simple_prefixes: vec![
+                "статус".into(),
+                "status".into(),
+                "помощь".into(),
+                "help".into(),
+                "skills".into(),
+                "список".into(),
+                "list".into(),
+                "справка".into(),
+            ],
+        }
+    }
+
+    /// Выбрать провайдера для запроса
+    pub fn select_provider(&self, input: &str) -> &str {
+        let lower = input.to_lowercase();
+        for prefix in &self.simple_prefixes {
+            if lower.starts_with(prefix) {
+                return "ollama"; // простые запросы → локальный Ollama (бесплатно)
+            }
+        }
+        "deepseek" // сложные запросы → DeepSeek
+    }
+
+    /// Получить кэшированный ответ
+    pub fn get_cached(&self, input: &str) -> Option<String> {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let cache = self.cache.lock().unwrap();
+        if let Some(cached) = cache.get(input) {
+            if now < cached.expires_at {
+                return Some(cached.response.clone());
+            }
+        }
+        // Fallback: Redis кэш
+        if let Some(ref kv) = self.kvstore {
+            let key = format!("llm:response:{}", input.len());
+            if let Ok(Some(val)) = kv.get(&key) {
+                return Some(val);
+            }
+        }
+        None
+    }
+
+    /// Сохранить в кэш
+    pub fn cache_response(&self, input: &str, response: &str, model: &str) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let mut cache = self.cache.lock().unwrap();
+        let entry = cache.entry(input.to_string()).or_insert(CachedResponse {
+            response: response.to_string(),
+            expires_at: now + self.cache_ttl_secs,
+            model: model.to_string(),
+            hit_count: 0,
+        });
+        entry.response = response.to_string();
+        entry.expires_at = now + self.cache_ttl_secs;
+        entry.hit_count += 1;
+
+        // Сохраняем в Redis для других нод
+        if let Some(ref kv) = self.kvstore {
+            let key = format!("llm:response:{}", input.len());
+            let _ = kv.set(&key, response, self.cache_ttl_secs);
+        }
+    }
+
+    /// Статистика кэша
+    pub fn stats(&self) -> String {
+        let cache = self.cache.lock().unwrap();
+        format!("🧠 LLM Router: {} cached responses (TTL: {}s)\n  Simple → Ollama (free), Complex → DeepSeek\n  Всего запросов в кэше: {}",
+            cache.len(), self.cache_ttl_secs,
+            cache.values().map(|c| c.hit_count).sum::<u64>())
+    }
+}
