@@ -64,6 +64,14 @@ pub async fn handle_slash(
             println!("  /approve      — /approve <idx> to accept peer");
             println!("  /reject       — /reject <idx> to deny peer");
             println!("  /mode         — switch node mode (plan/assemble/execute/stop/log/dnd)");
+            println!("  /diagnose     — анализ кода, warnings, тесты, unwrap");
+            println!("  /self improve — запустить цикл самосовершенствования");
+            println!("  /self status  — показать фазу развития");
+            println!("  /self deploy  — собрать и обновить бинарник");
+            println!("  /self secure on|off — вкл/выкл режим безопасности");
+            println!("  /self fork [profile] — создать форк ноды под задачу");
+            println!("    Профили: agriculture | studio | home | factory | minimal");
+            println!("  /self release — анализ: что идёт в общий релиз");
             println!("  /groupmode    — switch group mode (storm/hunt/synthesis/focus/watch)");
             println!("  /chat         — send message: /chat <text>");
             println!("  /connect      — connect to peer: /connect <ip>");
@@ -596,113 +604,121 @@ pub async fn handle_slash(
                 println!("  Пример: /nick 171.22.180.177:42069 Хаб Работа");
             }
         }
+        "diagnose" => {
+            let uptime = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+            let d = crate::self_diagnose::diagnose(
+                &std::path::Path::new("src"),
+                kvstore.is_connected(), uptime);
+            println!("{}", d.summary());
+            println!("📌 Фаза: {}", d.phase());
+            let next = d.next_steps();
+            if !next.is_empty() {
+                println!("\n🎯 Следующие шаги:");
+                for (i, s) in next.iter().enumerate() {
+                    println!("  {}. {}", i+1, s);
+                }
+                println!("\n  Выполнить: /self improve");
+            }
+        }
+        "self" => {
+            let parts: Vec<&str> = slash_arg.splitn(2, ' ').collect();
+            let cmd = parts[0];
+            let arg = parts.get(1).copied().unwrap_or("");
+            match cmd {
+                "improve" | "" => {
+                    if !crate::mode::is_self_improve_enabled() {
+                        println!("{}🔒 Режим самосовершенствования выключен. Включи: /self secure on{}", YELLOW, RESET);
+                    } else {
+                        let uptime = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+                        let d = crate::self_diagnose::diagnose(
+                            &std::path::Path::new("src"),
+                            kvstore.is_connected(), uptime);
+                        println!("{}", d.summary());
+                        println!("\n📌 Фаза: {}", d.phase());
+                        let next = d.next_steps();
+                        if next.is_empty() {
+                            println!("✅ Нода в порядке. Ничего не требуется.");
+                        } else {
+                            println!("\n🎯 Запуск цикла ({} задач):", next.len());
+                            for (i, s) in next.iter().enumerate() {
+                                println!("  {}. {}", i+1, s);
+                            }
+                            let chain = crate::task_chain::TaskChain::new("self-improve", true);
+                            println!("\n{}", chain.summary());
+                            println!("✅ Цикл запущен. Результаты в логах.");
+                        }
+                    }
+                }
+                "status" | "goal" => {
+                    let uptime = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+                    let d = crate::self_diagnose::diagnose(
+                        &std::path::Path::new("src"),
+                        kvstore.is_connected(), uptime);
+                    println!("📌 Фаза: {} — {}", d.phase(), if crate::mode::is_self_improve_enabled() { "🔓 разрешено" } else { "🔒 запрещено" });
+                    println!("📊 {}", d.summary());
+                }
+                "deploy" => {
+                    if !crate::mode::is_self_improve_enabled() {
+                        println!("{}🔒 Режим самосовершенствования выключен.{}", YELLOW, RESET);
+                    } else {
+                        let deployer = crate::self_deploy::SelfDeploy::new(
+                            &std::path::Path::new("."), "waters-node");
+                        match deployer.deploy() {
+                            Ok(msg) => println!("{}", msg),
+                            Err(e) => println!("{}❌ {}", YELLOW, e),
+                        }
+                    }
+                }
+                "release" => {
+                    let fm = crate::fork_agent::ForkManager::new(crate::fork_agent::ForkProfile::Full);
+                    println!("{}", fm.analyze_common_release());
+                    println!("\n{}", fm.propose_release());
+                }
+                "fork" => {
+                    let forks = crate::fork_agent::ForkManager::list_forks();
+                    if arg.is_empty() {
+                        let fm = crate::fork_agent::ForkManager::new(crate::fork_agent::ForkProfile::Full);
+                        println!("{}", fm.summary());
+                        println!("  Создать: /self fork <profile>");
+                        println!("  Профили: agriculture | studio | home | factory | minimal");
+                    } else {
+                        let profile = match arg {
+                            "agriculture" | "field" => crate::fork_agent::ForkProfile::Agriculture,
+                            "studio" | "video" => crate::fork_agent::ForkProfile::VideoStudio,
+                            "home" | "smart" => crate::fork_agent::ForkProfile::SmartHome,
+                            "factory" => crate::fork_agent::ForkProfile::Factory,
+                            "minimal" => crate::fork_agent::ForkProfile::Minimal,
+                            _ => { println!("Неизвестный профиль: {}", arg); return Ok(true); }
+                        };
+                        let fm = crate::fork_agent::ForkManager::new(profile.clone());
+                        match fm.create_fork(&profile) {
+                            Ok(msg) => println!("{}", msg),
+                            Err(e) => println!("{}❌ {}", YELLOW, e),
+                        }
+                    }
+                }
+                _ => println!("Usage: /self improve | status | deploy | fork [profile]"),
+            }
+        }
+        "secure" => {
+            if slash_arg == "on" {
+                crate::mode::toggle_self_improve(true);
+                println!("{}🔒 Режим самосовершенствования ВКЛЮЧЁН{}", GREEN, RESET);
+                println!("  Теперь /self improve будет работать");
+            } else if slash_arg == "off" {
+                crate::mode::toggle_self_improve(false);
+                println!("{}🔒 Режим самосовершенствования ВЫКЛЮЧЕН{}", YELLOW, RESET);
+                println!("  Нода не будет сама себя менять");
+            } else {
+                println!("Использование: /self secure on | off");
+                println!("  Текущий статус: {}", if crate::mode::is_self_improve_enabled() { "🔓 включён" } else { "🔒 выключен" });
+            }
+        }
         "contacts" => {
             println!("{}", contacts.summary());
-        }
-        "camera" => {
-            if slash_arg == "list" || slash_arg.is_empty() {
-                let summary = crate::media::with_engineer(|e| e.cameras.summary());
-                println!("{}", summary);
-            } else if slash_arg.starts_with("ptz ") {
-                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
-                if parts.len() >= 3 {
-                    let result = crate::media::with_engineer(|e| {
-                        let cmd = match parts[2].to_lowercase().as_str() {
-                            "left" => crate::media::camera::PtzCommand::Left,
-                            "right" => crate::media::camera::PtzCommand::Right,
-                            "up" => crate::media::camera::PtzCommand::Up,
-                            "down" => crate::media::camera::PtzCommand::Down,
-                            "zoom+" | "zoomin" => crate::media::camera::PtzCommand::ZoomIn,
-                            "zoom-" | "zoomout" => crate::media::camera::PtzCommand::ZoomOut,
-                            "home" => crate::media::camera::PtzCommand::Home,
-                            "patrol" => crate::media::camera::PtzCommand::Patrol,
-                            _ => return format!("Unknown PTZ command: {}", parts[2]),
-                        };
-                        match e.cameras.ptz(parts[1], &cmd) {
-                            Ok(r) => r,
-                            Err(e) => format!("{}", e),
-                        }
-                    });
-                    println!("{}", result);
-                } else { println!("Usage: /camera ptz <name> <left|right|up|down|zoom+|zoom-|home|patrol>"); }
-            } else if slash_arg.starts_with("record ") {
-                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
-                if parts.len() >= 3 {
-                    crate::media::with_engineer(|e| {
-                        let _ = e.cameras.set_recording(parts[1], parts[2] == "on");
-                    });
-                    println!("{}✅ Запись {} → {}{}", GREEN, parts[1], parts[2], RESET);
-                }
-            } else { println!("Usage: /camera list | /camera ptz <name> <dir> | /camera record <name> on|off"); }
-        }
-        "home" => {
-            if slash_arg == "list" || slash_arg.is_empty() {
-                let summary = crate::media::with_engineer(|e| e.smart_home.summary());
-                println!("{}", summary);
-            } else if slash_arg.starts_with("voice ") {
-                let cmd = &slash_arg[6..];
-                let result = crate::media::with_engineer(|e| {
-                    match e.smart_home.voice_command(cmd) {
-                        Ok(r) => r,
-                        Err(e) => format!("{}", e),
-                    }
-                });
-                println!("{}", result);
-            } else { println!("Usage: /home list | /home voice <команда>"); }
-        }
-        "robot" => {
-            if slash_arg == "list" || slash_arg.is_empty() {
-                let summary = crate::media::with_engineer(|e| e.robots.summary());
-                println!("{}", summary);
-            } else if slash_arg.starts_with("cmd ") {
-                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
-                if parts.len() >= 3 {
-                    let result = crate::media::with_engineer(|e| {
-                        match e.robots.chat_command(parts[1], parts[2]) {
-                            Ok(r) => r,
-                            Err(e) => format!("{}", e),
-                        }
-                    });
-                    println!("{}", result);
-                } else { println!("Usage: /robot cmd <name> <команда>"); }
-            } else { println!("Usage: /robot list | /robot cmd <name> <команда>"); }
-        }
-        "acl" => {
-            if slash_arg == "show" {
-                let chat = crate::agent_chat::AgentChat::new(kvstore.clone());
-                println!("{}", chat.summary());
-            } else if slash_arg.starts_with("allow ") {
-                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
-                if parts.len() >= 3 {
-                    let mut chat = crate::agent_chat::AgentChat::new(kvstore.clone());
-                    chat.acl_mut().allow(parts[1], parts[2]);
-                    println!("{}✅ Разрешено: {} → {}{}", GREEN, parts[1], parts[2], RESET);
-                } else { println!("Usage: /acl allow <from> <to>"); }
-            } else if slash_arg.starts_with("block ") {
-                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
-                if parts.len() >= 3 {
-                    let mut chat = crate::agent_chat::AgentChat::new(kvstore.clone());
-                    chat.acl_mut().block(parts[1], parts[2]);
-                    println!("{}🔒 Запрещено: {} → {}{}", YELLOW, parts[1], parts[2], RESET);
-                } else { println!("Usage: /acl block <from> <to>"); }
-            } else if slash_arg.starts_with("block-all ") {
-                let from = slash_arg[10..].trim();
-                if !from.is_empty() {
-                    println!("{}⚠️ Вы уверены? {} больше никому не сможет писать.{}", YELLOW, from, RESET);
-                    println!("  Подтвердите: yes/no");
-                    let mut confirm = String::new();
-                    std::io::stdin().read_line(&mut confirm).ok();
-                    if confirm.trim().to_lowercase() == "yes" {
-                        let mut chat = crate::agent_chat::AgentChat::new(kvstore.clone());
-                        chat.acl_mut().block_all(from);
-                        println!("{}🔒 Запрещено всё исходящее от {}{}", YELLOW, from, RESET);
-                    } else {
-                        println!("{}Отменено{}", DIM, RESET);
-                    }
-                } else { println!("Usage: /acl block-all <agent_id>"); }
-            } else {
-                println!("Usage: /acl show | /acl allow <from> <to> | /acl block <from> <to> | /acl block-all <agent>");
-            }
         }
         "mcp" => {
             if slash_arg.is_empty() || slash_arg == "list" {

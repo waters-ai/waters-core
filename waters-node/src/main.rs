@@ -24,16 +24,16 @@ mod agent;
 pub mod skill;
 pub mod skill_evolve;
 pub mod cron;
-pub mod plugin;
 pub mod security;
 pub mod tunnel;
-pub mod mcp_store;
 pub mod agent_chat;
-pub mod i18n;
-pub mod access;
+pub mod agents_builtin;
+pub mod self_diagnose;
+pub mod task_chain;
+pub mod self_deploy;
+pub mod fork_agent;
 mod store;
 mod bridge;
-mod media;
 mod journal;
 mod offline;
 mod display;
@@ -292,12 +292,11 @@ async fn main() -> Result<()> {
     ));
 
     let mut skill_reg = skill::SkillRegistry::new();
+    let builtin_count = agents_builtin::register(&mut skill_reg);
     skill_reg.load_from(&std::path::Path::new("skills"));
     skill_reg.load_from(&std::path::Path::new("agents"));
-    if skill_reg.list().len() > 0 {
-        let skill_count = skill_reg.list().len();
-        println!("  {0}{1}Skills{2}{3}   {4}{5}{6}", DIM, BOLD, RESET, DIM, CYAN, skill_count, RESET);
-    }
+    let skill_count = skill_reg.list().len();
+    println!("  {0}{1}Skills{2}{3}   {4}{5}{6}{7} ({} builtin)", DIM, BOLD, RESET, DIM, CYAN, skill_count, RESET, builtin_count);
 
     let tools = Arc::new(tools::ToolRegistry::new());
     print_tools(&tools.list());
@@ -481,9 +480,6 @@ async fn main() -> Result<()> {
     println!("  {}Contacts{}   {} saved", BOLD, RESET, contact_count);
 
     // Init MCP Store
-    let mut mcp_store = mcp_store::McpStore::new(&PathBuf::from(".waters"));
-    let mcp_count = mcp_store.list_installed().len();
-    info!("McpStore: {} skills installed", mcp_count);
 
     // Init Channel Isolation
     let mut channel_isolation = security::ChannelIsolation::new();
@@ -494,7 +490,6 @@ async fn main() -> Result<()> {
     let _ = agent_chat.broadcast("system", "chat", "node_start", serde_json::json!({"node": node.name()}));
 
     // Init VideoEngineer — камеры, запись, умный дом, роботы
-    media::init_engineer();
 
     // Init cron background task
     let cron_kv = kvstore.clone();

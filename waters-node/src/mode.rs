@@ -1,5 +1,18 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Глобальный флаг — разрешено ли самосовершенствование
+pub static SELF_IMPROVE_ENABLED: AtomicBool = AtomicBool::new(false);
+
+pub fn toggle_self_improve(on: bool) -> bool {
+    SELF_IMPROVE_ENABLED.store(on, Ordering::SeqCst);
+    on
+}
+
+pub fn is_self_improve_enabled() -> bool {
+    SELF_IMPROVE_ENABLED.load(Ordering::SeqCst)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Mode {
