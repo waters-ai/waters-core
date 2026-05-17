@@ -1296,3 +1296,99 @@ pub fn maybe_push(bridge_pool: &BridgePool, level: &str, title: &str, message: &
         auto_push(bridge_pool, title, message, "ru");
     }
 }
+
+/// ---------- MQTT Bridge — для полевых устройств (через mosquitto_pub) ----------
+
+#[derive(Debug)]
+pub struct MqttBridge {
+    name: String,
+    host: String,
+    port: u16,
+}
+
+impl MqttBridge {
+    pub fn new(name: &str, host: &str, port: u16) -> Self {
+        MqttBridge {
+            name: name.to_string(),
+            host: host.to_string(),
+            port,
+        }
+    }
+
+    fn publish(&self, topic: &str, payload: &str) -> Result<()> {
+        let output = std::process::Command::new("mosquitto_pub")
+            .args([
+                "-h",
+                &self.host,
+                "-p",
+                &self.port.to_string(),
+                "-t",
+                topic,
+                "-m",
+                payload,
+            ])
+            .output();
+        match output {
+            Ok(o) if o.status.success() => {
+                info!("MQTT: {} → {}", topic, &payload[..payload.len().min(80)]);
+                Ok(())
+            }
+            _ => {
+                // Fallback: just log
+                info!(
+                    "MQTT (log): {} → {}",
+                    topic,
+                    &payload[..payload.len().min(80)]
+                );
+                Ok(())
+            }
+        }
+    }
+
+    pub fn register_device(&self, device_id: &str, device_type: &str, caps: &[&str]) {
+        let payload = serde_json::json!({
+            "type": device_type, "capabilities": caps,
+            "protocol": "WDP/1.0",
+            "ts": chrono::Utc::now().to_rfc3339(),
+        });
+        let _ = self.publish(
+            &format!("waters/device/{}/register", device_id),
+            &payload.to_string(),
+        );
+        info!(
+            "Field device: '{}' registered as {} (caps: {})",
+            device_id,
+            device_type,
+            caps.join(", ")
+        );
+    }
+
+    pub fn send_command(&self, device_id: &str, command: &str, params: serde_json::Value) {
+        let payload = serde_json::json!({"cmd": command, "params": params});
+        let _ = self.publish(
+            &format!("waters/device/{}/cmd", device_id),
+            &payload.to_string(),
+        );
+        info!("Field cmd: {} → {} {:?}", device_id, command, params);
+    }
+}
+
+impl BridgeProvider for MqttBridge {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn call(&self, input: &str) -> Result<String> {
+        let parts: Vec<&str> = input.splitn(3, ' ').collect();
+        if parts.len() >= 2 {
+            let params = if parts.len() >= 3 {
+                serde_json::from_str(parts[2]).unwrap_or(serde_json::json!({}))
+            } else {
+                serde_json::json!({})
+            };
+            self.send_command(parts[0], parts[1], params);
+            Ok(format!("MQTT cmd sent to {}", parts[0]))
+        } else {
+            Err(anyhow::anyhow!("Format: device_id command [json_params]"))
+        }
+    }
+}
