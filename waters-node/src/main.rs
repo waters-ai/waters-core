@@ -33,6 +33,7 @@ pub mod task_chain;
 pub mod self_deploy;
 pub mod fork_agent;
 pub mod a2a;
+pub mod mcp_store;
 pub mod node_manager;
 pub mod tamagotchi;
 pub mod yasa_agent;
@@ -484,6 +485,11 @@ async fn main() -> Result<()> {
     println!("  {}Contacts{}   {} saved", BOLD, RESET, contact_count);
 
     // Init MCP Store
+
+    // Init MCP Store
+    let mut mcp_store = mcp_store::McpStore::new(&PathBuf::from(".waters"));
+    let mcp_count = mcp_store.list_installed().len();
+    info!("McpStore: {} skills in store", mcp_count);
 
     // Init Channel Isolation
     let mut channel_isolation = security::ChannelIsolation::new();

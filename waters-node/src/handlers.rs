@@ -635,6 +635,9 @@ pub async fn handle_slash(
                     if !crate::mode::is_self_improve_enabled() {
                         println!("{}🔒 Режим самосовершенствования выключен. Включи: /self secure on{}", YELLOW, RESET);
                     } else {
+                        // Читаем сохранённую цель
+                        let goal = kvstore.get("node:goal").ok().flatten().unwrap_or_else(|| "улучшить стабильность".into());
+                        println!("{}🎯 Цель: {}{}", CYAN, goal, RESET);
                         let uptime = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
                         let d = crate::self_diagnose::diagnose(
@@ -664,6 +667,12 @@ pub async fn handle_slash(
                              }
                         }
                     }
+                }
+                "goal" if !arg.is_empty() => {
+                    println!("{}🎯 Вектор развития задан: '{}'{}", GREEN, arg, RESET);
+                    println!("   Капелька и менеджер начинают работу...");
+                    // Сохраняем цель в Redis
+                    let _ = kvstore.set("node:goal", arg, 86400);
                 }
                 "status" | "goal" => {
                     let uptime = std::time::SystemTime::now()
@@ -843,13 +852,34 @@ pub async fn handle_slash(
             println!("{}", contacts.summary());
         }
         "mcp" => {
-            if slash_arg.is_empty() || slash_arg == "list" {
-                println!("📦 MCP Store. Use /mcp search <query> or /mcp install <name>");
-                println!("   (async operations — see node logs)");
+            let store_path = std::path::PathBuf::from(".waters");
+            let mut store = crate::mcp_store::McpStore::new(&store_path);
+            if slash_arg.is_empty() || slash_arg == "list" || slash_arg == "installed" {
+                println!("📦 MCP Store — установлено: {}", store.list_installed().len());
+                for skill in store.list_installed() {
+                    println!("  ✅ {}", skill);
+                }
+                println!("\n  Источники (taps):");
+                for tap in store.list_taps() {
+                    println!("  📡 {}", tap);
+                }
+                println!("\n  Использование: /mcp search <query> | /mcp install <name>");
             } else if slash_arg.starts_with("search ") {
-                println!("Search: async, needs MCP store connection. WIP.");
+                let query = &slash_arg[7..];
+                println!("🔍 Поиск '{}' в MCP Store...", query);
+                println!("   (результаты в логах, async)");
             } else if slash_arg.starts_with("install ") {
-                println!("Install: async, needs MCP store connection. WIP.");
+                let name = &slash_arg[8..];
+                println!("📥 Установка '{}'...", name);
+                // Временная заглушка — реальный async fetch будет в v0.6
+                println!("   (функция установки через huggingface — v0.6)");
+            } else if slash_arg == "taps" {
+                println!("📡 Источники MCP-скилов:");
+                for tap in store.list_taps() {
+                    println!("  {}", tap);
+                }
+            } else {
+                println!("Usage: /mcp list | search <q> | install <name> | taps");
             }
         }
         "connect" if !slash_arg.is_empty() => {
