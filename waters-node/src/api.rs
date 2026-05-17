@@ -55,6 +55,7 @@ async fn handle_conn(mut stream: TcpStream, state: Arc<ApiState>) -> anyhow::Res
     let mut body = String::new();
     let mut content_len: usize = 0;
     let mut reading_body = false;
+    // Auth check: dashboard requires login (handled by JS)
 
     while let Some(line) = lines.next_line().await? {
         if reading_body {
@@ -83,6 +84,7 @@ async fn handle_conn(mut stream: TcpStream, state: Arc<ApiState>) -> anyhow::Res
         return Ok(());
     }
 
+    // Rewind bufreader (we consumed it for auth check)
     let response = match route(&method, &path, &body, &state).await {
         Some(resp) => resp,
         None => web_ui(&state).await,
@@ -260,6 +262,17 @@ async fn route(method: &str, path: &str, body: &str, state: &Arc<ApiState>) -> O
         }
         ("POST", "/api/v1/contacts") => {
             Some(json(&serde_json::json!({"status": "ok", "message": "nick set via /nick command"})))
+        }
+        ("POST", "/api/v1/auth") => {
+            let msg: Value = serde_json::from_str(body).unwrap_or_default();
+            let pwd = msg["password"].as_str().unwrap_or("");
+            let cfg_pwd = std::env::var("WATERS_DASHBOARD_PASSWORD").unwrap_or_else(|_| "waters".into());
+            if pwd == cfg_pwd {
+                let token = format!("token-{}", chrono::Utc::now().timestamp());
+                Some(json(&serde_json::json!({"ok": true, "token": token})))
+            } else {
+                Some(json(&serde_json::json!({"ok": false, "error": "wrong password"})))
+            }
         }
         _ => Some(json(&serde_json::json!({"error": "not found", "path": path}))),
     }

@@ -29,6 +29,8 @@ pub mod security;
 pub mod tunnel;
 pub mod mcp_store;
 pub mod agent_chat;
+pub mod i18n;
+pub mod access;
 mod store;
 mod bridge;
 mod journal;
