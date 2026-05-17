@@ -1,6 +1,8 @@
 pub mod camera;
+pub mod device_agent;
 pub mod recorder;
 pub mod robot;
+pub mod smarthome;
 pub mod smarthome;
 
 use anyhow::Result;
