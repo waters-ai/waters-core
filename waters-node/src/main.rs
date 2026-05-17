@@ -33,6 +33,8 @@ pub mod task_chain;
 pub mod self_deploy;
 pub mod fork_agent;
 pub mod a2a;
+pub mod node_manager;
+pub mod tamagotchi;
 mod store;
 mod bridge;
 mod journal;

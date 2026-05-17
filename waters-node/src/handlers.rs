@@ -70,6 +70,7 @@ pub async fn handle_slash(
             println!("  /self deploy  — собрать и обновить бинарник");
             println!("  /self secure on|off — вкл/выкл режим безопасности");
             println!("  /self fork [profile] — создать форк ноды под задачу");
+            println!("  /me           — 💧 капелька: поговорить с душой ноды");
             println!("  /a2a          — A2A Gateway: connect, discover, allow, block");
             println!("  /camera       — /camera list | add | ptz | stream | report — удалённые камеры");
             println!("  /director     — /director scenes | switch | source | report — режиcсёрский пульт");
@@ -713,6 +714,52 @@ pub async fn handle_slash(
                     }
                 }
                 _ => println!("Usage: /self improve | status | deploy | fork [profile]"),
+            }
+        }
+        "me" => {
+            let mut t = crate::tamagotchi::Tamagotchi::new("Капелька");
+            t.owner_name = "Хозяин".into();
+            if slash_arg.is_empty() {
+                println!("{}", t.status());
+            } else if slash_arg == "greet" || slash_arg == "привет" {
+                println!("{}", t.greet());
+            } else if slash_arg == "think" || slash_arg == "думай" {
+                println!("{}", t.random_thought());
+            } else {
+                // любое сообщение — капелька отвечает
+                let answers = vec![
+                    "💧 Расскажи ещё! Мне интересно ✨",
+                    "💧 А что агенты? Работают? 🤖",
+                    "💧 Я тут подумала... может, форк сделаем?",
+                    "💧 Хороший день, правда? 🌊",
+                    "💧 Всё будет хорошо, я с тобой 💫",
+                ];
+                let idx = (slash_arg.len()) % answers.len();
+                println!("{}", answers[idx]);
+            }
+        }
+        "manager" => {
+            if slash_arg == "status" || slash_arg.is_empty() {
+                let mut mgr = crate::node_manager::NodeManager::new(node.name());
+                mgr.metrics.redis_ok = kvstore.is_connected();
+                mgr.metrics.active_agents = subagents.list_active(0).map(|a| a.len() as u32).unwrap_or(0);
+                mgr.metrics.peers_connected = gossip.peer_count() as u32;
+                mgr.metrics.warnings = 154; // hardcoded from latest cargo check
+                println!("{}", mgr.status());
+            } else if slash_arg == "improve" {
+                let mut mgr = crate::node_manager::NodeManager::new(node.name());
+                mgr.metrics.redis_ok = kvstore.is_connected();
+                for step in mgr.improve() {
+                    println!("{}", step);
+                }
+            } else if slash_arg == "mode auto" || slash_arg == "mode autonomous" {
+                println!("{}🤖 Режим: автономный — нода сама принимает решения{}", GREEN, RESET);
+            } else if slash_arg == "mode manual" {
+                println!("{}👤 Режим: ручной — нода ждёт команд{}", YELLOW, RESET);
+            } else if slash_arg == "mode advisory" {
+                println!("{}💡 Режим: совещательный — нода предлагает, хозяин утверждает{}", CYAN, RESET);
+            } else {
+                println!("Usage: /manager status | improve | mode auto|manual|advisory");
             }
         }
         "a2a" => {
