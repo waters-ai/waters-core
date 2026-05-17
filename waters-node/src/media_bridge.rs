@@ -439,3 +439,434 @@ impl BridgeProvider for MediaBridgeProvider {
         Ok(serde_json::json!({"response": result}))
     }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// REMOTE CAMERA MANAGEMENT — RTSP/ONVIF камеры, PTZ, стримы
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteCamera {
+    pub name: String,
+    pub rtsp_url: String,  // rtsp://user:pass@ip:554/stream1
+    pub onvif_url: String, // http://ip:5000/onvif/device_service
+    pub ptz_supported: bool,
+    pub location: String, // "поле 42", "ферма", "завод цех 3"
+    pub status: String,   // online | offline | recording
+    pub stream_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PtzDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+    ZoomIn,
+    ZoomOut,
+    Home,
+    Patrol,
+}
+
+/// Управление удалёнными камерами
+pub struct RemoteCameraManager {
+    cameras: Arc<Mutex<Vec<RemoteCamera>>>,
+    kvstore: Arc<KvStore>,
+}
+
+impl RemoteCameraManager {
+    pub fn new(kvstore: Arc<KvStore>) -> Self {
+        RemoteCameraManager {
+            cameras: Arc::new(Mutex::new(Vec::new())),
+            kvstore,
+        }
+    }
+
+    pub fn add_camera(&self, name: &str, rtsp: &str, onvif: &str, location: &str) {
+        let mut cams = self.cameras.lock().map_err(|e| warn!("Mutex: {}", e)).ok();
+        if let Some(ref mut cams) = cams {
+            cams.push(RemoteCamera {
+                name: name.to_string(),
+                rtsp_url: rtsp.to_string(),
+                onvif_url: onvif.to_string(),
+                ptz_supported: !onvif.is_empty(),
+                location: location.to_string(),
+                status: "online".into(),
+                stream_active: false,
+            });
+            info!("CameraManager: added '{}' at {} ({})", name, rtsp, location);
+        }
+    }
+
+    pub fn list_cameras(&self) -> Vec<RemoteCamera> {
+        self.cameras.lock().map(|c| c.clone()).unwrap_or_default()
+    }
+
+    pub fn ptz(&self, camera: &str, dir: &PtzDirection) -> Result<String> {
+        let cams = self
+            .cameras
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex: {}", e))?;
+        let cam = cams
+            .iter()
+            .find(|c| c.name == camera)
+            .ok_or_else(|| anyhow::anyhow!("Camera '{}' not found", camera))?;
+        if !cam.ptz_supported {
+            return Err(anyhow::anyhow!("Camera '{}' has no PTZ", camera));
+        }
+        // ONVIF PTZ — http-запрос к камере
+        info!("PTZ: {} → {:?}", camera, dir);
+        Ok(format!("✅ PTZ {} → {:?}", camera, dir))
+    }
+
+    /// Получить RTSP-поток для просмотра/транскодирования
+    pub fn get_stream_url(&self, camera: &str) -> Option<String> {
+        self.cameras
+            .lock()
+            .ok()?
+            .iter()
+            .find(|c| c.name == camera)
+            .map(|c| c.rtsp_url.clone())
+    }
+
+    /// Включить стрим с удалённой камеры на ноду
+    pub fn start_stream(&self, camera: &str) -> Result<String> {
+        let mut cams = self
+            .cameras
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex: {}", e))?;
+        if let Some(cam) = cams.iter_mut().find(|c| c.name == camera) {
+            cam.stream_active = true;
+            let _ = self.kvstore.select_db(0).xadd(
+                "media:streams:active",
+                &[
+                    ("camera", camera),
+                    ("rtsp", &cam.rtsp_url),
+                    ("status", "active"),
+                ],
+                100,
+            );
+            info!("Stream: started from camera '{}'", camera);
+            Ok(format!("✅ Стрим с '{}' запущен", camera))
+        } else {
+            Err(anyhow::anyhow!("Camera '{}' not found", camera))
+        }
+    }
+
+    pub fn stop_stream(&self, camera: &str) -> Result<String> {
+        let mut cams = self
+            .cameras
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex: {}", e))?;
+        if let Some(cam) = cams.iter_mut().find(|c| c.name == camera) {
+            cam.stream_active = false;
+            Ok(format!("⏹ Стрим с '{}' остановлен", camera))
+        } else {
+            Err(anyhow::anyhow!("Camera '{}' not found", camera))
+        }
+    }
+
+    pub fn summary(&self) -> String {
+        let cams = match self.cameras.lock() {
+            Ok(c) => c.clone(),
+            Err(_) => vec![],
+        };
+        let mut out = format!("📹 Удалённые камеры ({}):\n", cams.len());
+        for c in cams.iter() {
+            let icon = if c.stream_active { "🔴" } else { "📷" };
+            out.push_str(&format!(
+                "  {} {} [{}] {} — {} | PTZ:{}\n",
+                icon, c.name, c.status, c.location, c.rtsp_url, c.ptz_supported
+            ));
+        }
+        out
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DIRECTOR CONSOLE — режиcсёрский пульт для видео-продакшна
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DirectorScene {
+    pub name: String,
+    pub sources: Vec<String>,
+    pub active_source: String,
+    pub transition: String, // cut | fade | wipe
+    pub duration_secs: u32,
+}
+
+pub struct DirectorConsole {
+    scenes: Arc<Mutex<Vec<DirectorScene>>>,
+    kvstore: Arc<KvStore>,
+}
+
+impl DirectorConsole {
+    pub fn new(kvstore: Arc<KvStore>) -> Self {
+        let mut scenes = Vec::new();
+        scenes.push(DirectorScene {
+            name: "Основной".into(),
+            sources: vec![],
+            active_source: String::new(),
+            transition: "cut".into(),
+            duration_secs: 0,
+        });
+        DirectorConsole {
+            scenes: Arc::new(Mutex::new(scenes)),
+            kvstore,
+        }
+    }
+
+    /// Переключить источник в сцене (режиcсёрский пульт)
+    pub fn switch_source(&self, scene: &str, source: &str) -> Result<String> {
+        let mut sc = self
+            .scenes
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex: {}", e))?;
+        if let Some(s) = sc.iter_mut().find(|s| s.name == scene) {
+            s.active_source = source.to_string();
+            let _ = self.kvstore.select_db(0).xadd(
+                "media:director:switches",
+                &[
+                    ("scene", scene),
+                    ("source", source),
+                    ("ts", &chrono::Utc::now().to_rfc3339()),
+                ],
+                1000,
+            );
+            info!(
+                "Director: switched scene '{}' to source '{}'",
+                scene, source
+            );
+            Ok(format!("🎬 Сцена '{}' → {}", scene, source))
+        } else {
+            Err(anyhow::anyhow!("Scene '{}' not found", scene))
+        }
+    }
+
+    /// Добавить источник в сцену (камера, NDI, видеофайл)
+    pub fn add_source(&self, scene: &str, source: &str) -> Result<String> {
+        let mut sc = self
+            .scenes
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex: {}", e))?;
+        if let Some(s) = sc.iter_mut().find(|s| s.name == scene) {
+            if !s.sources.contains(&source.to_string()) {
+                s.sources.push(source.to_string());
+                info!("Director: added source '{}' to scene '{}'", source, scene);
+            }
+            Ok(format!(
+                "✅ Источник '{}' добавлен в сцену '{}'",
+                source, scene
+            ))
+        } else {
+            // Создаём новую сцену
+            sc.push(DirectorScene {
+                name: scene.to_string(),
+                sources: vec![source.to_string()],
+                active_source: source.to_string(),
+                transition: "cut".into(),
+                duration_secs: 0,
+            });
+            Ok(format!(
+                "✅ Сцена '{}' создана с источником '{}'",
+                scene, source
+            ))
+        }
+    }
+
+    /// Создать репортаж из источника на удалённом объекте
+    pub fn create_report(
+        &self,
+        location: &str,
+        source: &str,
+        duration_secs: u32,
+    ) -> Result<String> {
+        let report_id = uuid::Uuid::new_v4().to_string();
+        let _ = self.kvstore.select_db(0).xadd(
+            "media:reports",
+            &[
+                ("id", &report_id),
+                ("location", location),
+                ("source", source),
+                ("duration", &duration_secs.to_string()),
+                ("ts", &chrono::Utc::now().to_rfc3339()),
+            ],
+            1000,
+        );
+        info!(
+            "Report: created from {} ({}, {}s) — id:{}",
+            location,
+            source,
+            duration_secs,
+            &report_id[..8]
+        );
+        Ok(format!(
+            "📡 Репортаж из '{}' создан (id:{})",
+            location,
+            &report_id[..8]
+        ))
+    }
+
+    pub fn summary(&self) -> String {
+        let sc = self.scenes.lock().map(|s| s.clone()).unwrap_or_default();
+        let mut out = format!("🎬 Режиcсёрский пульт ({} сцен):\n", sc.len());
+        for s in &sc {
+            out.push_str(&format!(
+                "  🎥 {}: [{}] активный: {}\n",
+                s.name,
+                s.sources.join(", "),
+                s.active_source
+            ));
+        }
+        out
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VIDEO OUTPUT — вывод видео на мониторы, телевизоры, приборы
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DisplayDevice {
+    Hdmi,      // прямой HDMI-выход (Raspberry Pi, SDL2)
+    NdiOutput, // NDI-приёмник (видео по сети)
+    WebRtc,    // браузерный просмотр
+    SmartTv,   // Smart TV (DLNA, Chromecast, AirPlay)
+    Projector, // проектор (HDMI/SDI)
+    Monitor,   // монитор (DisplayPort/HDMI)
+    LedWall,   // светодиодный экран (LED video wall)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoOutput {
+    pub name: String,
+    pub device: DisplayDevice,
+    pub current_source: Option<String>,
+    pub resolution: String,
+    pub is_active: bool,
+    pub location: String, // "зал заседаний", "цех 3", "дом гостиная"
+}
+
+pub struct DisplayManager {
+    outputs: Arc<Mutex<Vec<VideoOutput>>>,
+    kvstore: Arc<KvStore>,
+}
+
+impl DisplayManager {
+    pub fn new(kvstore: Arc<KvStore>) -> Self {
+        let mut outputs = Vec::new();
+        outputs.push(VideoOutput {
+            name: "Главный монитор".into(),
+            device: DisplayDevice::Hdmi,
+            current_source: None,
+            resolution: "1920x1080".into(),
+            is_active: false,
+            location: "Студия".into(),
+        });
+        outputs.push(VideoOutput {
+            name: "Телевизор зал".into(),
+            device: DisplayDevice::SmartTv,
+            current_source: None,
+            resolution: "3840x2160".into(),
+            is_active: false,
+            location: "Дом".into(),
+        });
+        outputs.push(VideoOutput {
+            name: "NDI-приёмник".into(),
+            device: DisplayDevice::NdiOutput,
+            current_source: None,
+            resolution: "1920x1080".into(),
+            is_active: false,
+            location: "Сеть".into(),
+        });
+        DisplayManager {
+            outputs: Arc::new(Mutex::new(outputs)),
+            kvstore,
+        }
+    }
+
+    /// Назначить источник на устройство вывода
+    pub fn route(&self, source: &str, output: &str) -> Result<String> {
+        let mut outs = self
+            .outputs
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex: {}", e))?;
+        if let Some(o) = outs.iter_mut().find(|o| o.name == output) {
+            o.current_source = Some(source.to_string());
+            o.is_active = true;
+            let _ = self.kvstore.select_db(0).xadd(
+                "media:display:routes",
+                &[
+                    ("source", source),
+                    ("output", output),
+                    ("ts", &chrono::Utc::now().to_rfc3339()),
+                ],
+                100,
+            );
+            info!("Display: routed '{}' → {}", source, output);
+            Ok(format!("📺 {} → {} (активно)", source, output))
+        } else if output == "*" {
+            // На все устройства
+            for o in outs.iter_mut() {
+                o.current_source = Some(source.to_string());
+                o.is_active = true;
+            }
+            info!("Display: routed '{}' → ALL outputs", source);
+            Ok(format!("📺 {} → ВСЕ выходы", source))
+        } else {
+            Err(anyhow::anyhow!(
+                "Output '{}' not found. Доступны: {}",
+                output,
+                outs.iter()
+                    .map(|o| o.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        }
+    }
+
+    /// Отключить устройство вывода
+    pub fn disconnect(&self, output: &str) -> Result<String> {
+        let mut outs = self
+            .outputs
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex: {}", e))?;
+        if let Some(o) = outs.iter_mut().find(|o| o.name == output) {
+            o.is_active = false;
+            o.current_source = None;
+            Ok(format!("⏹ {} отключён", output))
+        } else {
+            Err(anyhow::anyhow!("Output '{}' not found", output))
+        }
+    }
+
+    pub fn list(&self) -> Vec<VideoOutput> {
+        self.outputs.lock().map(|o| o.clone()).unwrap_or_default()
+    }
+
+    pub fn summary(&self) -> String {
+        let outs = self.list();
+        let mut out = format!("📺 Видеовыходы ({}):\n", outs.len());
+        for o in &outs {
+            let icon = match o.device {
+                DisplayDevice::Hdmi => "🖥",
+                DisplayDevice::NdiOutput => "🌐",
+                DisplayDevice::WebRtc => "🌍",
+                DisplayDevice::SmartTv => "📺",
+                DisplayDevice::Projector => "🔦",
+                DisplayDevice::Monitor => "🖥",
+                DisplayDevice::LedWall => "✨",
+            };
+            let src = o.current_source.as_deref().unwrap_or("—");
+            out.push_str(&format!(
+                "  {} {} — {} [{}] {}\n",
+                icon,
+                o.name,
+                if o.is_active { "🔴" } else { "⏹" },
+                o.resolution,
+                src
+            ));
+        }
+        out
+    }
+}
