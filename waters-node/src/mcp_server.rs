@@ -160,7 +160,15 @@ impl McpHandler {
                     }).to_string());
                 }
 
-                let skill = skill.unwrap();
+                let skill = match skill {
+                    Some(s) => s,
+                    None => {
+                        return Some(serde_json::json!({
+                            "jsonrpc": "2.0", "id": id,
+                            "error": {"code": -32602, "message": "Agent not found"}
+                        }).to_string());
+                    }
+                };
                 let role = &skill.manifest.role;
                 let llm = &skill.manifest.llm.preferred;
                 let node_id = "mcp-server";

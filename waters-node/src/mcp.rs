@@ -194,3 +194,82 @@ mod tests {
         assert_eq!(client.list_servers().len(), 1);
     }
 }
+
+/// ---------- MCP Security — защита от утечек и инъекций ----------
+
+pub struct McpSecurity {
+    /// Паттерны, которые нужно заблокировать в tool args
+    blocked_patterns: Vec<String>,
+    /// Поля, которые нужно маскировать в логах
+    secret_fields: Vec<String>,
+}
+
+impl McpSecurity {
+    pub fn new() -> Self {
+        McpSecurity {
+            blocked_patterns: vec![
+                "rm -rf".into(), "sudo".into(), "DROP TABLE".into(), 
+                "DELETE FROM".into(), "exec(".into(), "eval(".into(),
+                "os.system".into(), "subprocess".into(),
+            ],
+            secret_fields: vec![
+                "api_key".into(), "password".into(), "token".into(),
+                "secret".into(), "auth".into(), "key".into(), "passwd".into(),
+            ],
+        }
+    }
+
+    /// Проверить tool args на опасные паттерны
+    pub fn validate_tool_args(&self, tool: &str, args: &serde_json::Value) -> Result<(), String> {
+        let args_str = serde_json::to_string(args).unwrap_or_default().to_lowercase();
+        for pattern in &self.blocked_patterns {
+            if args_str.contains(&pattern.to_lowercase()) {
+                return Err(format!("Blocked dangerous pattern in tool '{}': {}", tool, pattern));
+            }
+        }
+        // Блокируем запись в системные файлы через любые tools
+        if tool == "write_file" || tool == "exec_shell" || tool == "file_write" {
+            if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
+                let dangerous = ["/etc/", "/usr/", "/boot/", "/var/", "/sys/",
+                    ".ssh/", ".git/config", "authorized_keys"];
+                for d in &dangerous {
+                    if path.contains(d) {
+                        return Err(format!("Blocked write to system path: {}", d));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Замаскировать секреты в логах
+    pub fn sanitize_for_log(&self, data: &str) -> String {
+        let mut result = data.to_string();
+        for field in &self.secret_fields {
+            // Маскируем "field": "value" → "field": "***"
+            let pattern = format!("\"{}\": \"", field);
+            if let Some(start) = result.find(&pattern) {
+                if let Some(end) = result[start..].find('\"') {
+                    let mask_start = start + pattern.len();
+                    let mask_end = start + end;
+                    if mask_end > mask_start {
+                        result.replace_range(mask_start..mask_end, "***");
+                    }
+                }
+            }
+            // Маскируем "field": "value" в URL-encoded формате
+            let url_pattern = format!("{}=", field);
+            if let Some(start) = result.find(&url_pattern) {
+                if let Some(end) = result[start..].find('&') {
+                    result.replace_range(start..start+end, &format!("{}={}", field, "***"));
+                }
+            }
+        }
+        result
+    }
+
+    pub fn summary(&self) -> String {
+        format!("🔒 MCP Security: {} blocked patterns, {} secret fields masked",
+            self.blocked_patterns.len(), self.secret_fields.len())
+    }
+}
