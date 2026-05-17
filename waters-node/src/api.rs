@@ -139,6 +139,29 @@ async fn route(method: &str, path: &str, body: &str, state: &Arc<ApiState>) -> O
     if !path.starts_with("/api/") { return None; }
 
     match (method, path) {
+        ("GET", "/api/v1/health") => {
+            let peers = state.nodes.lock().await.len();
+            let uptime = state.start_time.elapsed().as_secs();
+            let redis = state.kvstore.as_ref().map(|k| k.is_connected()).unwrap_or(false);
+            let status = if redis { "healthy" } else { "degraded" };
+            let code = if redis { 200 } else { 503 };
+            let body = serde_json::json!({
+                "status": status,
+                "version": env!("CARGO_PKG_VERSION"),
+                "uptime_secs": uptime,
+                "peers": peers,
+                "redis": redis,
+                "node_id": state.node_id,
+                "node_name": state.node_name,
+            });
+            let body_str = serde_json::to_string_pretty(&body).unwrap_or_default();
+            let response = format!(
+                "HTTP/1.1 {}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\n\r\n{}",
+                if code == 200 { "200 OK" } else { "503 Service Unavailable" },
+                body_str.len(), body_str
+            );
+            return Some(response);
+        }
         ("GET", "/api/v1/node/status") => {
             let peers = state.nodes.lock().await.len();
             let uptime = state.start_time.elapsed().as_secs();

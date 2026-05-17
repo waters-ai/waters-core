@@ -1264,3 +1264,35 @@ impl BridgeProvider for McpBridge {
         client.call_tool(&self.server, &self.tool, input)
     }
 }
+
+/// Push notifications — через любой активный ChatBridge
+pub fn send_push(bridge_pool: &BridgePool, target: &str, message: &str) {
+    if let Some(bridge) = bridge_pool.get(target) {
+        if let Err(e) = bridge.call(message) {
+            warn!("Push to '{}' failed: {}", target, e);
+        }
+    }
+}
+
+/// Push через авто-определённый канал (первый доступный)
+pub fn auto_push(bridge_pool: &BridgePool, title: &str, message: &str, lang: &str) {
+    let prefix = match lang {
+        "zh" => "🔔",
+        _ => "🔔",
+    };
+    let full_msg = format!("{} *{}*\n{}", prefix, title, message);
+    for name in &["chat", "telegram", "discord", "email", "whatsapp"] {
+        if let Some(bridge) = bridge_pool.get(name) {
+            let _ = bridge.call(&full_msg);
+            return;
+        }
+    }
+    warn!("auto_push: no active bridge for notification");
+}
+
+/// Push notification helper — отправляет через bridge_pool
+pub fn maybe_push(bridge_pool: &BridgePool, level: &str, title: &str, message: &str) {
+    if level == "critical" || level == "warning" {
+        auto_push(bridge_pool, title, message, "ru");
+    }
+}

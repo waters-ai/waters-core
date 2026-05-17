@@ -617,9 +617,17 @@ pub async fn handle_slash(
             } else if slash_arg.starts_with("block-all ") {
                 let from = slash_arg[10..].trim();
                 if !from.is_empty() {
-                    let mut chat = crate::agent_chat::AgentChat::new(kvstore.clone());
-                    chat.acl_mut().block_all(from);
-                    println!("{}🔒 Запрещено всё исходящее от {}{}", YELLOW, from, RESET);
+                    println!("{}⚠️ Вы уверены? {} больше никому не сможет писать.{}", YELLOW, from, RESET);
+                    println!("  Подтвердите: yes/no");
+                    let mut confirm = String::new();
+                    std::io::stdin().read_line(&mut confirm).ok();
+                    if confirm.trim().to_lowercase() == "yes" {
+                        let mut chat = crate::agent_chat::AgentChat::new(kvstore.clone());
+                        chat.acl_mut().block_all(from);
+                        println!("{}🔒 Запрещено всё исходящее от {}{}", YELLOW, from, RESET);
+                    } else {
+                        println!("{}Отменено{}", DIM, RESET);
+                    }
                 } else { println!("Usage: /acl block-all <agent_id>"); }
             } else {
                 println!("Usage: /acl show | /acl allow <from> <to> | /acl block <from> <to> | /acl block-all <agent>");

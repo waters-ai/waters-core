@@ -56,19 +56,33 @@ impl Node {
         }
     }
 
-    pub fn id(&self) -> &str { &self.identity.node_id }
-    pub fn name(&self) -> &str { &self.identity.node_name }
-    pub fn identity(&self) -> &NodeIdentity { &self.identity }
+    pub fn id(&self) -> &str {
+        &self.identity.node_id
+    }
+    pub fn name(&self) -> &str {
+        &self.identity.node_name
+    }
+    pub fn identity(&self) -> &NodeIdentity {
+        &self.identity
+    }
 
     pub fn tick(&mut self) {
         self.uptime_counter.fetch_add(1, Ordering::Relaxed);
         self.identity.uptime_secs = self.uptime_counter.load(Ordering::Relaxed);
     }
 
-    pub fn set_subagents(&mut self, count: u64) { self.identity.subagents = count; }
-    pub fn set_findings(&mut self, count: u64) { self.identity.findings = count; }
-    pub fn set_kafka(&mut self, connected: bool) { self.identity.kafka_connected = connected; }
-    pub fn set_autonomy(&mut self, level: u8) { self.identity.autonomy_level = level; }
+    pub fn set_subagents(&mut self, count: u64) {
+        self.identity.subagents = count;
+    }
+    pub fn set_findings(&mut self, count: u64) {
+        self.identity.findings = count;
+    }
+    pub fn set_kafka(&mut self, connected: bool) {
+        self.identity.kafka_connected = connected;
+    }
+    pub fn set_autonomy(&mut self, level: u8) {
+        self.identity.autonomy_level = level;
+    }
 
     pub fn save_state(&self, path: &Path) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(&self.identity)?;
@@ -107,5 +121,61 @@ impl Node {
             "fixed_ip": self.identity.fixed_ip,
             "timestamp": chrono::Utc::now().to_rfc3339(),
         })
+    }
+}
+
+/// Presence — статус ноды в сети
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Presence {
+    pub node_id: String,
+    pub node_name: String,
+    pub status: String, // online | away | busy | dnd | offline
+    pub last_seen: String,
+    pub peers: u32,
+    pub uptime: u64,
+    pub version: String,
+}
+
+impl Node {
+    /// Сохранить presence в Redis (публичный статус)
+    pub fn publish_presence(&self, kvstore: &crate::store::KvStore, peers: u32, uptime: u64) {
+        let presence = Presence {
+            node_id: self.id().to_string(),
+            node_name: self.name().to_string(),
+            status: "online".to_string(),
+            last_seen: chrono::Utc::now().to_rfc3339(),
+            peers,
+            uptime,
+            version: env!("CARGO_PKG_VERSION").to_string(),
+        };
+        let key = format!("presence:{}", self.id());
+        if let Ok(json) = serde_json::to_string(&presence) {
+            let _ = kvstore.set(&key, &json, 300); // 5 min TTL
+        }
+    }
+
+    /// Получить presence другого узла
+    pub fn get_presence(kvstore: &crate::store::KvStore, node_id: &str) -> Option<Presence> {
+        let key = format!("presence:{}", node_id);
+        kvstore
+            .get(&key)
+            .ok()
+            .flatten()
+            .and_then(|s| serde_json::from_str(&s).ok())
+    }
+
+    /// Список всех visible нод
+    pub fn list_presence(kvstore: &crate::store::KvStore) -> Vec<Presence> {
+        let mut nodes = Vec::new();
+        if let Ok(keys) = kvstore.list_keys("presence:*") {
+            for key in keys {
+                if let Some(presence) =
+                    Self::get_presence(kvstore, &key.replacen("presence:", "", 1))
+                {
+                    nodes.push(presence);
+                }
+            }
+        }
+        nodes
     }
 }

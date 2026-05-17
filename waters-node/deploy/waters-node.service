@@ -1,0 +1,31 @@
+[Unit]
+Description=WATERS Node v0.4 — P2P Agent Runtime
+Documentation=https://github.com/waters-ai/waters-node
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/waters-node
+EnvironmentFile=-/home/ubuntu/waters-node/.env
+ExecStart=/home/ubuntu/waters-node/bin/waters-node --port 42069
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/waters-node/.waters
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
