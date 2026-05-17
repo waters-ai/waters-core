@@ -28,6 +28,7 @@ pub mod plugin;
 pub mod security;
 pub mod tunnel;
 pub mod mcp_store;
+pub mod agent_chat;
 mod store;
 mod bridge;
 mod journal;
@@ -484,6 +485,10 @@ async fn main() -> Result<()> {
     // Init Channel Isolation
     let mut channel_isolation = security::ChannelIsolation::new();
     info!("ChannelIsolation: {} channels configured", channel_isolation.list_channels().len());
+
+    // Init AgentChat
+    let agent_chat = agent_chat::AgentChat::new(kvstore.clone());
+    let _ = agent_chat.broadcast("system", "chat", "node_start", serde_json::json!({"node": node.name()}));
 
     // Init cron background task
     let cron_kv = kvstore.clone();

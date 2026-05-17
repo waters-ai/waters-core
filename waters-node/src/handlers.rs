@@ -71,6 +71,8 @@ pub async fn handle_slash(
             println!("  /contacts     — показать контактную книгу");
             println!("  /mcp          — MCP store: /mcp list | /mcp search <q> | /mcp install <name>");
             println!("  /channel      — /channel create <name> | /channel allow <name> <peer>");
+            println!("  @agent <id>   — agent-to-agent message: @agent scout-id ищи метеориты");
+            println!("  @all <topic>  — broadcast всем агентам в канале");
             println!("  /sessions     — list sessions");
             println!("  /json         — output JSON format");
             println!("  /cargo        — show pending cargo transfers");
@@ -852,6 +854,14 @@ pub async fn handle_natural(
             println!("  connect <ip>      — join a peer");
             println!("  dashboard         — open http://localhost:{}", api_port);
             println!("  exit              — shutdown");
+        }
+        _ if cmd.starts_with("@agent ") || cmd.starts_with("@all ") => {
+            if let Some(msg) = crate::agent_chat::AgentChat::parse_agent_command(cmd) {
+                let chat = crate::agent_chat::AgentChat::new(kvstore.clone());
+                let _ = chat.send(&msg, 0);
+                let short_to = if msg.to.len() > 12 { &msg.to[..12] } else { &msg.to };
+                println!("{}🤖 Сообщение отправлено агенту {}{}", GREEN, short_to, RESET);
+            }
         }
         "status" => {
             let peers = gossip.list_peers().await;
