@@ -470,6 +470,11 @@ async fn main() -> Result<()> {
     let sec_rule_count = security_learner.get_rules().len();
     info!("SecurityLearner: {} events, {} rules loaded", sec_event_count, sec_rule_count);
 
+    // Init Contact Book
+    let mut contacts = tunnel::ContactBook::new(&PathBuf::from(".waters"));
+    let contact_count = contacts.list().len();
+    println!("  {}Contacts{}   {} saved", BOLD, RESET, contact_count);
+
     // Init cron background task
     let cron_kv = kvstore.clone();
     tokio::spawn(async move {
@@ -526,6 +531,7 @@ async fn main() -> Result<()> {
                 &mut task_mgr, &mut group_mgr, &mut node, &state_path,
                 &kvstore, &reviewer, &group_chat,
                 &mut skill_evolver,
+                &mut contacts,
             ).await?
         } else {
             handlers::handle_natural(

@@ -30,6 +30,7 @@ pub async fn handle_slash(
     reviewer: &crate::agent_rating::AgentReviewer,
     group_chat: &crate::group_chat::GroupChat,
     skill_evolver: &mut crate::skill_evolve::SkillEvolver,
+    contacts: &mut crate::tunnel::ContactBook,
 ) -> Result<bool, anyhow::Error> {
     match slash_cmd {
         "help" | "h" => {
@@ -62,10 +63,12 @@ pub async fn handle_slash(
             println!("  /approvals    — show pending peer approval requests");
             println!("  /approve      — /approve <idx> to accept peer");
             println!("  /reject       — /reject <idx> to deny peer");
-            println!("  /mode         — switch node mode (plan/execute/stop/log)");
+            println!("  /mode         — switch node mode (plan/assemble/execute/stop/log/dnd)");
             println!("  /groupmode    — switch group mode (storm/hunt/synthesis/focus/watch)");
             println!("  /chat         — send message: /chat <text>");
             println!("  /connect      — connect to peer: /connect <ip>");
+            println!("  /nick         — /nick <node_id> <name> [group] — дать имя пиру");
+            println!("  /contacts     — показать контактную книгу");
             println!("  /sessions     — list sessions");
             println!("  /json         — output JSON format");
             println!("  /cargo        — show pending cargo transfers");
@@ -563,8 +566,27 @@ pub async fn handle_slash(
                 let msg = mode_engine.switch(new_mode);
                 println!("{}", msg);
             } else {
-                println!("Modes: plan, assemble, execute, stop, log");
+                println!("Modes: plan, assemble, execute, stop, log, dnd");
             }
+        }
+        "nick" if !slash_arg.is_empty() => {
+            let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+            if parts.len() >= 2 {
+                let node_id = parts[0];
+                let nickname = parts[1];
+                let group = parts.get(2).copied().unwrap_or("");
+                contacts.set(node_id, nickname, group);
+                println!("{}✅ Контакт сохранён: {} → {}{}{}",
+                    GREEN, node_id, nickname,
+                    if group.is_empty() { String::new() } else { format!(" [{}]", group) },
+                    RESET);
+            } else {
+                println!("Usage: /nick <node_id> <имя> [группа]");
+                println!("  Пример: /nick 171.22.180.177:42069 Хаб Работа");
+            }
+        }
+        "contacts" => {
+            println!("{}", contacts.summary());
         }
         "connect" if !slash_arg.is_empty() => {
             gossip.direct_sync(slash_arg, channel_mgr.clone()).await.ok();
