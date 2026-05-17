@@ -1,0 +1,59 @@
+{
+  "topic": "tasks.assigned.v1",
+  "type": "task_assignment",
+  "priority": "P1",
+  "assigned_to": "agent.constructor.v1",
+  "assigned_by": "agent.architect.v1",
+  "timestamp": "2026-05-16T00:00:00Z",
+  "title": "Agent Cargo Protocol — DTN-перемещение агентов между нодами",
+  "summary": "Реализовать три протокола обмена между нодами с переменной связью: Agent Cargo (Full/Lite, Push/Pull), Task Sync (двусторонняя синхронизация), Result Exchange (findings only).",
+  "context": {
+    "problem": "Домашняя нода (переменный IP, периодические сеансы) соединяется с хаб-нодой (постоянный IP). В таких условиях нужен store-and-forward обмен: агенты, задачи, результаты.",
+    "solution": "Создан модуль cargo.rs с моделями данных. Добавлены поля в NodeIdentity. Документация обновлена в MASTER_SPEC_V3.md (секция 7.5) и TASK_LIST_V3.md (Фаза 1.3)."
+  },
+  "tasks": [
+    {
+      "id": "1.3.1",
+      "file": "cargo.rs",
+      "description": "Модели данных: CargoMode, CargoStatus, AgentCargo, CargoManifest, AgentSnapshot, CargoChunk, SyncSession, ResultExchange, CargoGossipMessage, CargoEngine"
+    },
+    {
+      "id": "1.3.2",
+      "files": ["cargo.rs", "gossip.rs"],
+      "description": "Push/Pull handshake: OFFER/ACK/SEND/CONFIRM/REQUEST через gossip"
+    },
+    {
+      "id": "1.3.3",
+      "file": "cargo.rs",
+      "description": "Чанкование и resume для узких каналов"
+    },
+    {
+      "id": "1.3.4",
+      "files": ["cargo.rs", "gossip.rs"],
+      "description": "Sync (sync.start/data/ack) и Result-Exchange (xchange.data/ack) протоколы"
+    },
+    {
+      "id": "1.3.5",
+      "files": ["convo.rs", "cargo.rs"],
+      "description": "Чат-аппрув для входящих Offer/Request"
+    },
+    {
+      "id": "1.3.6",
+      "file": "node.rs",
+      "description": "Поля is_home_node, fixed_ip, cargo_*, last_sync_seq в NodeIdentity"
+    },
+    {
+      "id": "1.3.7",
+      "file": "dtn.rs",
+      "description": "Приоритетная очередь для cargo vs gossip"
+    }
+  ],
+  "references": [
+    "docs/waters-node/MASTER_SPEC_V3.md#75-dtn-cargo-protocol-tri-protokola-obmena-mezhdu-nodami-s-peremennoy-svyazyu",
+    "docs/waters-node/TASK_LIST_V3.md#faza-13-agent-cargo-protocol-p1-2-dnya",
+    "waters-node/src/cargo.rs",
+    "waters-node/src/node.rs"
+  ],
+  "order": "После Фазы 1.2 (Crash Recovery), перед Фазой 2 (Bridges Config). 6 дней на реализацию.",
+  "estimated_days": 6
+}

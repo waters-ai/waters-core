@@ -1,0 +1,70 @@
+{
+  "topic": "tasks.assigned.v1",
+  "type": "self_assignment",
+  "priority": "P0",
+  "assigned_to": "agent.architect.v1",
+  "assigned_by": "agent.architect.v1",
+  "timestamp": "2026-05-16T00:00:00Z",
+  "title": "Node Modes Analysis + Skyholder Design — следующий сеанс",
+  "summary": "Проанализировать реализацию Конструктора, создать NODE_MODES.md (7 режимов), проработать Skyholder-требования, выбрать лучшие решения.",
+  "session_startup": {
+    "load_snapshot": "architect",
+    "read_journal": "docs/waters-node/ARCHITECT_JOURNAL.md",
+    "read_tasks": "tasks.assigned.v1/001-agent-cargo-protocol.json",
+    "read_spec": "docs/waters-node/MASTER_SPEC_V3.md"
+  },
+  "tasks": [
+    {
+      "id": "A1",
+      "priority": "P0",
+      "description": "Анализ реализации Конструктора: cargo.rs — что сделано, diff с TASK_LIST_V3.md, оценка отклонений"
+    },
+    {
+      "id": "A2",
+      "priority": "P0",
+      "file": "docs/waters-node/NODE_MODES.md",
+      "description": "Создать документ с описанием 7 режимов: Master, Slave, Dom, Serv, Earth, Remote, Cosmos. Для каждого: требования к каналу, автономия, приоритет трафика, шаблон конфига"
+    },
+    {
+      "id": "A3",
+      "priority": "P0",
+      "description": "Skyholder-режимы: для каждого из 7 режимов — требования к Skyholder (agent lifecycle, ресурсы, бриджи), как Skyholder ведёт себя при обрыве/reconnect",
+      "subtasks": [
+        "Master: Skyholder на хабе управляет группой",
+        "Slave: Skyholder подчиняется, получает команды",
+        "Dom: Skyholder с DTN, переменная связь",
+        "Serv: Skyholder-хранитель ресурсов",
+        "Earth: Skyholder в наземном центре",
+        "Remote: Skyholder с высокой задержкой",
+        "Cosmos: Skyholder с loss 1-5%"
+      ]
+    },
+    {
+      "id": "A4",
+      "priority": "P1",
+      "description": "Альтернативные решения: для каждого режима — 2-3 варианта архитектуры Skyholder, таблица сравнения (сложность/надёжность/производительность/соответствие ТЗ), выбор лучшего"
+    },
+    {
+      "id": "A5",
+      "priority": "P1",
+      "description": "Сверка с реализацией Конструктора: какие решения совпали, где расхождения, нужно ли менять спецификацию"
+    },
+    {
+      "id": "A6",
+      "priority": "P1",
+      "description": "Запись результатов: обновить ARCHITECT_JOURNAL.md, сохранить snapshot, записать в граф"
+    }
+  ],
+  "references": [
+    "docs/waters-node/MASTER_SPEC_V3.md",
+    "docs/waters-node/TASK_LIST_V3.md",
+    "docs/waters-node/ARCHITECT_JOURNAL.md",
+    "waters-node/src/cargo.rs",
+    "waters-node/src/node.rs",
+    "waters-node/src/gossip.rs",
+    "waters-node/src/agent.rs",
+    "waters-node/src/dtn.rs",
+    "waters-node/config.toml"
+  ],
+  "estimated_hours": 4
+}
