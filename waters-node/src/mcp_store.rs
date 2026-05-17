@@ -168,8 +168,62 @@ impl McpStore {
         &self.config.taps
     }
 
-    async fn fetch_from_tap(&self, tap: &str, _query: &str) -> Option<Vec<McpSkillMeta>> {
-        // For now, return empty — real HTTP fetch will be added
+    async fn fetch_from_tap(&self, tap: &str, query: &str) -> Option<Vec<McpSkillMeta>> {
+        let client = reqwest::Client::builder()
+            .user_agent("waters-node/0.5")
+            .build().ok()?;
+
+        if tap == "huggingface.co/skills" {
+            let encoded: String = query.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+            let url = format!("https://huggingface.co/api/skills?search={}&limit=20", encoded);
+            match client.get(&url).send().await {
+                Ok(resp) => {
+                    if let Ok(text) = resp.text().await {
+                        if let Ok(skills) = serde_json::from_str::<Vec<McpSkillMeta>>(&text) {
+                            info!("McpStore: fetched {} skills from huggingface", skills.len());
+                            return Some(skills);
+                        }
+                    }
+                }
+                Err(e) => warn!("McpStore: huggingface fetch failed: {}", e),
+            }
+        }
+        if tap.starts_with("github.com/") {
+            let parts: Vec<&str> = tap.splitn(3, '/').collect();
+            if parts.len() >= 3 {
+                let repo = format!("{}/{}", parts[1], parts[2]);
+                let url = format!("https://api.github.com/repos/{}/contents/skills?ref=main", repo);
+                match client.get(&url).send().await {
+                    Ok(resp) => {
+                        if let Ok(files) = resp.json::<Vec<serde_json::Value>>().await {
+                            let mut results = Vec::new();
+                            for file in files {
+                                if let Some(name) = file["name"].as_str() {
+                                    if name.ends_with(".json") || name.ends_with(".md") {
+                                        if query.is_empty() || name.contains(query) {
+                                            results.push(McpSkillMeta {
+                                                name: name.trim_end_matches(".json").trim_end_matches(".md").to_string(),
+                                                version: "1.0.0".into(),
+                                                description: format!("Skill from {}", tap),
+                                                author: Some(parts[1].to_string()),
+                                                tags: vec!["remote".into()],
+                                                source_url: Some(file["download_url"].as_str().unwrap_or("").to_string()),
+                                                tools: vec![],
+                                                install_command: None,
+                                                env_vars: vec![],
+                                            });
+                                        }
+                                    }
+                }
+            }
+                            info!("McpStore: fetched {} skills from {}", results.len(), tap);
+                            return Some(results);
+                        }
+                    }
+                    Err(e) => warn!("McpStore: github fetch failed: {}", e),
+                }
+            }
+        }
         None
     }
 
