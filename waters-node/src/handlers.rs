@@ -72,6 +72,9 @@ pub async fn handle_slash(
             println!("  /self fork [profile] — создать форк ноды под задачу");
             println!("  /me           — 💧 капелька: поговорить с душой ноды");
             println!("  /yasa         — ☦️ Яса: проверить агента, обучить, аудит секретов");
+            println!("  /groups       — список групп и их ресурсов");
+            println!("  /tasks        — список задач");
+            println!("  /bridges      — список бриджей (общие/личные)");
             println!("  /a2a          — A2A Gateway: connect, discover, allow, block");
             println!("  /camera       — /camera list | add | ptz | stream | report — удалённые камеры");
             println!("  /director     — /director scenes | switch | source | report — режиcсёрский пульт");
@@ -724,6 +727,51 @@ pub async fn handle_slash(
                     }
                 }
                 _ => println!("Usage: /self improve | status | deploy | fork [profile]"),
+            }
+        }
+        "groups" | "group" => {
+            let groups = group_mgr.list();
+            if groups.is_empty() {
+                println!("{}Нет групп. Создать: /group create <name>{}", DIM, RESET);
+            } else {
+                println!("📋 Группы ({}):", groups.len());
+                for g in &groups {
+                    println!("  {} [{}] {} участников | skills:{}, agents:{}, bridges:{}",
+                        g.name, g.mode, g.members.len(),
+                        g.shared_skills.len(), g.shared_agents.len(), g.shared_bridges.len());
+                }
+            }
+        }
+        "tasks" | "task" => {
+            let tasks = task_mgr.list().await;
+            if tasks.is_empty() {
+                println!("{}Нет задач. Создать: /task create <title> <desc>{}", DIM, RESET);
+            } else {
+                println!("📋 Задачи ({}):", tasks.len());
+                for t in tasks.iter().rev().take(10) {
+                    let short_id: String = t.id.chars().take(8).collect();
+                    let assigned = t.assigned_to.as_deref().unwrap_or("—");
+                    let short_title: String = t.title.chars().take(40).collect();
+                    println!("  {} [{}] {} → {}", short_id, t.status, short_title, assigned);
+                }
+            }
+        }
+        "bridges" => {
+            let list = bridge_pool.list();
+            if list.is_empty() {
+                println!("{}Нет бриджей{}", DIM, RESET);
+            } else {
+                println!("🔌 Бриджи ({}):", list.len());
+                for name in &list {
+                    let meta = bridge_pool.info.get(name);
+                    let is_shared = meta.map(|m| !m.locked).unwrap_or(false);
+                    let prio = meta.map(|m| m.priority).unwrap_or(0);
+                    let enabled = meta.map(|m| m.enabled).unwrap_or(false);
+                    println!("  {} {} (prio:{}, {})",
+                        if is_shared { "🌐" } else { "🔒" },
+                        name, prio,
+                        if enabled { "✅" } else { "⏹" });
+                }
             }
         }
         "yasa" => {
