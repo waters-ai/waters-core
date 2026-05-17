@@ -71,6 +71,8 @@ pub async fn handle_slash(
             println!("  /self secure on|off — вкл/выкл режим безопасности");
             println!("  /self fork [profile] — создать форк ноды под задачу");
             println!("  /a2a          — A2A Gateway: connect, discover, allow, block");
+            println!("  /camera       — /camera list | add | ptz | stream | report — удалённые камеры");
+            println!("  /director     — /director scenes | switch | source | report — режиcсёрский пульт");
             println!("    Профили: agriculture | studio | home | factory | minimal");
             println!("  /self release — анализ: что идёт в общий релиз");
             println!("  /groupmode    — switch group mode (storm/hunt/synthesis/focus/watch)");
@@ -646,9 +648,18 @@ pub async fn handle_slash(
                             for (i, s) in next.iter().enumerate() {
                                 println!("  {}. {}", i+1, s);
                             }
-                            let chain = crate::task_chain::TaskChain::new("self-improve", true);
-                            println!("\n{}", chain.summary());
-                            println!("✅ Цикл запущен. Результаты в логах.");
+                             let chain = crate::task_chain::TaskChain::new("self-improve", true);
+                             println!("\n{}", chain.summary());
+                             println!("🚀 Запускаю агентов...");
+                             // Вызываем execute асинхронно — игнорируем результат
+                             let desc = next.iter().enumerate()
+                                 .map(|(i, s)| format!("{}. {}", i+1, s))
+                                 .collect::<Vec<_>>().join(";");
+                             let task_desc = format!("Цикл улучшения ноды:\n{}", desc);
+                             match chain.execute(subagents, skill_reg, &task_desc).await {
+                                 Ok(result) => println!("✅ Цикл завершён:\n{}", result),
+                                 Err(e) => println!("{}❌ Ошибка цикла: {}{}", YELLOW, e, RESET),
+                             }
                         }
                     }
                 }
