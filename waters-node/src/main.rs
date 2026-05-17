@@ -433,6 +433,20 @@ async fn main() -> Result<()> {
         println!("  {0}status{1}    — node info", DIM, RESET);
     }
 
+    // Init CronEngine
+    let mut cron_engine = cron::CronEngine::new(&PathBuf::from(".waters"));
+    let _ = cron_engine.load();
+    cron_engine.start();
+    let cron_jobs = cron_engine.list_jobs().len();
+    if cron_jobs > 0 {
+        println!("  {}Cron{}   {} jobs loaded", BOLD, RESET, cron_jobs);
+    }
+
+    // Init SkillEvolver
+    let evolve_dir = PathBuf::from(".waters/skills/evolved");
+    std::fs::create_dir_all(&evolve_dir).ok();
+    let mut skill_evolver = skill_evolve::SkillEvolver::new(&evolve_dir);
+
     // Main loop
     use tokio::io::{AsyncBufReadExt, BufReader};
 

@@ -1,4 +1,4 @@
-use crate::skill::{Skill, SkillManifest, SkillRegistry, LlmConfig};
+use crate::skill::{LlmConfig, Skill, SkillManifest, SkillRegistry};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -89,7 +89,10 @@ impl SkillEvolver {
         };
 
         let version_parts: Vec<&str> = original.manifest.version.split('.').collect();
-        let minor: u32 = version_parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let minor: u32 = version_parts
+            .get(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
         let new_version = format!("1.{}.{}", minor + 1, review.success_rating);
 
         let new_name = format!("{}-v{}", review.skill_name, minor + 1);
@@ -97,7 +100,10 @@ impl SkillEvolver {
         let improve_text = if review.improvements.is_empty() {
             String::new()
         } else {
-            format!("\n## Улучшения после ревью\n\n{}", review.improvements.join("\n"))
+            format!(
+                "\n## Улучшения после ревью\n\n{}",
+                review.improvements.join("\n")
+            )
         };
 
         let mut new_prompt = format!(
@@ -112,14 +118,23 @@ impl SkillEvolver {
         if !review.weaknesses.is_empty() {
             new_prompt.push_str(&format!(
                 "\n\n## Известные слабости\n\n{}",
-                review.weaknesses.iter().map(|w| format!("- {w}")).collect::<Vec<_>>().join("\n")
+                review
+                    .weaknesses
+                    .iter()
+                    .map(|w| format!("- {w}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
             ));
         }
 
         let mut manifest = original.manifest.clone();
         manifest.name = new_name.clone();
-        manifest.version = new_version;
-        manifest.description = format!("{} (эволюция v{})", original.manifest.description, minor + 1);
+        manifest.version = new_version.clone();
+        manifest.description = format!(
+            "{} (эволюция v{})",
+            original.manifest.description,
+            minor + 1
+        );
         manifest.author = Some("self-evolved".into());
         let mut all_tags = review.new_tags.clone();
         for t in &manifest.tags {
