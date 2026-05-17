@@ -228,6 +228,16 @@ async fn route(method: &str, path: &str, body: &str, state: &Arc<ApiState>) -> O
             ]);
             Some(json(&serde_json::json!({"skills": skills, "count": 5})))
         }
+        ("GET", "/api/v1/contacts") => {
+            let contacts = serde_json::json!([
+                {"nickname":"Хаб-177","node_id":"171.22.180.177:42069","group":"Работа"},
+                {"nickname":"Петя","node_id":"10.0.0.5:42070","group":"Друзья"}
+            ]);
+            Some(json(&serde_json::json!({"contacts": contacts, "count": 2})))
+        }
+        ("POST", "/api/v1/contacts") => {
+            Some(json(&serde_json::json!({"status": "ok", "message": "nick set via /nick command"})))
+        }
         _ => Some(json(&serde_json::json!({"error": "not found", "path": path}))),
     }
 }
@@ -325,6 +335,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <a href="#" onclick="switchTab('agents')" id="nav-agents">🤖 Agents</a>
     <a href="#" onclick="switchTab('peers')" id="nav-peers">🌐 Peers</a>
     <a href="#" onclick="switchTab('skills')" id="nav-skills">🧠 Skills</a>
+    <a href="#" onclick="switchTab('contacts')" id="nav-contacts">📒 Contacts</a>
     <a href="#" onclick="switchTab('settings')" id="nav-settings">⚙️ Settings</a>
   </div>
 </div>
@@ -417,6 +428,19 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <div class="grid" id="skills-grid"></div>
   </div>
 
+  <!-- TAB: Contacts -->
+  <div class="tab-content" id="tab-contacts">
+    <div class="card"><div class="card-hdr"><h3>📒 Контакты</h3><span class="badge" id="contacts-count">0</span></div>
+      <div id="contacts-list"><div class="item"><span class="l">Загрузка...</span></div></div>
+      <div class="chat-input" style="margin-top:12px;flex-wrap:wrap">
+        <input id="nick-id" placeholder="node_id (IP:port)" style="flex:2;min-width:120px">
+        <input id="nick-name" placeholder="имя" style="flex:1;min-width:80px">
+        <input id="nick-group" placeholder="группа" style="flex:1;min-width:80px">
+        <button class="btn-primary" onclick="addContact()">➕</button>
+      </div>
+    </div>
+  </div>
+
   <!-- TAB: Settings -->
   <div class="tab-content" id="tab-settings">
     <div class="card"><div class="card-hdr"><h3>Node Settings</h3></div>
@@ -481,7 +505,11 @@ async function loadChat(){let r=await api('chat');let box=document.getElementByI
 // === PTT EVENTS ===
 document.addEventListener('DOMContentLoaded',function(){let ptt=document.getElementById('ptt-btn');if(ptt){ptt.addEventListener('mousedown',startPTT);ptt.addEventListener('mouseup',stopPTT);ptt.addEventListener('mouseleave',stopPTT);ptt.addEventListener('touchstart',function(e){e.preventDefault();startPTT()});ptt.addEventListener('touchend',function(e){e.preventDefault();stopPTT()})}});
 
+// === CONTACTS ===
+async function loadContacts(){try{let r=await api('contacts');if(!r||!r.contacts)return;let el=document.getElementById('contacts-list');let cnt=document.getElementById('contacts-count');if(cnt)cnt.textContent=r.contacts.length;if(!el)return;el.innerHTML='';r.contacts.forEach(c=>{let g=c.group?' ['+c.group+']':'';el.innerHTML+='<div class=item><span class=l>'+c.nickname+g+'</span><span class=v style="font-size:11px;font-family:mono;color:var(--muted)">'+c.node_id+'</span></div>'})}catch(e){}}
+async function addContact(){let id=document.getElementById('nick-id').value.trim();let name=document.getElementById('nick-name').value.trim();let grp=document.getElementById('nick-group').value.trim();if(!id||!name)return;await api('contacts','POST',{node_id:id,nickname:name,group:grp});document.getElementById('nick-id').value='';document.getElementById('nick-name').value='';document.getElementById('nick-group').value='';loadContacts()}
+
 // === INIT ===
 if(synth)synth.onvoiceschanged=initVoices;
-setInterval(refresh,5000);refresh();loadChat();loadPeers();setInterval(loadPeers,10000);loadStatus();setInterval(loadStatus,5000)
+setInterval(refresh,5000);refresh();loadChat();loadPeers();setInterval(loadPeers,10000);loadStatus();setInterval(loadStatus,5000);loadContacts();setInterval(loadContacts,15000)
 </script></body></html>"##;
