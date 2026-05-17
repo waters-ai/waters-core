@@ -33,6 +33,7 @@ pub mod i18n;
 pub mod access;
 mod store;
 mod bridge;
+mod media;
 mod journal;
 mod offline;
 mod display;
@@ -491,6 +492,9 @@ async fn main() -> Result<()> {
     // Init AgentChat
     let agent_chat = agent_chat::AgentChat::new(kvstore.clone());
     let _ = agent_chat.broadcast("system", "chat", "node_start", serde_json::json!({"node": node.name()}));
+
+    // Init VideoEngineer — камеры, запись, умный дом, роботы
+    media::init_engineer();
 
     // Init cron background task
     let cron_kv = kvstore.clone();

@@ -73,6 +73,9 @@ pub async fn handle_slash(
             println!("  /channel      — /channel create <name> | /channel allow <name> <peer>");
             println!("  @agent <id>   — agent-to-agent message: @agent scout-id ищи метеориты");
             println!("  @all <topic>  — broadcast всем агентам в канале");
+            println!("  /camera       — /camera list | /camera ptz <name> <dir> | /camera record <name> on|off");
+            println!("  /home         — /home list | /home voice <команда> — голосовое управление умным домом");
+            println!("  /robot        — /robot list | /robot cmd <name> <команда> — команды роботу");
             println!("  /acl allow <from> <to> — разрешить агенту писать другому");
             println!("  /acl block <from> <to> — запретить агенту писать другому");
             println!("  /acl block-all <from> — запретить всё исходящее от агента");
@@ -595,6 +598,74 @@ pub async fn handle_slash(
         }
         "contacts" => {
             println!("{}", contacts.summary());
+        }
+        "camera" => {
+            if slash_arg == "list" || slash_arg.is_empty() {
+                let summary = crate::media::with_engineer(|e| e.cameras.summary());
+                println!("{}", summary);
+            } else if slash_arg.starts_with("ptz ") {
+                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+                if parts.len() >= 3 {
+                    let result = crate::media::with_engineer(|e| {
+                        let cmd = match parts[2].to_lowercase().as_str() {
+                            "left" => crate::media::camera::PtzCommand::Left,
+                            "right" => crate::media::camera::PtzCommand::Right,
+                            "up" => crate::media::camera::PtzCommand::Up,
+                            "down" => crate::media::camera::PtzCommand::Down,
+                            "zoom+" | "zoomin" => crate::media::camera::PtzCommand::ZoomIn,
+                            "zoom-" | "zoomout" => crate::media::camera::PtzCommand::ZoomOut,
+                            "home" => crate::media::camera::PtzCommand::Home,
+                            "patrol" => crate::media::camera::PtzCommand::Patrol,
+                            _ => return format!("Unknown PTZ command: {}", parts[2]),
+                        };
+                        match e.cameras.ptz(parts[1], &cmd) {
+                            Ok(r) => r,
+                            Err(e) => format!("{}", e),
+                        }
+                    });
+                    println!("{}", result);
+                } else { println!("Usage: /camera ptz <name> <left|right|up|down|zoom+|zoom-|home|patrol>"); }
+            } else if slash_arg.starts_with("record ") {
+                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+                if parts.len() >= 3 {
+                    crate::media::with_engineer(|e| {
+                        let _ = e.cameras.set_recording(parts[1], parts[2] == "on");
+                    });
+                    println!("{}✅ Запись {} → {}{}", GREEN, parts[1], parts[2], RESET);
+                }
+            } else { println!("Usage: /camera list | /camera ptz <name> <dir> | /camera record <name> on|off"); }
+        }
+        "home" => {
+            if slash_arg == "list" || slash_arg.is_empty() {
+                let summary = crate::media::with_engineer(|e| e.smart_home.summary());
+                println!("{}", summary);
+            } else if slash_arg.starts_with("voice ") {
+                let cmd = &slash_arg[6..];
+                let result = crate::media::with_engineer(|e| {
+                    match e.smart_home.voice_command(cmd) {
+                        Ok(r) => r,
+                        Err(e) => format!("{}", e),
+                    }
+                });
+                println!("{}", result);
+            } else { println!("Usage: /home list | /home voice <команда>"); }
+        }
+        "robot" => {
+            if slash_arg == "list" || slash_arg.is_empty() {
+                let summary = crate::media::with_engineer(|e| e.robots.summary());
+                println!("{}", summary);
+            } else if slash_arg.starts_with("cmd ") {
+                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+                if parts.len() >= 3 {
+                    let result = crate::media::with_engineer(|e| {
+                        match e.robots.chat_command(parts[1], parts[2]) {
+                            Ok(r) => r,
+                            Err(e) => format!("{}", e),
+                        }
+                    });
+                    println!("{}", result);
+                } else { println!("Usage: /robot cmd <name> <команда>"); }
+            } else { println!("Usage: /robot list | /robot cmd <name> <команда>"); }
         }
         "acl" => {
             if slash_arg == "show" {
