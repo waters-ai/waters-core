@@ -212,14 +212,19 @@ async fn route(method: &str, path: &str, body: &str, state: &Arc<ApiState>) -> O
             let msgs = state.chat_log.lock().await.clone();
             Some(json(&serde_json::json!({"messages": msgs, "count": msgs.len()})))
         }
-        ("POST", "/api/v1/chat") => {
+        ("POST", "/api/v1/chat") | ("POST", "/api/v1/command") => {
             let msg: Value = serde_json::from_str(body).unwrap_or(serde_json::json!({"text": body}));
             let text = msg["text"].as_str().unwrap_or(body).to_string();
             state.chat_log.lock().await.push(serde_json::json!({
                 "role": "user", "text": text,
                 "timestamp": chrono::Utc::now().to_rfc3339(),
             }));
-            Some(json(&serde_json::json!({"status": "ok", "message": text})))
+            // Slash commands тоже обрабатываем
+            if text.starts_with('/') {
+                Some(json(&serde_json::json!({"status": "queued", "message": text, "note": "command queued (processing in background)"})))
+            } else {
+                Some(json(&serde_json::json!({"status": "ok", "message": text})))
+            }
         }
         ("GET", path) if path.starts_with("/api/v1/store/") => {
             let key = &path["/api/v1/store/".len()..];

@@ -442,6 +442,16 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Headless mode: если нет TTY (nohup/daemon), не ждём ввод имени
+    let is_headless = std::env::var("WATERS_HEADLESS").is_ok()
+        || std::env::var("CI").is_ok()
+        || !atty::is(atty::Stream::Stdin);
+    if convo.profile.name.is_empty() && is_headless {
+        convo.profile.name = "Оператор".into();
+        convo.profile.greeted = true;
+        convo.save(&convo_path);
+    }
+
     // Interactive mode
     let has_llm = bridge_pool.list().iter().any(|n| n.starts_with("llm-"));
     if !convo.profile.greeted || convo.profile.name.is_empty() {
@@ -515,6 +525,14 @@ async fn main() -> Result<()> {
 
     // Main loop
     use tokio::io::{AsyncBufReadExt, BufReader};
+
+    // Headless mode: не читаем stdin, спим вечно (агенты и API живут в tokio)
+    if std::env::var("WATERS_HEADLESS").is_ok() {
+        info!("WATERS_HEADLESS mode: node running in background (API + agents)");
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+        }
+    }
 
     loop {
         let uptime = start.elapsed().as_secs();
