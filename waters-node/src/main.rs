@@ -447,6 +447,18 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(&evolve_dir).ok();
     let mut skill_evolver = skill_evolve::SkillEvolver::new(&evolve_dir);
 
+    // Init cron background task
+    let cron_kv = kvstore.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            if cron_kv.is_connected() {
+                let _ = cron_kv.publish("cron:tick", &format!("{{\"ts\":{}}}", chrono::Utc::now().timestamp()));
+            }
+        }
+    });
+
     // Main loop
     use tokio::io::{AsyncBufReadExt, BufReader};
 

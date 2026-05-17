@@ -359,8 +359,17 @@ pub async fn handle_slash(
                     }
                     Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
                 }
+            } else if parts[0] == "close" && parts.len() >= 2 {
+                let agent_id = parts[1];
+                match subagents.agent_close(agent_id, 0).await {
+                    Ok(result) => {
+                        println!("{}✅ Агент {} закрыт (найдено: {}){}",
+                            GREEN, agent_id, result.findings_count, RESET);
+                    }
+                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                }
             } else {
-                println!("Usage: /agent create <skill> [--parent <id>] [bg]  |  /agent list");
+                println!("Usage: /agent create <skill> [node] [bg]  |  /agent list  |  /agent close <id>");
             }
         }
         "send" if !slash_arg.is_empty() => {
