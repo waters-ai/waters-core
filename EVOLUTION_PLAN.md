@@ -111,7 +111,7 @@ fork auto-deploy
 
 ```
 ✅ v0.5.0-alpha — 12MB, 44 модуля, 29 тестов
-✅ Нода на 87.242.102.177 — жива, получает команды
+✅ Нода на VPS — жива, получает команды (2 ноды в P2P mesh)
 ✅ TUI-агенты (7 шт) — вшиты в бинарник
 ✅ Self-improve цикл — diagnose → plan → implement → review → verify → deploy
 ✅ Fork на GitHub — форки создаются в waters-ai/*

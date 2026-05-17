@@ -35,6 +35,7 @@ pub mod fork_agent;
 pub mod a2a;
 pub mod node_manager;
 pub mod tamagotchi;
+pub mod yasa_agent;
 mod store;
 mod bridge;
 mod journal;

@@ -71,6 +71,7 @@ pub async fn handle_slash(
             println!("  /self secure on|off — вкл/выкл режим безопасности");
             println!("  /self fork [profile] — создать форк ноды под задачу");
             println!("  /me           — 💧 капелька: поговорить с душой ноды");
+            println!("  /yasa         — ☦️ Яса: проверить агента, обучить, аудит секретов");
             println!("  /a2a          — A2A Gateway: connect, discover, allow, block");
             println!("  /camera       — /camera list | add | ptz | stream | report — удалённые камеры");
             println!("  /director     — /director scenes | switch | source | report — режиcсёрский пульт");
@@ -714,6 +715,44 @@ pub async fn handle_slash(
                     }
                 }
                 _ => println!("Usage: /self improve | status | deploy | fork [profile]"),
+            }
+        }
+        "yasa" => {
+            let yasa = crate::yasa_agent::YasaAgent::new("Яса-агент");
+            if slash_arg == "screen" || slash_arg.is_empty() {
+                let agents = subagents.list_active(0).unwrap_or_default();
+                if agents.is_empty() {
+                    println!("{}✅ Нет активных агентов — нарушений нет{}", GREEN, RESET);
+                } else {
+                    for agent in &agents {
+                        let check = yasa.screen_agent(&agent.agent_id, &agent.skill, &agent.objective);
+                        let agent_short: String = agent.agent_id.chars().take(8).collect();
+                        if check.passed {
+                            println!("{}✅ {} — Яса соблюдена{}", GREEN, agent_short, RESET);
+                        } else {
+                            println!("{}❌ {} — НАРУШЕНИЕ ЯСЫ{}", RED, agent_short, RESET);
+                            for v in &check.commandments_violated { println!("  {}", v); }
+                            for v in &check.security_violated { println!("  {}", v); }
+                        }
+                    }
+                }
+            } else if slash_arg == "git" || slash_arg == "commit" || slash_arg == "check" {
+                let issues = crate::yasa_agent::YasaAgent::check_git_secrets();
+                if issues.is_empty() {
+                    println!("{}✅ Git-дифф чист — секреты не утекают{}", GREEN, RESET);
+                } else {
+                    for issue in &issues {
+                        println!("{}", issue);
+                    }
+                    println!("\n⚠️ Перед коммитом исправь утечки!");
+                }
+            } else if slash_arg == "teach" || slash_arg == "обучи" {
+                println!("{}", yasa.get_yasa_prompt());
+                println!("\n✅ Теперь агенты знают Ясу. Выполни: /yasa screen");
+            } else if slash_arg == "rules" || slash_arg == "заповеди" {
+                println!("{}", yasa.summary());
+            } else {
+                println!("Usage: /yasa screen | git | teach | rules");
             }
         }
         "me" => {

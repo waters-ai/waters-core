@@ -1,0 +1,38 @@
+version: '3.8'
+services:
+  node1:
+    build: .
+    ports:
+      - "42069:42069"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - NODE_NAME=node1
+      - CONNECT=node2:42069
+    depends_on:
+      - redis
+    volumes:
+      - node1-data:/root/waters-node/.waters
+
+  node2:
+    build: .
+    ports:
+      - "42070:42069"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - NODE_NAME=node2
+      - CONNECT=node1:42069
+    depends_on:
+      - redis
+    volumes:
+      - node2-data:/root/waters-node/.waters
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  node1-data:
+  node2-data:
