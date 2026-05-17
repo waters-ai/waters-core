@@ -29,6 +29,7 @@ pub async fn handle_slash(
     kvstore: &Arc<KvStore>,
     reviewer: &crate::agent_rating::AgentReviewer,
     group_chat: &crate::group_chat::GroupChat,
+    skill_evolver: &mut crate::skill_evolve::SkillEvolver,
 ) -> Result<bool, anyhow::Error> {
     match slash_cmd {
         "help" | "h" => {
@@ -359,15 +360,26 @@ pub async fn handle_slash(
                     }
                     Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
                 }
-            } else if parts[0] == "close" && parts.len() >= 2 {
-                let agent_id = parts[1];
-                match subagents.agent_close(agent_id, 0).await {
-                    Ok(result) => {
-                        println!("{}✅ Агент {} закрыт (найдено: {}){}",
-                            GREEN, agent_id, result.findings_count, RESET);
-                    }
-                    Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
-                }
+             } else if parts[0] == "close" && parts.len() >= 2 {
+                 let agent_id = parts[1];
+                 match subagents.agent_close(agent_id, 0).await {
+                     Ok(result) => {
+                         println!("{}✅ Агент {} закрыт (найдено: {}){}",
+                             GREEN, agent_id, result.findings_count, RESET);
+                         let skill_name = &result.skill;
+                         if !skill_name.is_empty() {
+                             let success = result.findings_count > 0;
+                             let _ = crate::skill_evolve::auto_evolve(
+                                 skill_reg, skill_evolver,
+                                 skill_name,
+                                 &result.objective,
+                                 success,
+                                 &[],
+                             );
+                         }
+                     }
+                     Err(e) => println!("{}Ошибка: {}{}", YELLOW, e, RESET),
+                 }
             } else {
                 println!("Usage: /agent create <skill> [node] [bg]  |  /agent list  |  /agent close <id>");
             }

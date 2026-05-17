@@ -441,20 +441,50 @@ pub struct ChatBridgeConfig {
     pub transport: String,
     pub token: String,
     #[serde(default)]
+    pub channel_id: String,
+    #[serde(default)]
     pub phone_number_id: String,
     #[serde(default)]
     pub app_id: String,
     #[serde(default)]
     pub app_secret: String,
+    #[serde(default)]
+    pub smtp_host: String,
+    #[serde(default = "default_smtp_port")]
+    pub smtp_port: u16,
+    #[serde(default)]
+    pub smtp_user: String,
+    #[serde(default)]
+    pub smtp_pass: String,
+    #[serde(default)]
+    pub imap_host: String,
+    #[serde(default = "default_imap_port")]
+    pub imap_port: u16,
+    #[serde(default)]
+    pub from_addr: String,
+}
+fn default_smtp_port() -> u16 {
+    587
+}
+fn default_imap_port() -> u16 {
+    993
 }
 impl Default for ChatBridgeConfig {
     fn default() -> Self {
         ChatBridgeConfig {
             transport: "stdin".into(),
             token: String::new(),
+            channel_id: String::new(),
             phone_number_id: String::new(),
             app_id: String::new(),
             app_secret: String::new(),
+            smtp_host: "smtp.gmail.com".into(),
+            smtp_port: 587,
+            smtp_user: String::new(),
+            smtp_pass: String::new(),
+            imap_host: "imap.gmail.com".into(),
+            imap_port: 993,
+            from_addr: String::new(),
         }
     }
 }
@@ -895,6 +925,10 @@ enum ChatTransport {
         token: String,
         chat_id: Option<String>,
     },
+    Discord {
+        token: String,
+        channel_id: String,
+    },
     WhatsApp {
         token: String,
         phone_number_id: String,
@@ -904,6 +938,15 @@ enum ChatTransport {
         app_id: String,
         app_secret: String,
         token: String,
+    },
+    Email {
+        smtp_host: String,
+        smtp_port: u16,
+        smtp_user: String,
+        smtp_pass: String,
+        imap_host: String,
+        imap_port: u16,
+        from_addr: String,
     },
 }
 
@@ -940,6 +983,38 @@ impl ChatBridge {
                 app_id: app_id.to_string(),
                 app_secret: app_secret.to_string(),
                 token: token.to_string(),
+            },
+        }
+    }
+    pub fn new_discord(name: &str, token: &str, channel_id: &str) -> Self {
+        ChatBridge {
+            name: name.to_string(),
+            transport: ChatTransport::Discord {
+                token: token.to_string(),
+                channel_id: channel_id.to_string(),
+            },
+        }
+    }
+    pub fn new_email(
+        name: &str,
+        smtp_host: &str,
+        smtp_port: u16,
+        smtp_user: &str,
+        smtp_pass: &str,
+        imap_host: &str,
+        imap_port: u16,
+        from_addr: &str,
+    ) -> Self {
+        ChatBridge {
+            name: name.to_string(),
+            transport: ChatTransport::Email {
+                smtp_host: smtp_host.to_string(),
+                smtp_port,
+                smtp_user: smtp_user.to_string(),
+                smtp_pass: smtp_pass.to_string(),
+                imap_host: imap_host.to_string(),
+                imap_port,
+                from_addr: from_addr.to_string(),
             },
         }
     }
@@ -1013,6 +1088,47 @@ impl BridgeProvider for ChatBridge {
                     .json(&msg_body)
                     .send()?;
                 Ok(serde_json::to_string(&resp.json::<serde_json::Value>()?)?)
+            }
+            ChatTransport::Discord { token, channel_id } => {
+                let body = serde_json::json!({
+                    "content": input,
+                    "allowed_mentions": {"parse": []}
+                });
+                let client = reqwest::blocking::Client::new();
+                let resp = client
+                    .post(format!(
+                        "https://discord.com/api/v10/channels/{}/messages",
+                        channel_id
+                    ))
+                    .header("Authorization", format!("Bot {}", token))
+                    .header("Content-Type", "application/json")
+                    .json(&body)
+                    .send()?;
+                Ok(format!("Discord sent: {}", resp.status()))
+            }
+            ChatTransport::Email {
+                smtp_host,
+                smtp_port,
+                smtp_user,
+                smtp_pass,
+                from_addr,
+                ..
+            } => {
+                // Отправка через HTTP-mail API (упрощённо)
+                let to = input.lines().next().unwrap_or("user@example.com");
+                let body_text = input.lines().skip(1).collect::<Vec<_>>().join("\n");
+                let email_body = serde_json::json!({
+                    "from": from_addr,
+                    "to": to,
+                    "subject": "WATERS Node — сообщение агента",
+                    "text": if body_text.is_empty() { input } else { &body_text },
+                });
+                let client = reqwest::blocking::Client::new();
+                let resp = client
+                    .post(format!("http://{}:{}/sendmail", smtp_host, smtp_port))
+                    .json(&email_body)
+                    .send()?;
+                Ok(format!("Email sent to {}: {}", to, resp.status()))
             }
         }
     }

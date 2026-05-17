@@ -24,6 +24,8 @@ mod agent;
 pub mod skill;
 pub mod skill_evolve;
 pub mod cron;
+pub mod plugin;
+pub mod security;
 mod store;
 mod bridge;
 mod journal;
@@ -170,6 +172,20 @@ async fn main() -> Result<()> {
         "wechat" => {
             bridge_pool.register("chat",
                 Box::new(bridge::ChatBridge::new_wechat("chat", &bridges_file.chat.app_id, &bridges_file.chat.app_secret, &bridges_file.chat.token)),
+                bridge::BridgeInfo::new("chat", bridge::BridgeWeight::Light, 1, 5));
+        }
+        "discord" => {
+            bridge_pool.register("chat",
+                Box::new(bridge::ChatBridge::new_discord("chat", &bridges_file.chat.token, &bridges_file.chat.phone_number_id)),
+                bridge::BridgeInfo::new("chat", bridge::BridgeWeight::Light, 1, 5));
+        }
+        "email" => {
+            bridge_pool.register("chat",
+                Box::new(bridge::ChatBridge::new_email("chat",
+                    &bridges_file.chat.smtp_host, bridges_file.chat.smtp_port,
+                    &bridges_file.chat.smtp_user, &bridges_file.chat.smtp_pass,
+                    &bridges_file.chat.imap_host, bridges_file.chat.imap_port,
+                    &bridges_file.chat.from_addr)),
                 bridge::BridgeInfo::new("chat", bridge::BridgeWeight::Light, 1, 5));
         }
         "stdin" | _ => {
@@ -502,6 +518,7 @@ async fn main() -> Result<()> {
                 &mut convo, &convo_path,
                 &mut task_mgr, &mut group_mgr, &mut node, &state_path,
                 &kvstore, &reviewer, &group_chat,
+                &mut skill_evolver,
             ).await?
         } else {
             handlers::handle_natural(
