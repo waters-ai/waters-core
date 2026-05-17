@@ -440,12 +440,21 @@ impl SingleLlmConfig {
 pub struct ChatBridgeConfig {
     pub transport: String,
     pub token: String,
+    #[serde(default)]
+    pub phone_number_id: String,
+    #[serde(default)]
+    pub app_id: String,
+    #[serde(default)]
+    pub app_secret: String,
 }
 impl Default for ChatBridgeConfig {
     fn default() -> Self {
         ChatBridgeConfig {
             transport: "stdin".into(),
             token: String::new(),
+            phone_number_id: String::new(),
+            app_id: String::new(),
+            app_secret: String::new(),
         }
     }
 }
@@ -886,6 +895,16 @@ enum ChatTransport {
         token: String,
         chat_id: Option<String>,
     },
+    WhatsApp {
+        token: String,
+        phone_number_id: String,
+        api_version: String,
+    },
+    WeChat {
+        app_id: String,
+        app_secret: String,
+        token: String,
+    },
 }
 
 impl ChatBridge {
@@ -901,6 +920,26 @@ impl ChatBridge {
             transport: ChatTransport::Telegram {
                 token: token.to_string(),
                 chat_id: None,
+            },
+        }
+    }
+    pub fn new_whatsapp(name: &str, token: &str, phone_number_id: &str) -> Self {
+        ChatBridge {
+            name: name.to_string(),
+            transport: ChatTransport::WhatsApp {
+                token: token.to_string(),
+                phone_number_id: phone_number_id.to_string(),
+                api_version: "v18.0".into(),
+            },
+        }
+    }
+    pub fn new_wechat(name: &str, app_id: &str, app_secret: &str, token: &str) -> Self {
+        ChatBridge {
+            name: name.to_string(),
+            transport: ChatTransport::WeChat {
+                app_id: app_id.to_string(),
+                app_secret: app_secret.to_string(),
+                token: token.to_string(),
             },
         }
     }
@@ -923,6 +962,55 @@ impl BridgeProvider for ChatBridge {
                 let resp = reqwest::blocking::Client::new()
                     .post(format!("https://api.telegram.org/bot{}/sendMessage", token))
                     .json(&body)
+                    .send()?;
+                Ok(serde_json::to_string(&resp.json::<serde_json::Value>()?)?)
+            }
+            ChatTransport::WhatsApp {
+                token,
+                phone_number_id,
+                api_version,
+            } => {
+                let body = serde_json::json!({
+                    "messaging_product": "whatsapp",
+                    "to": "user",
+                    "type": "text",
+                    "text": {"body": input}
+                });
+                let client = reqwest::blocking::Client::new();
+                let resp = client
+                    .post(format!(
+                        "https://graph.facebook.com/{}/{}/messages",
+                        api_version, phone_number_id
+                    ))
+                    .header("Authorization", format!("Bearer {}", token))
+                    .header("Content-Type", "application/json")
+                    .json(&body)
+                    .send()?;
+                Ok(serde_json::to_string(&resp.json::<serde_json::Value>()?)?)
+            }
+            ChatTransport::WeChat {
+                app_id, app_secret, ..
+            } => {
+                // 1. Получить access_token через app_id + app_secret
+                let client = reqwest::blocking::Client::new();
+                let token_resp: serde_json::Value = client
+                    .get(format!("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid={}&secret={}", app_id, app_secret))
+                    .send()?
+                    .json()?;
+                let access_token = token_resp["access_token"].as_str().unwrap_or("");
+
+                // 2. Отправить сообщение через WeChat (WeCom / 企业微信)
+                let msg_body = serde_json::json!({
+                    "touser": "@all",
+                    "msgtype": "text",
+                    "text": {"content": input}
+                });
+                let resp = client
+                    .post(format!(
+                        "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={}",
+                        access_token
+                    ))
+                    .json(&msg_body)
                     .send()?;
                 Ok(serde_json::to_string(&resp.json::<serde_json::Value>()?)?)
             }

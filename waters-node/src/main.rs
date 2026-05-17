@@ -21,7 +21,9 @@ mod convo;
 mod task;
 mod mode;
 mod agent;
-mod skill;
+pub mod skill;
+pub mod skill_evolve;
+pub mod cron;
 mod store;
 mod bridge;
 mod journal;
@@ -158,6 +160,16 @@ async fn main() -> Result<()> {
         "telegram" => {
             bridge_pool.register("chat",
                 Box::new(bridge::ChatBridge::new_telegram("chat", &bridges_file.chat.token)),
+                bridge::BridgeInfo::new("chat", bridge::BridgeWeight::Light, 1, 5));
+        }
+        "whatsapp" => {
+            bridge_pool.register("chat",
+                Box::new(bridge::ChatBridge::new_whatsapp("chat", &bridges_file.chat.token, &bridges_file.chat.phone_number_id)),
+                bridge::BridgeInfo::new("chat", bridge::BridgeWeight::Light, 1, 5));
+        }
+        "wechat" => {
+            bridge_pool.register("chat",
+                Box::new(bridge::ChatBridge::new_wechat("chat", &bridges_file.chat.app_id, &bridges_file.chat.app_secret, &bridges_file.chat.token)),
                 bridge::BridgeInfo::new("chat", bridge::BridgeWeight::Light, 1, 5));
         }
         "stdin" | _ => {
