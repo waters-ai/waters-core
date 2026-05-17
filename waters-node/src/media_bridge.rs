@@ -870,3 +870,155 @@ impl DisplayManager {
         out
     }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// VIDEO AGENT MANAGER — управление видеопотоками + анализ LLM
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StreamPriority {
+    Critical,  // всегда полный поток
+    High,      // приоритетный
+    Normal,    // по возможности
+    Low,       // только если есть ресурсы
+    Background,// фоновый, минимальный битрейт
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamControl {
+    pub camera: String,
+    pub enabled: bool,
+    pub max_bitrate_kbps: u32,
+    pub resolution: String,
+    pub fps: u8,
+    pub priority: StreamPriority,
+    pub auto_throttle: bool,
+}
+
+pub struct VideoAgentManager {
+    streams: Arc<Mutex<Vec<StreamControl>>>,
+    kvstore: Arc<KvStore>,
+    cpu_threshold: f64,    // при какой загрузке CPU начинать троттлить
+    mem_threshold: f64,    // при какой загрузке памяти
+}
+
+impl VideoAgentManager {
+    pub fn new(kvstore: Arc<KvStore>) -> Self {
+        VideoAgentManager {
+            streams: Arc::new(Mutex::new(Vec::new())),
+            kvstore,
+            cpu_threshold: 0.7,   // 70% CPU → троттлим
+            mem_threshold: 0.8,   // 80% MEM → троттлим
+        }
+    }
+
+    /// Зарегистрировать видеопоток с приоритетом
+    pub fn register_stream(&self, camera: &str, priority: StreamPriority) {
+        let mut streams = self.streams.lock().unwrap();
+        streams.push(StreamControl {
+            camera: camera.to_string(),
+            enabled: true,
+            max_bitrate_kbps: 10000,
+            resolution: "1920x1080".into(),
+            fps: 30,
+            priority,
+            auto_throttle: true,
+        });
+        info!("VideoAgent: registered stream '{}' with {:?} priority", camera, priority);
+    }
+
+    /// Динамически троттлить потоки на основе загрузки
+    pub fn throttle_if_needed(&self) -> Vec<String> {
+        let mut actions = Vec::new();
+        let cpu_load = self.get_cpu_load();
+        let mem_load = self.get_mem_load();
+        let mut streams = self.streams.lock().unwrap();
+
+        for stream in streams.iter_mut() {
+            if !stream.auto_throttle || !stream.enabled { continue; }
+
+            let should_throttle = cpu_load > self.cpu_threshold || mem_load > self.mem_threshold;
+            let is_background = matches!(stream.priority, StreamPriority::Background);
+            let is_low = matches!(stream.priority, StreamPriority::Low);
+
+            if should_throttle && (is_background || is_low) {
+                stream.enabled = false;
+                actions.push(format!("⏹ {}: остановлен (CPU:{:.0}% MEM:{:.0}%)",
+                    stream.camera, cpu_load * 100.0, mem_load * 100.0));
+            } else if should_throttle && stream.fps > 5 {
+                stream.fps /= 2;
+                stream.max_bitrate_kbps /= 2;
+                actions.push(format!("🔽 {}: троттл до {}fps/{}kbps",
+                    stream.camera, stream.fps, stream.max_bitrate_kbps));
+            }
+        }
+        actions
+    }
+
+    /// Анализ видеокадра через LLM (описание сцены)
+    pub fn analyze_frame(&self, camera: &str, image_b64: &str) -> String {
+        let _ = self.kvstore.select_db(0).xadd("media:vision:queue",
+            &[("camera", camera), ("image", image_b64),
+              ("ts", &chrono::Utc::now().to_rfc3339())], 100);
+        format!("📸 Анализ кадра '{}' поставлен в очередь LLM", camera)
+    }
+
+    /// Получить метрики видеосистемы
+    pub fn metrics(&self) -> String {
+        let cpu = self.get_cpu_load();
+        let mem = self.get_mem_load();
+        let streams = self.streams.lock().unwrap();
+        let active = streams.iter().filter(|s| s.enabled).count();
+        let total_bitrate: u32 = streams.iter().map(|s| s.max_bitrate_kbps).sum();
+
+        format!("📊 Видео-метрики:\n  CPU: {:.0}% | MEM: {:.0}%\n  Потоков: {}/{} | Битрейт: {} kbps\n  Пороги: CPU>{:.0}% | MEM>{:.0}%",
+            cpu * 100.0, mem * 100.0, active, streams.len(), total_bitrate,
+            self.cpu_threshold * 100.0, self.mem_threshold * 100.0)
+    }
+
+    fn get_cpu_load(&self) -> f64 {
+        // Читаем /proc/loadavg
+        if let Ok(content) = std::fs::read_to_string("/proc/loadavg") {
+            if let Some(first) = content.split_whitespace().next() {
+                if let Ok(load) = first.parse::<f64>() {
+                    // Нормализуем по количеству ядер
+                    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+                    return (load / cores as f64).min(1.0);
+                }
+            }
+        }
+        0.0
+    }
+
+    fn get_mem_load(&self) -> f64 {
+        if let Ok(content) = std::fs::read_to_string("/proc/meminfo") {
+            let mut total = 0f64;
+            let mut available = 0f64;
+            for line in content.lines() {
+                if let Some(val) = line.strip_prefix("MemTotal:") {
+                    total = val.trim().split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                }
+                if let Some(val) = line.strip_prefix("MemAvailable:") {
+                    available = val.trim().split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                }
+            }
+            if total > 0.0 {
+                return 1.0 - (available / total);
+            }
+        }
+        0.0
+    }
+
+    pub fn summary(&self) -> String {
+        let mut out = format!("🤖 Видео-менеджер:\n");
+        out.push_str(&format!("  {}\n", self.metrics()));
+        let streams = self.streams.lock().unwrap();
+        for s in streams.iter() {
+            let icon = if s.enabled { "🔴" } else { "⏹" };
+            let prio = format!("{:?}", s.priority);
+            out.push_str(&format!("  {} {} — {}@{}fps {}kbps [{}]\n",
+                icon, s.camera, s.resolution, s.fps, s.max_bitrate_kbps, prio));
+        }
+        out
+    }
+}
