@@ -235,7 +235,8 @@ impl SubAgentManager {
             loop {
                 tokio::select! {
                     Some(msg) = input_rx.recv() => {
-                        info!("Agent {} received: {}", &task_id, &msg[..msg.len().min(60)]);
+                        let truncated: String = msg.chars().take(60).collect();
+                        info!("Agent {} received: {}", &task_id, truncated);
 
                         // Append input message as finding
                         let finding_id = uuid::Uuid::new_v4().to_string();
@@ -308,7 +309,8 @@ impl SubAgentManager {
             }
             rt.input_tx.send(message.to_string()).await
                 .map_err(|e| anyhow::anyhow!("Failed to send to agent {}: {}", agent_id, e))?;
-            info!("Sent input to agent {} (interrupt={}): {}", agent_id, interrupt, &message[..message.len().min(60)]);
+            let message_short: String = message.chars().take(60).collect();
+            info!("Sent input to agent {} (interrupt={}): {}", agent_id, interrupt, message_short);
             Ok(())
         } else {
             // Agent not in runtime — message via Redis
@@ -348,7 +350,8 @@ impl SubAgentManager {
         let _ = self.kvstore.select_db(db).xadd(
             &Self::journal_key(agent_id), &[("event", "assigned"), ("data", &journal.to_string())], 100);
 
-        info!("Agent {} assigned: {} → {}", agent_id, &old_obj[..40.min(old_obj.len())], objective);
+        let old_obj_short: String = old_obj.chars().take(40).collect();
+        info!("Agent {} assigned: {} → {}", agent_id, old_obj_short, objective);
         Ok(())
     }
 
