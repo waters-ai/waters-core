@@ -2,7 +2,8 @@
 /// Позволяет waters-node говорить с любыми A2A-совместимыми агентами
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{info, warn};
 
@@ -92,14 +93,66 @@ impl A2aPeer {
 pub struct A2aAdapter {
     peers: Vec<A2aPeer>,
     local_agent_id: String,
+    /// Токен для входящих A2A-запросов (из WATERS_A2A_TOKEN)
+    auth_token: String,
+    /// Белый список — только эти A2A-агенты могут слать запросы
+    allowed_peers: HashSet<String>,
+    /// Rate limiter — макс запросов в минуту
+    rate_limit: AtomicU64,
+    rate_window: AtomicU64,
 }
 
 impl A2aAdapter {
     pub fn new(agent_id: &str) -> Self {
+        let token = std::env::var("WATERS_A2A_TOKEN").unwrap_or_default();
         A2aAdapter {
             peers: Vec::new(),
             local_agent_id: format!("a2a-{}", agent_id),
+            auth_token: token,
+            allowed_peers: HashSet::new(),
+            rate_limit: AtomicU64::new(60),
+            rate_window: AtomicU64::new(60),
         }
+    }
+
+    /// Проверить авторизацию входящего A2A-запроса
+    pub fn check_auth(&self, token: &str) -> bool {
+        if self.auth_token.is_empty() {
+            return true; // если токен не задан — пропускаем все (для отладки)
+        }
+        token == self.auth_token
+    }
+
+    /// Проверить, разрешён ли этот A2A-пир
+    pub fn is_peer_allowed(&self, peer_id: &str) -> bool {
+        if self.allowed_peers.is_empty() {
+            return true; // если белый список пуст — пропускаем всех
+        }
+        self.allowed_peers.contains(peer_id)
+    }
+
+    /// Проверить rate limit
+    pub fn check_rate_limit(&self) -> bool {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+        let window = self.rate_window.load(Ordering::Relaxed);
+        if now > window {
+            self.rate_window.store(now + 60, Ordering::Relaxed);
+            self.rate_limit.store(0, Ordering::Relaxed);
+        }
+        let count = self.rate_limit.fetch_add(1, Ordering::Relaxed);
+        count < 120 // макс 120 запросов в минуту
+    }
+
+    /// Разрешить A2A-пиру доступ
+    pub fn allow_peer(&mut self, peer_id: &str) {
+        self.allowed_peers.insert(peer_id.to_string());
+        info!("A2A Security: allowed peer '{}'", peer_id);
+    }
+
+    /// Заблокировать A2A-пира
+    pub fn block_peer(&mut self, peer_id: &str) {
+        self.allowed_peers.remove(peer_id);
+        info!("A2A Security: blocked peer '{}'", peer_id);
     }
 
     /// Отправить A2A-запрос внешнему агенту
@@ -152,6 +205,63 @@ impl A2aAdapter {
     /// Наш A2A-endpoint для внешних запросов
     pub fn local_endpoint(&self) -> String {
         format!("/a2a/v1/{}", self.local_agent_id)
+    }
+
+    /// Обработать входящий A2A-запрос от внешнего агента
+    /// Возвращает JSON-ответ и HTTP-статус (200/401/429)
+    pub fn handle_request(&self, body: &str, auth_token: &str) -> (String, u16) {
+        // 1. Проверка аутентификации
+        if !self.check_auth(auth_token) {
+            warn!("A2A Security: UNAUTHORIZED access attempt");
+            let error = serde_json::json!({
+                "jsonrpc": "2.0", "id": null,
+                "error": {"code": -32001, "message": "Unauthorized"}
+            });
+            return (serde_json::to_string(&error).unwrap_or_default(), 401);
+        }
+        // 2. Rate limit
+        if !self.check_rate_limit() {
+            warn!("A2A Security: rate limit exceeded");
+            let error = serde_json::json!({
+                "jsonrpc": "2.0", "id": null,
+                "error": {"code": -32002, "message": "Too Many Requests"}
+            });
+            return (serde_json::to_string(&error).unwrap_or_default(), 429);
+        }
+        // 3. Парсинг и обработка
+        match A2aMessage::from_json(body) {
+            Some(msg) => {
+                // 4. Проверка ACL пира
+                let peer_id = msg.params.get("target").and_then(|v| v.as_str()).unwrap_or("unknown");
+                if !self.is_peer_allowed(peer_id) {
+                    warn!("A2A Security: peer '{}' not allowed", peer_id);
+                    let error = serde_json::json!({
+                        "jsonrpc": "2.0", "id": &msg.id,
+                        "error": {"code": -32003, "message": "Access denied"}
+                    });
+                    return (serde_json::to_string(&error).unwrap_or_default(), 403);
+                }
+                info!("A2A: incoming {} from ({})", msg.method, &msg.id[..8]);
+                let result = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": msg.id,
+                    "result": {
+                        "id": uuid::Uuid::new_v4().to_string(),
+                        "status": "working",
+                        "message": format!("A2A request '{}' received by waters-node", msg.method),
+                    }
+                });
+                (serde_json::to_string(&result).unwrap_or_default(), 200)
+            }
+            None => {
+                let error = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": null,
+                    "error": {"code": -32700, "message": "Parse error"}
+                });
+                (serde_json::to_string(&error).unwrap_or_default(), 400)
+            }
+        }
     }
 
     pub fn summary(&self) -> String {

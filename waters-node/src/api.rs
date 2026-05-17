@@ -263,6 +263,20 @@ async fn route(method: &str, path: &str, body: &str, state: &Arc<ApiState>) -> O
         ("POST", "/api/v1/contacts") => {
             Some(json(&serde_json::json!({"status": "ok", "message": "nick set via /nick command"})))
         }
+        ("POST", "/api/v1/a2a") => {
+            let msg: Value = serde_json::from_str(body).unwrap_or_default();
+            let a2a_token = msg["token"].as_str().unwrap_or("");
+            let a2a_body = msg["body"].as_str().unwrap_or(body);
+            // Временно: простой ответ, позже будет A2aAdapter::handle_request
+            if a2a_token.is_empty() && !msg.get("body").is_some() {
+                Some(json(&serde_json::json!({"error": "A2A token or body required"})))
+            } else {
+                Some(json(&serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": {"status": "ok", "message": "A2A request received"}
+                })))
+            }
+        }
         ("POST", "/api/v1/auth") => {
             let msg: Value = serde_json::from_str(body).unwrap_or_default();
             let pwd = msg["password"].as_str().unwrap_or("");

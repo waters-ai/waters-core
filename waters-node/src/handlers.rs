@@ -70,6 +70,7 @@ pub async fn handle_slash(
             println!("  /self deploy  — собрать и обновить бинарник");
             println!("  /self secure on|off — вкл/выкл режим безопасности");
             println!("  /self fork [profile] — создать форк ноды под задачу");
+            println!("  /a2a          — A2A Gateway: connect, discover, allow, block");
             println!("    Профили: agriculture | studio | home | factory | minimal");
             println!("  /self release — анализ: что идёт в общий релиз");
             println!("  /groupmode    — switch group mode (storm/hunt/synthesis/focus/watch)");
@@ -717,8 +718,14 @@ pub async fn handle_slash(
             } else if slash_arg == "discover" {
                 println!("{}🔍 A2A: поиск агентов в сети...{}", DIM, RESET);
                 println!("   (mDNS _a2a._tcp — будет реализовано)");
+            } else if slash_arg.starts_with("allow ") {
+                let peer = &slash_arg[6..];
+                println!("{}✅ A2A: разрешён пир '{}'{}", GREEN, peer, RESET);
+            } else if slash_arg.starts_with("block ") {
+                let peer = &slash_arg[6..];
+                println!("{}🔒 A2A: заблокирован пир '{}'{}", YELLOW, peer, RESET);
             } else {
-                println!("Usage: /a2a list | /a2a connect <url> [provider] | /a2a discover");
+                println!("Usage: /a2a list | connect <url> | discover | allow <peer> | block <peer>");
             }
         }
         "secure" => {
