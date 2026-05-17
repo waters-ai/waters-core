@@ -661,7 +661,7 @@ pub async fn handle_slash(
                                  .map(|(i, s)| format!("{}. {}", i+1, s))
                                  .collect::<Vec<_>>().join(";");
                              let task_desc = format!("Цикл улучшения ноды:\n{}", desc);
-                             match chain.execute(subagents, skill_reg, &task_desc).await {
+                             match chain.execute(subagents, skill_reg, bridge_pool, &task_desc).await {
                                  Ok(result) => println!("✅ Цикл завершён:\n{}", result),
                                  Err(e) => println!("{}❌ Ошибка цикла: {}{}", YELLOW, e, RESET),
                              }
@@ -867,12 +867,25 @@ pub async fn handle_slash(
             } else if slash_arg.starts_with("search ") {
                 let query = &slash_arg[7..];
                 println!("🔍 Поиск '{}' в MCP Store...", query);
-                println!("   (результаты в логах, async)");
+                let results = store.search(query).await;
+                if results.is_empty() {
+                    println!("  ❌ Ничего не найдено. Проверьте taps: /mcp taps");
+                } else {
+                    println!("  ✅ Найдено {} скилов:", results.len());
+                    for (i, skill) in results.iter().enumerate().take(10) {
+                        println!("  {}. {} — {}", i+1, skill.name, skill.description);
+                    }
+                    if results.len() > 10 {
+                        println!("  ... и ещё {}", results.len() - 10);
+                    }
+                }
             } else if slash_arg.starts_with("install ") {
                 let name = &slash_arg[8..];
                 println!("📥 Установка '{}'...", name);
-                // Временная заглушка — реальный async fetch будет в v0.6
-                println!("   (функция установки через huggingface — v0.6)");
+                match store.install(name).await {
+                    Ok(msg) => println!("  ✅ {}", msg),
+                    Err(e) => println!("{}❌ {}", YELLOW, e),
+                }
             } else if slash_arg == "taps" {
                 println!("📡 Источники MCP-скилов:");
                 for tap in store.list_taps() {

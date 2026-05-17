@@ -63,13 +63,16 @@ impl McpClient {
     }
 
     pub fn register(&mut self, name: &str, _transport: &str, command: &str, args: &[String]) {
-        self.servers.insert(name.to_string(), McpServerHandle {
-            command: command.to_string(),
-            args: args.to_vec(),
-            status: McpStatus::Starting,
-            tools: Vec::new(),
-            last_healthcheck: Instant::now(),
-        });
+        self.servers.insert(
+            name.to_string(),
+            McpServerHandle {
+                command: command.to_string(),
+                args: args.to_vec(),
+                status: McpStatus::Starting,
+                tools: Vec::new(),
+                last_healthcheck: Instant::now(),
+            },
+        );
         info!("MCP server registered: {} ({})", name, _transport);
     }
 
@@ -79,19 +82,28 @@ impl McpClient {
 
         for name in &server_names {
             if let Some(handle) = self.servers.get_mut(name) {
-                let result = Self::request(&handle.command, &handle.args, serde_json::json!({
-                    "jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1
-                }));
+                let result = Self::request(
+                    &handle.command,
+                    &handle.args,
+                    serde_json::json!({
+                        "jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1
+                    }),
+                );
 
                 match result {
                     Ok(resp) => {
-                        let tools = resp["result"]["tools"].as_array()
-                            .map(|arr| arr.iter().map(|t| McpToolInfo {
-                                server_name: name.clone(),
-                                tool_name: t["name"].as_str().unwrap_or("?").to_string(),
-                                description: t["description"].as_str().map(String::from),
-                                input_schema: t.get("inputSchema").cloned(),
-                            }).collect::<Vec<_>>())
+                        let tools = resp["result"]["tools"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .map(|t| McpToolInfo {
+                                        server_name: name.clone(),
+                                        tool_name: t["name"].as_str().unwrap_or("?").to_string(),
+                                        description: t["description"].as_str().map(String::from),
+                                        input_schema: t.get("inputSchema").cloned(),
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
                             .unwrap_or_default();
 
                         handle.tools = tools.clone();
@@ -110,11 +122,17 @@ impl McpClient {
     }
 
     pub fn call_tool(&self, server: &str, tool: &str, args: &Value) -> Result<Value> {
-        let handle = self.servers.get(server)
+        let handle = self
+            .servers
+            .get(server)
             .ok_or_else(|| anyhow::anyhow!("MCP server '{}' not found", server))?;
 
         if handle.status != McpStatus::Ready {
-            return Err(anyhow::anyhow!("MCP server '{}' is not ready (status: {:?})", server, handle.status));
+            return Err(anyhow::anyhow!(
+                "MCP server '{}' is not ready (status: {:?})",
+                server,
+                handle.status
+            ));
         }
 
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
@@ -128,7 +146,10 @@ impl McpClient {
         let result = Self::request(&handle.command, &handle.args, input)?;
 
         if let Some(err) = result.get("error") {
-            warn!("MCP call error: {} (server: {}, tool: {})", err, server, tool);
+            warn!(
+                "MCP call error: {} (server: {}, tool: {})",
+                err, server, tool
+            );
             return Err(anyhow::anyhow!("MCP error: {:?}", err));
         }
 
@@ -139,7 +160,8 @@ impl McpClient {
         let serialized = serde_json::to_string(&request)?;
         let output = Command::new(command)
             .args(args)
-            .arg("--mcp").arg("-")
+            .arg("--mcp")
+            .arg("-")
             .arg(&serialized)
             .output()?;
 
@@ -157,15 +179,27 @@ impl McpClient {
         for (name, handle) in &self.servers {
             let alive = Command::new(&handle.command)
                 .args(&handle.args)
-                .arg("--health").arg("-")
-                .output().is_ok();
-            results.push((name.clone(), if alive { McpStatus::Ready } else { McpStatus::Failed("healthcheck failed".into()) }));
+                .arg("--health")
+                .arg("-")
+                .output()
+                .is_ok();
+            results.push((
+                name.clone(),
+                if alive {
+                    McpStatus::Ready
+                } else {
+                    McpStatus::Failed("healthcheck failed".into())
+                },
+            ));
         }
         results
     }
 
     pub fn get_tools(&self, server: &str) -> Vec<McpToolInfo> {
-        self.servers.get(server).map(|h| h.tools.clone()).unwrap_or_default()
+        self.servers
+            .get(server)
+            .map(|h| h.tools.clone())
+            .unwrap_or_default()
     }
 
     pub fn list_servers(&self) -> Vec<String> {
@@ -178,6 +212,39 @@ impl McpClient {
 }
 
 #[cfg(test)]
+#[test]
+fn test_mcp_security_blocked_patterns() {
+    use crate::mcp::McpSecurity;
+    let sec = McpSecurity::new();
+    assert!(sec
+        .validate_tool_args("exec_shell", &serde_json::json!({"cmd": "rm -rf /"}))
+        .is_err());
+    assert!(sec
+        .validate_tool_args("exec_shell", &serde_json::json!({"cmd": "ls -la"}))
+        .is_ok());
+}
+
+#[test]
+fn test_mcp_security_system_paths() {
+    use crate::mcp::McpSecurity;
+    let sec = McpSecurity::new();
+    assert!(sec
+        .validate_tool_args("write_file", &serde_json::json!({"path": "/etc/passwd"}))
+        .is_err());
+    assert!(sec
+        .validate_tool_args("write_file", &serde_json::json!({"path": "/tmp/test.txt"}))
+        .is_ok());
+}
+
+#[test]
+fn test_mcp_security_sanitize() {
+    use crate::mcp::McpSecurity;
+    let sec = McpSecurity::new();
+    let log = r#"{"api_key": "sk-secret123", "data": "ok"}"#;
+    let clean = sec.sanitize_for_log(log);
+    assert!(!clean.contains("sk-secret123"));
+    assert!(clean.contains("***"));
+}
 mod tests {
     use super::*;
 
@@ -208,30 +275,53 @@ impl McpSecurity {
     pub fn new() -> Self {
         McpSecurity {
             blocked_patterns: vec![
-                "rm -rf".into(), "sudo".into(), "DROP TABLE".into(), 
-                "DELETE FROM".into(), "exec(".into(), "eval(".into(),
-                "os.system".into(), "subprocess".into(),
+                "rm -rf".into(),
+                "sudo".into(),
+                "DROP TABLE".into(),
+                "DELETE FROM".into(),
+                "exec(".into(),
+                "eval(".into(),
+                "os.system".into(),
+                "subprocess".into(),
             ],
             secret_fields: vec![
-                "api_key".into(), "password".into(), "token".into(),
-                "secret".into(), "auth".into(), "key".into(), "passwd".into(),
+                "api_key".into(),
+                "password".into(),
+                "token".into(),
+                "secret".into(),
+                "auth".into(),
+                "key".into(),
+                "passwd".into(),
             ],
         }
     }
 
     /// Проверить tool args на опасные паттерны
     pub fn validate_tool_args(&self, tool: &str, args: &serde_json::Value) -> Result<(), String> {
-        let args_str = serde_json::to_string(args).unwrap_or_default().to_lowercase();
+        let args_str = serde_json::to_string(args)
+            .unwrap_or_default()
+            .to_lowercase();
         for pattern in &self.blocked_patterns {
             if args_str.contains(&pattern.to_lowercase()) {
-                return Err(format!("Blocked dangerous pattern in tool '{}': {}", tool, pattern));
+                return Err(format!(
+                    "Blocked dangerous pattern in tool '{}': {}",
+                    tool, pattern
+                ));
             }
         }
         // Блокируем запись в системные файлы через любые tools
         if tool == "write_file" || tool == "exec_shell" || tool == "file_write" {
             if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
-                let dangerous = ["/etc/", "/usr/", "/boot/", "/var/", "/sys/",
-                    ".ssh/", ".git/config", "authorized_keys"];
+                let dangerous = [
+                    "/etc/",
+                    "/usr/",
+                    "/boot/",
+                    "/var/",
+                    "/sys/",
+                    ".ssh/",
+                    ".git/config",
+                    "authorized_keys",
+                ];
                 for d in &dangerous {
                     if path.contains(d) {
                         return Err(format!("Blocked write to system path: {}", d));
@@ -248,20 +338,21 @@ impl McpSecurity {
         for field in &self.secret_fields {
             // Маскируем "field": "value" → "field": "***"
             let pattern = format!("\"{}\": \"", field);
-            if let Some(start) = result.find(&pattern) {
-                if let Some(end) = result[start..].find('\"') {
-                    let mask_start = start + pattern.len();
-                    let mask_end = start + end;
-                    if mask_end > mask_start {
-                        result.replace_range(mask_start..mask_end, "***");
+            let mut search_start = 0;
+            while let Some(start) = result[search_start..].find(&pattern) {
+                let abs_start = search_start + start;
+                let value_start = abs_start + pattern.len();
+                // Находим закрывающую кавычку
+                if let Some(end) = result[value_start..].find('\"') {
+                    let abs_end = value_start + end;
+                    if abs_end > value_start {
+                        result.replace_range(value_start..abs_end, "***");
+                        search_start = abs_end + 1;
+                    } else {
+                        break;
                     }
-                }
-            }
-            // Маскируем "field": "value" в URL-encoded формате
-            let url_pattern = format!("{}=", field);
-            if let Some(start) = result.find(&url_pattern) {
-                if let Some(end) = result[start..].find('&') {
-                    result.replace_range(start..start+end, &format!("{}={}", field, "***"));
+                } else {
+                    break;
                 }
             }
         }
@@ -269,7 +360,10 @@ impl McpSecurity {
     }
 
     pub fn summary(&self) -> String {
-        format!("🔒 MCP Security: {} blocked patterns, {} secret fields masked",
-            self.blocked_patterns.len(), self.secret_fields.len())
+        format!(
+            "🔒 MCP Security: {} blocked patterns, {} secret fields masked",
+            self.blocked_patterns.len(),
+            self.secret_fields.len()
+        )
     }
 }

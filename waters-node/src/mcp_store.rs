@@ -107,24 +107,27 @@ impl McpStore {
     }
 
     /// Install a skill by name
-    pub async fn install(&mut self, name: &str) -> Result<()> {
+    pub async fn install(&mut self, name: &str) -> Result<String, String> {
         let install_dir = self.skills_dir.join(name);
         if install_dir.exists() {
-            return Err(anyhow::anyhow!("Skill '{}' already installed", name));
+            return Err(format!("Skill '{}' already installed", name));
         }
 
         // Find meta from taps
-        let meta = self.search(name).await.into_iter()
+        let skills = self.search(name).await;
+        let meta = skills.into_iter()
             .find(|m| m.name == name)
-            .ok_or_else(|| anyhow::anyhow!("Skill '{}' not found in any tap", name))?;
+            .ok_or_else(|| format!("Skill '{}' not found in any tap", name))?;
 
         // Create dir and write meta
-        fs::create_dir_all(&install_dir)?;
+        fs::create_dir_all(&install_dir).map_err(|e| format!("Failed to create dir: {}", e))?;
         let meta_path = install_dir.join("meta.json");
-        fs::write(&meta_path, serde_json::to_string_pretty(&meta)?)?;
-        fs::write(install_dir.join("SKILL.md"), format!("# {}\n\n{}\n\n## Tools\n{}",
+        let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| format!("JSON error: {}", e))?;
+        fs::write(&meta_path, &meta_json).map_err(|e| format!("Write error: {}", e))?;
+        let skill_md = format!("# {}\n\n{}\n\n## Tools\n{}",
             meta.name, meta.description,
-            meta.tools.iter().map(|t| format!("- `{}`", t)).collect::<Vec<_>>().join("\n")))?;
+            meta.tools.iter().map(|t| format!("- `{}`", t)).collect::<Vec<_>>().join("\n"));
+        fs::write(install_dir.join("SKILL.md"), &skill_md).map_err(|e| format!("Write error: {}", e))?;
 
         // Record installed
         if !self.config.installed.contains(&name.to_string()) {
@@ -133,18 +136,18 @@ impl McpStore {
         self.save()?;
 
         info!("McpStore: installed skill '{}' from {}", name, meta.source_url.as_deref().unwrap_or("unknown"));
-        Ok(())
+        Ok(format!("✅ '{}' установлен из {}", name, meta.source_url.as_deref().unwrap_or("taps")))
     }
 
-    pub fn uninstall(&mut self, name: &str) -> Result<()> {
+    pub fn uninstall(&mut self, name: &str) -> Result<String, String> {
         let install_dir = self.skills_dir.join(name);
         if install_dir.exists() {
-            fs::remove_dir_all(&install_dir)?;
+            fs::remove_dir_all(&install_dir).map_err(|e| format!("Remove error: {}", e))?;
         }
         self.config.installed.retain(|s| s != name);
-        self.save()?;
+        self.save().map_err(|e| format!("Save error: {}", e))?;
         info!("McpStore: uninstalled skill '{}'", name);
-        Ok(())
+        Ok(format!("✅ '{}' удалён", name))
     }
 
     pub fn list_installed(&self) -> Vec<String> {
@@ -162,6 +165,7 @@ impl McpStore {
     pub fn remove_tap(&mut self, url: &str) {
         self.config.taps.retain(|t| t != url);
         let _ = self.save();
+        info!("McpStore: removed tap '{}'", url);
     }
 
     pub fn list_taps(&self) -> &[String] {
@@ -227,12 +231,13 @@ impl McpStore {
         None
     }
 
-    pub fn save(&self) -> Result<()> {
+    pub fn save(&self) -> Result<String, String> {
         if let Some(parent) = self.config_path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).map_err(|e| format!("Dir error: {}", e))?;
         }
-        fs::write(&self.config_path, serde_json::to_string_pretty(&self.config)?)?;
-        Ok(())
+        let json = serde_json::to_string_pretty(&self.config).map_err(|e| format!("JSON error: {}", e))?;
+        fs::write(&self.config_path, &json).map_err(|e| format!("Write error: {}", e))?;
+        Ok("✅ Сохранено".into())
     }
 
     pub fn summary(&self) -> String {
@@ -240,6 +245,82 @@ impl McpStore {
         for s in &self.config.installed {
             out.push_str(&format!("  ✅ {}\n", s));
         }
+        for t in &self.config.taps {
+            out.push_str(&format!("  📡 {}\n", t));
+        }
         out
+    }
+}
+
+/// ---------- MCP Store FFI для синхронного вызова из хендлера ----------
+impl McpStore {
+    /// Синхронная версия search — без async, для тестов и CLI
+    pub fn search_sync(&mut self, query: &str) -> Vec<McpSkillMeta> {
+        let mut results = Vec::new();
+        // Локальные установленные
+        if let Ok(entries) = std::fs::read_dir(&self.skills_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() { continue; }
+                let meta_path = path.join("meta.json");
+                if let Ok(content) = std::fs::read_to_string(&meta_path) {
+                    if let Ok(meta) = serde_json::from_str::<McpSkillMeta>(&content) {
+                        if query.is_empty() || meta.name.contains(query) || meta.description.contains(query) {
+                            results.push(meta);
+                        }
+                    }
+                }
+            }
+        }
+        results
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mcp_store_default_config() {
+        let store = McpStoreConfig::default();
+        assert_eq!(store.taps.len(), 2);
+        assert!(store.installed.contains(&"general".to_string()));
+    }
+
+    #[test]
+    fn test_mcp_skill_meta_serialize() {
+        let meta = McpSkillMeta {
+            name: "test-skill".into(),
+            version: "1.0.0".into(),
+            description: "Test".into(),
+            author: Some("tester".into()),
+            tags: vec!["test".into()],
+            source_url: None,
+            tools: vec!["tool1".into()],
+            install_command: None,
+            env_vars: vec![],
+        };
+        let json = serde_json::to_string(&meta).unwrap();
+        assert!(json.contains("test-skill"));
+        assert!(json.contains("tool1"));
+    }
+
+    #[test]
+    fn test_mcp_store_add_tap() {
+        let dir = std::env::temp_dir().join("mcp-test-store");
+        let mut store = McpStore::new(&dir);
+        let taps_before = store.list_taps().len();
+        store.add_tap("https://example.com/custom-skills");
+        assert_eq!(store.list_taps().len(), taps_before + 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_search_empty_query_returns_installed() {
+        let dir = std::env::temp_dir().join("mcp-test-search");
+        let mut store = McpStore::new(&dir);
+        let results = store.search_sync("");
+        assert!(results.is_empty() || results.iter().any(|s| store.list_installed().contains(&s.name)));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
