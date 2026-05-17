@@ -109,19 +109,53 @@ pub struct KafkaTopics {
     pub agents: String,
 }
 
-fn default_profile() -> String { "default".into() }
+fn default_profile() -> String {
+    "default".into()
+}
 
-fn default_name() -> String { "waters-node".into() }
-fn default_workspace() -> String { ".".into() }
-fn default_session_dir() -> String { ".waters/sessions".into() }
-fn default_redis_url() -> String { "redis://127.0.0.1:6379".into() }
-fn default_llm_provider() -> String { "ollama".into() }
-fn default_ollama_url() -> String { "http://127.0.0.1:11434".into() }
-fn default_ollama_model() -> String { "qwen2.5:14b".into() }
-fn default_topic() -> String { "mission.1.orders.v1".into() }
-fn default_findings_topic() -> String { "mission.1.findings.v1".into() }
-fn default_heartbeat_topic() -> String { "mission.1.heartbeat.v1".into() }
-fn default_agents_topic() -> String { "mission.1.agents.v1".into() }
+fn default_name() -> String {
+    // Человекочитаемое имя по умолчанию
+    let hostname = std::fs::read_to_string("/etc/hostname").unwrap_or_default();
+    if !hostname.trim().is_empty() {
+        let clean: String = hostname
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .take(8)
+            .collect();
+        return crate::tunnel::suggest_node_name(&clean);
+    }
+    crate::tunnel::suggest_node_name("waters-node")
+}
+fn default_workspace() -> String {
+    ".".into()
+}
+fn default_session_dir() -> String {
+    ".waters/sessions".into()
+}
+fn default_redis_url() -> String {
+    "redis://127.0.0.1:6379".into()
+}
+fn default_llm_provider() -> String {
+    "ollama".into()
+}
+fn default_ollama_url() -> String {
+    "http://127.0.0.1:11434".into()
+}
+fn default_ollama_model() -> String {
+    "qwen2.5:14b".into()
+}
+fn default_topic() -> String {
+    "mission.1.orders.v1".into()
+}
+fn default_findings_topic() -> String {
+    "mission.1.findings.v1".into()
+}
+fn default_heartbeat_topic() -> String {
+    "mission.1.heartbeat.v1".into()
+}
+fn default_agents_topic() -> String {
+    "mission.1.agents.v1".into()
+}
 
 impl Config {
     pub fn from_file(path: &Path) -> Result<Self> {

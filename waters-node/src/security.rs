@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
@@ -218,32 +218,216 @@ pub struct SecurityLearner {
     learned_rules: Vec<LearnedRule>,
     data_path: PathBuf,
     anomaly_threshold: f64,
+    whitelist: HashSet<String>,
+    blacklist: HashSet<String>,
+    whitelist_file: PathBuf,
+    blacklist_file: PathBuf,
 }
 
 impl SecurityLearner {
     pub fn new(data_path: &Path) -> Self {
         let full_path = data_path.join("security_learned.json");
-        let (events, trust_map, learned_rules) = if full_path.exists() {
-            match fs::read_to_string(&full_path) {
-                Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-                Err(e) => {
-                    warn!("SecurityLearner: cant load state: {}", e);
-                    (Vec::new(), HashMap::new(), Vec::new())
-                }
-            }
-        } else {
-            (Vec::new(), HashMap::new(), Vec::new())
-        };
+        let wl_file = data_path.join("allow.txt");
+        let bl_file = data_path.join("block.txt");
+        let (events, trust_map, learned_rules, mut whitelist, mut blacklist) =
+            load_state(&full_path);
 
-        SecurityLearner {
+        // Load user-editable text files — они приоритетнее JSON
+        whitelist.extend(Self::load_list_file(&wl_file));
+        blacklist.extend(Self::load_list_file(&bl_file));
+
+        // Sync back — дописать в JSON то, чего там не было
+        let mut learner = SecurityLearner {
             events,
             trust_map,
             learned_rules,
             data_path: full_path,
             anomaly_threshold: 0.7,
+            whitelist,
+            blacklist,
+            whitelist_file: wl_file,
+            blacklist_file: bl_file,
+        };
+        let _ = learner.save();
+        learner
+    }
+
+    fn load_list_file(path: &Path) -> HashSet<String> {
+        if !path.exists() {
+            return HashSet::new();
+        }
+        match fs::read_to_string(path) {
+            Ok(content) => content
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                .collect(),
+            Err(e) => {
+                warn!("SecurityLearner: cant load list from {:?}: {}", path, e);
+                HashSet::new()
+            }
         }
     }
 
+    fn save_list_file(path: &Path, list: &HashSet<String>) {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let content = list
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let _ = fs::write(path, content + "\n");
+    }
+
+    /// Sync whitelist from the text file (allow.txt) — user edits it by hand
+    pub fn sync_whitelist(&mut self) {
+        let file_list = Self::load_list_file(&self.whitelist_file);
+        for item in file_list {
+            self.whitelist.insert(item);
+        }
+        info!(
+            "SecurityLearner: whitelist synced, {} entries",
+            self.whitelist.len()
+        );
+    }
+
+    /// Sync blacklist from the text file (block.txt) — user edits it by hand
+    pub fn sync_blacklist(&mut self) {
+        let file_list = Self::load_list_file(&self.blacklist_file);
+        for item in file_list {
+            self.blacklist.insert(item);
+        }
+        info!(
+            "SecurityLearner: blacklist synced, {} entries",
+            self.blacklist.len()
+        );
+    }
+
+    /// Add to whitelist — сразу и в память, и в файл
+    pub fn add_whitelist(&mut self, peer: &str) {
+        self.whitelist.insert(peer.to_string());
+        Self::save_list_file(&self.whitelist_file, &self.whitelist);
+        info!(
+            "SecurityLearner: whitelist +{} (now {})",
+            peer,
+            self.whitelist.len()
+        );
+    }
+
+    /// Remove from whitelist
+    pub fn remove_whitelist(&mut self, peer: &str) {
+        self.whitelist.remove(peer);
+        Self::save_list_file(&self.whitelist_file, &self.whitelist);
+        info!(
+            "SecurityLearner: whitelist -{} (now {})",
+            peer,
+            self.whitelist.len()
+        );
+    }
+
+    /// Add to blacklist — сразу и в память, и в файл
+    pub fn add_blacklist(&mut self, peer: &str) {
+        self.blacklist.insert(peer.to_string());
+        Self::save_list_file(&self.blacklist_file, &self.blacklist);
+        info!(
+            "SecurityLearner: blacklist +{} (now {})",
+            peer,
+            self.blacklist.len()
+        );
+    }
+
+    /// Remove from blacklist
+    pub fn remove_blacklist(&mut self, peer: &str) {
+        self.blacklist.remove(peer);
+        Self::save_list_file(&self.blacklist_file, &self.blacklist);
+        info!(
+            "SecurityLearner: blacklist -{} (now {})",
+            peer,
+            self.blacklist.len()
+        );
+    }
+
+    pub fn is_whitelisted(&self, peer: &str) -> bool {
+        self.whitelist.contains(peer) || self.trust_level(peer) == TrustLevel::Trusted
+    }
+
+    pub fn is_blacklisted(&self, peer: &str) -> bool {
+        self.blacklist.contains(peer)
+    }
+
+    pub fn get_whitelist(&self) -> &HashSet<String> {
+        &self.whitelist
+    }
+    pub fn get_blacklist(&self) -> &HashSet<String> {
+        &self.blacklist
+    }
+
+    /// Переопределяем should_block — чёрный список имеет приоритет
+    pub fn should_block_ext(&self, peer: &str, risk_score: u8) -> bool {
+        if self.is_blacklisted(peer) {
+            return true;
+        }
+        if self.is_whitelisted(peer) {
+            return false;
+        }
+        self.should_block(peer, risk_score)
+    }
+}
+
+fn load_state(
+    path: &Path,
+) -> (
+    Vec<SecurityEvent>,
+    HashMap<String, PeerTrust>,
+    Vec<LearnedRule>,
+    HashSet<String>,
+    HashSet<String>,
+) {
+    if !path.exists() {
+        return (
+            Vec::new(),
+            HashMap::new(),
+            Vec::new(),
+            HashSet::new(),
+            HashSet::new(),
+        );
+    }
+    match fs::read_to_string(path) {
+        Ok(content) => match serde_json::from_str::<serde_json::Value>(&content) {
+            Ok(data) => (
+                serde_json::from_value(data["events"].clone()).unwrap_or_default(),
+                serde_json::from_value(data["trust_map"].clone()).unwrap_or_default(),
+                serde_json::from_value(data["learned_rules"].clone()).unwrap_or_default(),
+                serde_json::from_value(data["whitelist"].clone()).unwrap_or_default(),
+                serde_json::from_value(data["blacklist"].clone()).unwrap_or_default(),
+            ),
+            Err(e) => {
+                warn!("SecurityLearner: parse error: {}", e);
+                (
+                    Vec::new(),
+                    HashMap::new(),
+                    Vec::new(),
+                    HashSet::new(),
+                    HashSet::new(),
+                )
+            }
+        },
+        Err(e) => {
+            warn!("SecurityLearner: cant load state: {}", e);
+            (
+                Vec::new(),
+                HashMap::new(),
+                Vec::new(),
+                HashSet::new(),
+                HashSet::new(),
+            )
+        }
+    }
+}
+
+impl SecurityLearner {
     pub fn record_event(
         &mut self,
         kind: SecurityEventKind,
@@ -484,8 +668,17 @@ impl SecurityLearner {
             "events": self.events,
             "trust_map": self.trust_map,
             "learned_rules": self.learned_rules,
+            "whitelist": self.whitelist,
+            "blacklist": self.blacklist,
         });
         fs::write(&self.data_path, serde_json::to_string_pretty(&state)?)?;
+        // Sync to text files so user can edit them
+        let wl_path = self.whitelist_file.clone();
+        let bl_path = self.blacklist_file.clone();
+        let wl = self.whitelist.clone();
+        let bl = self.blacklist.clone();
+        Self::save_list_file(&wl_path, &wl);
+        Self::save_list_file(&bl_path, &bl);
         info!("SecurityLearner: state saved to {:?}", self.data_path);
         Ok(())
     }

@@ -26,6 +26,7 @@ pub mod skill_evolve;
 pub mod cron;
 pub mod plugin;
 pub mod security;
+pub mod tunnel;
 mod store;
 mod bridge;
 mod journal;
