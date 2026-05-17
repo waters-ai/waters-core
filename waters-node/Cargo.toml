@@ -1,8 +1,8 @@
 [package]
 name = "waters-node"
-version = "0.3.0"
+version = "0.5.0-alpha"
 edition = "2021"
-description = "WATERS Node — distributed agent runtime. P2P swarm, 6 LLMs, chat as UI."
+description = "WATERS Node v0.5 — P2P agent runtime. P2P, self-improving skills, multi-platform chat, voice, media, YASA security, plugin system."
 
 [[bin]]
 name = "waters-node"
