@@ -27,6 +27,7 @@ pub mod cron;
 pub mod plugin;
 pub mod security;
 pub mod tunnel;
+pub mod mcp_store;
 mod store;
 mod bridge;
 mod journal;
@@ -474,6 +475,15 @@ async fn main() -> Result<()> {
     let mut contacts = tunnel::ContactBook::new(&PathBuf::from(".waters"));
     let contact_count = contacts.list().len();
     println!("  {}Contacts{}   {} saved", BOLD, RESET, contact_count);
+
+    // Init MCP Store
+    let mut mcp_store = mcp_store::McpStore::new(&PathBuf::from(".waters"));
+    let mcp_count = mcp_store.list_installed().len();
+    info!("McpStore: {} skills installed", mcp_count);
+
+    // Init Channel Isolation
+    let mut channel_isolation = security::ChannelIsolation::new();
+    info!("ChannelIsolation: {} channels configured", channel_isolation.list_channels().len());
 
     // Init cron background task
     let cron_kv = kvstore.clone();

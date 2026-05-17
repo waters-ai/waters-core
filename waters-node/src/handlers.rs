@@ -69,6 +69,8 @@ pub async fn handle_slash(
             println!("  /connect      — connect to peer: /connect <ip>");
             println!("  /nick         — /nick <node_id> <name> [group] — дать имя пиру");
             println!("  /contacts     — показать контактную книгу");
+            println!("  /mcp          — MCP store: /mcp list | /mcp search <q> | /mcp install <name>");
+            println!("  /channel      — /channel create <name> | /channel allow <name> <peer>");
             println!("  /sessions     — list sessions");
             println!("  /json         — output JSON format");
             println!("  /cargo        — show pending cargo transfers");
@@ -587,6 +589,16 @@ pub async fn handle_slash(
         }
         "contacts" => {
             println!("{}", contacts.summary());
+        }
+        "mcp" => {
+            if slash_arg.is_empty() || slash_arg == "list" {
+                println!("📦 MCP Store. Use /mcp search <query> or /mcp install <name>");
+                println!("   (async operations — see node logs)");
+            } else if slash_arg.starts_with("search ") {
+                println!("Search: async, needs MCP store connection. WIP.");
+            } else if slash_arg.starts_with("install ") {
+                println!("Install: async, needs MCP store connection. WIP.");
+            }
         }
         "connect" if !slash_arg.is_empty() => {
             gossip.direct_sync(slash_arg, channel_mgr.clone()).await.ok();

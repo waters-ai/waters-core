@@ -683,3 +683,173 @@ impl SecurityLearner {
         Ok(())
     }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Channel Isolation — разделение каналов по группам безопасности
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChannelAccess {
+    Public,
+    GroupOnly(Vec<String>),
+    PeerList(Vec<String>),
+    Private,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelPolicy {
+    pub name: String,
+    pub access: ChannelAccess,
+    pub encrypt: bool,
+    pub max_peers: u8,
+    pub audit: bool,
+}
+
+pub struct ChannelIsolation {
+    channels: HashMap<String, ChannelPolicy>,
+}
+
+impl ChannelIsolation {
+    pub fn new() -> Self {
+        let mut channels = HashMap::new();
+        channels.insert(
+            "chat".into(),
+            ChannelPolicy {
+                name: "chat".into(),
+                access: ChannelAccess::GroupOnly(vec![]),
+                encrypt: false,
+                max_peers: 100,
+                audit: true,
+            },
+        );
+        channels.insert(
+            "findings".into(),
+            ChannelPolicy {
+                name: "findings".into(),
+                access: ChannelAccess::GroupOnly(vec![]),
+                encrypt: false,
+                max_peers: 100,
+                audit: true,
+            },
+        );
+        channels.insert(
+            "voice".into(),
+            ChannelPolicy {
+                name: "voice".into(),
+                access: ChannelAccess::Public,
+                encrypt: false,
+                max_peers: 6,
+                audit: false,
+            },
+        );
+        channels.insert(
+            "admin".into(),
+            ChannelPolicy {
+                name: "admin".into(),
+                access: ChannelAccess::PeerList(vec![]),
+                encrypt: true,
+                max_peers: 3,
+                audit: true,
+            },
+        );
+        ChannelIsolation { channels }
+    }
+
+    pub fn create_channel(&mut self, name: &str, access: ChannelAccess, max_peers: u8) {
+        let info_msg = format!("{:?}", &access);
+        self.channels.insert(
+            name.to_string(),
+            ChannelPolicy {
+                name: name.to_string(),
+                access,
+                encrypt: false,
+                max_peers,
+                audit: true,
+            },
+        );
+        info!(
+            "ChannelIsolation: created channel '{}' ({})",
+            name, info_msg
+        );
+    }
+
+    pub fn can_access(&self, channel: &str, peer: &str, group_token: Option<&str>) -> bool {
+        let Some(policy) = self.channels.get(channel) else {
+            return false;
+        };
+        match &policy.access {
+            ChannelAccess::Public => true,
+            ChannelAccess::Private => false,
+            ChannelAccess::GroupOnly(groups) => {
+                if let Some(token) = group_token {
+                    groups.is_empty() || groups.contains(&token.to_string())
+                } else {
+                    false
+                }
+            }
+            ChannelAccess::PeerList(peers) => peers.contains(&peer.to_string()),
+        }
+    }
+
+    pub fn add_peer_to_channel(&mut self, channel: &str, peer: &str) {
+        if let Some(policy) = self.channels.get_mut(channel) {
+            match &mut policy.access {
+                ChannelAccess::PeerList(peers) => {
+                    if !peers.contains(&peer.to_string()) {
+                        peers.push(peer.to_string());
+                        info!("ChannelIsolation: added {} to channel '{}'", peer, channel);
+                    }
+                }
+                _ => warn!(
+                    "ChannelIsolation: cannot add peer to non-peerlist channel '{}'",
+                    channel
+                ),
+            }
+        }
+    }
+
+    pub fn remove_peer_from_channel(&mut self, channel: &str, peer: &str) {
+        if let Some(policy) = self.channels.get_mut(channel) {
+            match &mut policy.access {
+                ChannelAccess::PeerList(peers) => {
+                    peers.retain(|p| p != peer);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn list_channels(&self) -> Vec<&ChannelPolicy> {
+        self.channels.values().collect()
+    }
+
+    pub fn channel_summary(&self) -> String {
+        let mut out = "🔒 Channel Isolation:\n".to_string();
+        for ch in self.channels.values() {
+            let icon = match ch.access {
+                ChannelAccess::Public => "🌐",
+                ChannelAccess::GroupOnly(_) => "👥",
+                ChannelAccess::PeerList(_) => "🔐",
+                ChannelAccess::Private => "🔒",
+            };
+            out.push_str(&format!(
+                "  {} {} (peers:{}, audit:{})\n",
+                icon, ch.name, ch.max_peers, ch.audit
+            ));
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_channel_access() {
+        let ci = ChannelIsolation::new();
+        assert!(ci.can_access("chat", "peer1", Some("token123")));
+        assert!(!ci.can_access("admin", "stranger", None));
+        assert!(ci.can_access("voice", "anyone", None));
+    }
+}
