@@ -1,16 +1,45 @@
 #!/bin/bash
-# WATERS — подключение к мастер-ноде 177
-# Запуск: ./connect-177.sh [порт]
+set -euo pipefail
 
-PORT=${1:-42069}
-MASTER="87.242.102.177"
-REDIS_URL="${REDIS_URL:-redis://127.0.0.1:6379}"
-DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:?Ошибка: установи DEEPSEEK_API_KEY}"
+HOST="${1:-171.22.180.177}"
+USER="${2:-ubuntu}"
 
-echo "═══ WATERS v0.4 — подключение к $MASTER:$PORT ═══"
-echo ""
+echo "🌊 WATERS Node v0.5.0-alpha — deploy to $USER@$HOST"
+ssh -o StrictHostKeyChecking=no "$USER@$HOST" \
+  -R 11434:localhost:11434 \
+  bash -s << 'REMOTE'
+set -euo pipefail
+cd ~
+mkdir -p waters-node
+cd waters-node
 
-# Запускаем ноду с авто-подключением к мастеру
-exec ./waters-node \
-  --port $PORT \
-  --connect "$MASTER:$PORT"
+echo "📥 Downloading v0.5.0-alpha..."
+wget -q https://github.com/waters-ai/waters-core/releases/download/v0.5.0-alpha/waters-node -O waters-node
+chmod +x waters-node
+
+echo "⚙️ Setting up systemd..."
+cat > /tmp/waters-node.service << 'SERVICE'
+[Unit]
+Description=WATERS Node v0.5.0-alpha
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/waters-node
+EnvironmentFile=-/home/ubuntu/waters-node/.env
+ExecStart=/home/ubuntu/waters-node/waters-node --port 42069
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+sudo mv /tmp/waters-node.service /etc/systemd/system/waters-node.service
+sudo systemctl daemon-reload
+echo "✅ Done. Start: sudo systemctl start waters-node"
+echo "   Logs: journalctl -u waters-node -f"
+REMOTE
