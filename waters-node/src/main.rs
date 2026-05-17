@@ -463,6 +463,12 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(&evolve_dir).ok();
     let mut skill_evolver = skill_evolve::SkillEvolver::new(&evolve_dir);
 
+    // Init Security Learner
+    let mut security_learner = security::SecurityLearner::new(&PathBuf::from(".waters"));
+    let sec_event_count = security_learner.recent_events(1).len();
+    let sec_rule_count = security_learner.get_rules().len();
+    info!("SecurityLearner: {} events, {} rules loaded", sec_event_count, sec_rule_count);
+
     // Init cron background task
     let cron_kv = kvstore.clone();
     tokio::spawn(async move {

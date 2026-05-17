@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::info;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ShareScope {
@@ -64,7 +66,10 @@ impl SharePolicy {
             require_approval: true,
             audit_log: true,
         });
-        info!("SharePolicy: sharing bridge '{}' with group approval", bridge);
+        info!(
+            "SharePolicy: sharing bridge '{}' with group approval",
+            bridge
+        );
     }
 
     pub fn is_shared(&self, resource_type: &str, resource_id: &str) -> bool {
@@ -138,5 +143,350 @@ impl PrivacyEngine {
             out.push_str(&format!("    Agents shared: {}\n", policy.agents.len()));
         }
         out
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Security Learning Engine — агент секьюрити учится на опыте
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum SecurityEventKind {
+    ShareApproved,
+    ShareDenied,
+    PeerConnected,
+    PeerRejected,
+    BridgeAccessed,
+    DangerCommandBlocked,
+    RatingThresholdCrossed,
+    AnomalyDetected,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityEvent {
+    pub timestamp: String,
+    pub kind: SecurityEventKind,
+    pub peer_id: String,
+    pub resource: String,
+    pub details: String,
+    pub risk_score: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerTrust {
+    pub peer_id: String,
+    pub successful_interactions: u32,
+    pub failed_interactions: u32,
+    pub total_shares: u32,
+    pub last_seen: String,
+    pub trust_level: TrustLevel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TrustLevel {
+    Unknown,
+    Low,
+    Medium,
+    High,
+    Trusted,
+}
+
+impl std::fmt::Display for TrustLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TrustLevel::Unknown => write!(f, "❓ Unknown"),
+            TrustLevel::Low => write!(f, "⚠️ Low"),
+            TrustLevel::Medium => write!(f, "🔶 Medium"),
+            TrustLevel::High => write!(f, "🟢 High"),
+            TrustLevel::Trusted => write!(f, "✅ Trusted"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LearnedRule {
+    pub pattern: String,
+    pub action: String,
+    pub confidence: f64,
+    pub based_on_events: u32,
+    pub auto_apply: bool,
+}
+
+pub struct SecurityLearner {
+    events: Vec<SecurityEvent>,
+    trust_map: HashMap<String, PeerTrust>,
+    learned_rules: Vec<LearnedRule>,
+    data_path: PathBuf,
+    anomaly_threshold: f64,
+}
+
+impl SecurityLearner {
+    pub fn new(data_path: &Path) -> Self {
+        let full_path = data_path.join("security_learned.json");
+        let (events, trust_map, learned_rules) = if full_path.exists() {
+            match fs::read_to_string(&full_path) {
+                Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+                Err(e) => {
+                    warn!("SecurityLearner: cant load state: {}", e);
+                    (Vec::new(), HashMap::new(), Vec::new())
+                }
+            }
+        } else {
+            (Vec::new(), HashMap::new(), Vec::new())
+        };
+
+        SecurityLearner {
+            events,
+            trust_map,
+            learned_rules,
+            data_path: full_path,
+            anomaly_threshold: 0.7,
+        }
+    }
+
+    pub fn record_event(
+        &mut self,
+        kind: SecurityEventKind,
+        peer: &str,
+        resource: &str,
+        details: &str,
+        risk: u8,
+    ) {
+        let event = SecurityEvent {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            kind,
+            peer_id: peer.to_string(),
+            resource: resource.to_string(),
+            details: details.to_string(),
+            risk_score: risk,
+        };
+        info!(
+            "SecurityEvent: {:?} peer={} resource={} risk={}",
+            kind, peer, resource, risk
+        );
+        self.events.push(event);
+
+        // Update peer trust
+        let trust = self.trust_map.entry(peer.to_string()).or_insert(PeerTrust {
+            peer_id: peer.to_string(),
+            successful_interactions: 0,
+            failed_interactions: 0,
+            total_shares: 0,
+            last_seen: chrono::Utc::now().to_rfc3339(),
+            trust_level: TrustLevel::Unknown,
+        });
+        trust.last_seen = chrono::Utc::now().to_rfc3339();
+
+        match kind {
+            SecurityEventKind::ShareApproved | SecurityEventKind::PeerConnected => {
+                trust.successful_interactions += 1;
+                trust.total_shares += 1;
+            }
+            SecurityEventKind::ShareDenied
+            | SecurityEventKind::PeerRejected
+            | SecurityEventKind::DangerCommandBlocked => {
+                trust.failed_interactions += 1;
+            }
+            SecurityEventKind::AnomalyDetected => {
+                trust.failed_interactions += 2;
+            }
+            _ => {}
+        }
+
+        // Recalculate trust level
+        self.recalc_trust(peer);
+
+        // Learn rules if enough events
+        if self.events.len() % 10 == 0 {
+            self.learn();
+        }
+
+        // Auto-save every 20 events
+        if self.events.len() % 20 == 0 {
+            let _ = self.save();
+        }
+    }
+
+    fn recalc_trust(&mut self, peer: &str) {
+        if let Some(trust) = self.trust_map.get_mut(peer) {
+            let total = trust.successful_interactions + trust.failed_interactions;
+            if total == 0 {
+                return;
+            }
+            let ratio = trust.successful_interactions as f64 / total as f64;
+
+            trust.trust_level = if trust.successful_interactions >= 50 && ratio > 0.95 {
+                TrustLevel::Trusted
+            } else if trust.successful_interactions >= 20 && ratio > 0.85 {
+                TrustLevel::High
+            } else if trust.successful_interactions >= 5 && ratio > 0.7 {
+                TrustLevel::Medium
+            } else if total > 3 {
+                TrustLevel::Low
+            } else {
+                TrustLevel::Unknown
+            };
+        }
+    }
+
+    pub fn trust_level(&self, peer: &str) -> TrustLevel {
+        self.trust_map
+            .get(peer)
+            .map(|t| t.trust_level)
+            .unwrap_or(TrustLevel::Unknown)
+    }
+
+    pub fn should_auto_approve(&self, peer: &str) -> bool {
+        self.trust_level(peer) == TrustLevel::Trusted || self.trust_level(peer) == TrustLevel::High
+    }
+
+    pub fn should_block(&self, peer: &str, risk_score: u8) -> bool {
+        let level = self.trust_level(peer);
+        if level == TrustLevel::Trusted {
+            return false;
+        }
+        if level == TrustLevel::Unknown && risk_score > 5 {
+            return true;
+        }
+        if level == TrustLevel::Low && risk_score > 3 {
+            return true;
+        }
+        false
+    }
+
+    fn learn(&mut self) {
+        // Pattern: если пир успешно шарит > 10 раз без инцидентов — повысить доверие
+        for (peer, trust) in &self.trust_map {
+            if trust.successful_interactions >= 10 && trust.failed_interactions == 0 {
+                let rule_name = format!("auto-trust-{}", peer);
+                let exists = self.learned_rules.iter().any(|r| r.pattern == rule_name);
+                if !exists {
+                    let rn = rule_name.clone();
+                    self.learned_rules.push(LearnedRule {
+                        pattern: rule_name,
+                        action: format!("auto_approve {}", peer),
+                        confidence: 0.9,
+                        based_on_events: trust.successful_interactions + trust.failed_interactions,
+                        auto_apply: true,
+                    });
+                    info!(
+                        "SecurityLearner: learned rule '{}' — {} OK interactions, 0 incidents",
+                        rn, trust.successful_interactions
+                    );
+                }
+            }
+        }
+
+        // Pattern: если пир часто отклоняется — понизить
+        for (peer, trust) in &self.trust_map {
+            if trust.failed_interactions >= 3 && trust.successful_interactions == 0 {
+                let rule_name = format!("block-{}", peer);
+                let exists = self.learned_rules.iter().any(|r| r.pattern == rule_name);
+                if !exists {
+                    let rn = rule_name.clone();
+                    self.learned_rules.push(LearnedRule {
+                        pattern: rule_name,
+                        action: format!("block {}", peer),
+                        confidence: 0.6,
+                        based_on_events: trust.failed_interactions,
+                        auto_apply: false,
+                    });
+                    warn!("SecurityLearner: learned rule '{}' — {} failed interactions, suggest block", rn, trust.failed_interactions);
+                }
+            }
+        }
+
+        // Pattern: аномалия — пир с >10 failed за короткое время
+        let recent_fails: Vec<&SecurityEvent> = self
+            .events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e.kind,
+                    SecurityEventKind::AnomalyDetected | SecurityEventKind::DangerCommandBlocked
+                )
+            })
+            .collect();
+        if recent_fails.len() >= 5 {
+            let peers: Vec<&str> = recent_fails.iter().map(|e| e.peer_id.as_str()).collect();
+            for peer in peers {
+                let rule_name = format!("anomaly-block-{}", peer);
+                let exists = self.learned_rules.iter().any(|r| r.pattern == rule_name);
+                if !exists {
+                    self.learned_rules.push(LearnedRule {
+                        pattern: rule_name,
+                        action: format!("auto_block {}", peer),
+                        confidence: 0.8,
+                        based_on_events: recent_fails.len() as u32,
+                        auto_apply: true,
+                    });
+                    info!(
+                        "SecurityLearner: anomaly detected for {}, auto-block applied",
+                        peer
+                    );
+                }
+            }
+        }
+    }
+
+    pub fn get_rules(&self) -> &[LearnedRule] {
+        &self.learned_rules
+    }
+
+    pub fn get_peers(&self) -> Vec<(&String, &PeerTrust)> {
+        let mut peers: Vec<_> = self.trust_map.iter().collect();
+        peers.sort_by_key(|(_, t)| std::cmp::Reverse(t.successful_interactions));
+        peers
+    }
+
+    pub fn recent_events(&self, count: usize) -> Vec<&SecurityEvent> {
+        self.events.iter().rev().take(count).collect()
+    }
+
+    pub fn summary(&self) -> String {
+        let mut out = format!(
+            "SecurityLearner: {} events, {} learned rules\n",
+            self.events.len(),
+            self.learned_rules.len()
+        );
+        out.push_str(&format!("  Known peers: {}\n", self.trust_map.len()));
+        for (id, trust) in &self.trust_map {
+            out.push_str(&format!(
+                "    {} — {} (ok:{}, fail:{}, shares:{})\n",
+                id,
+                trust.trust_level,
+                trust.successful_interactions,
+                trust.failed_interactions,
+                trust.total_shares
+            ));
+        }
+        if !self.learned_rules.is_empty() {
+            out.push_str("  Learned rules:\n");
+            for rule in &self.learned_rules {
+                out.push_str(&format!(
+                    "    {} → {} (conf:{:.1}, events:{}, auto:{})\n",
+                    rule.pattern,
+                    rule.action,
+                    rule.confidence,
+                    rule.based_on_events,
+                    rule.auto_apply
+                ));
+            }
+        }
+        out
+    }
+
+    pub fn save(&self) -> Result<(), std::io::Error> {
+        if let Some(parent) = self.data_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let state = serde_json::json!({
+            "events": self.events,
+            "trust_map": self.trust_map,
+            "learned_rules": self.learned_rules,
+        });
+        fs::write(&self.data_path, serde_json::to_string_pretty(&state)?)?;
+        info!("SecurityLearner: state saved to {:?}", self.data_path);
+        Ok(())
     }
 }
