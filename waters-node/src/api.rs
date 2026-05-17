@@ -336,6 +336,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <a href="#" onclick="switchTab('peers')" id="nav-peers">🌐 Peers</a>
     <a href="#" onclick="switchTab('skills')" id="nav-skills">🧠 Skills</a>
     <a href="#" onclick="switchTab('contacts')" id="nav-contacts">📒 Contacts</a>
+    <a href="#" onclick="switchTab('voice')" id="nav-voice">🎤 Voice</a>
     <a href="#" onclick="switchTab('settings')" id="nav-settings">⚙️ Settings</a>
   </div>
 </div>
@@ -428,6 +429,35 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
     <div class="grid" id="skills-grid"></div>
   </div>
 
+  <!-- TAB: Voice -->
+  <div class="tab-content" id="tab-voice">
+    <div class="grid">
+      <div class="card"><div class="card-hdr"><h3>🎤 Рация (Push-to-Talk)</h3></div>
+        <div style="text-align:center;padding:16px">
+          <canvas id="vu-meter" width="300" height="40" style="border-radius:8px;background:rgba(255,255,255,0.03);width:100%;max-width:400px;margin-bottom:12px"></canvas>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+            <button id="ptt-main" class="btn-danger" style="width:80px;height:80px;border-radius:50%;font-size:32px">🎤</button>
+            <button class="btn-ghost" onclick="agentVoice()" style="width:64px;height:64px;border-radius:50%;font-size:28px">🤖</button>
+            <button class="btn-ghost" onclick="toggleVoice()" id="voice-toggle2" style="width:64px;height:64px;border-radius:50%;font-size:24px">🔇</button>
+            <button class="btn-ghost" onclick="cycleVoiceMode()" id="voice-profile2" style="width:64px;height:64px;border-radius:50%;font-size:18px">👩 1/6</button>
+          </div>
+          <div style="margin-top:12px;font-size:13px;color:var(--muted)" id="voice-status">Нажми 🎤 и говори. Отпусти — отправится</div>
+        </div>
+      </div>
+      <div class="card"><div class="card-hdr"><h3>🔊 Воспроизведение</h3></div>
+        <div style="padding:12px">
+          <div class="item"><span class="l">Озвучивание ответов</span><span class="v" id="voice-status-text">Выкл</span></div>
+          <div class="item"><span class="l">Текущий голос</span><span class="v" id="voice-current-profile">👩 1/6</span></div>
+          <div class="item"><span class="l">Голосов в системе</span><span class="v" id="voice-available">—</span></div>
+          <div style="margin-top:12px;display:flex;gap:6px;justify-content:center">
+            <button class="btn-ghost" onclick="toggleVoice()" style="font-size:13px">🔊 Вкл/Выкл</button>
+            <button class="btn-ghost" onclick="cycleVoiceMode()" style="font-size:13px">🔄 Сменить голос</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- TAB: Contacts -->
   <div class="tab-content" id="tab-contacts">
     <div class="card"><div class="card-hdr"><h3>📒 Контакты</h3><span class="badge" id="contacts-count">0</span></div>
@@ -459,7 +489,9 @@ let audioCtx=null,pushToTalkStream=null,skillsCache=null;
 const ICONS=['👩','👨','🧑','👩‍🦰','👨‍🦱','🧑‍🦳'];
 
 // === TAB SWITCHING ===
-function switchTab(name){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));let tab=document.getElementById('tab-'+name);if(tab)tab.classList.add('active');document.querySelectorAll('.sidebar .nav a').forEach(a=>a.classList.remove('active'));let nav=document.getElementById('nav-'+name);if(nav)nav.classList.add('active');let title=document.getElementById('page-title');const T={'dashboard':'Dashboard','chat':'Chat','agents':'Agents','peers':'Peers','skills':'Skills','settings':'Settings'};if(title)title.textContent=T[name]||name;if(name==='agents')loadStatus();if(name==='peers')loadPeers();if(name==='skills')loadSkills()}
+function switchTab(name){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));let tab=document.getElementById('tab-'+name);if(tab)tab.classList.add('active');document.querySelectorAll('.sidebar .nav a').forEach(a=>a.classList.remove('active'));let nav=document.getElementById('nav-'+name);if(nav)nav.classList.add('active');let title=document.getElementById('page-title');
+const T={'dashboard':'Dashboard','chat':'Chat','agents':'Agents','peers':'Peers','skills':'Skills','voice':'🎤 Voice','contacts':'📒 Contacts','settings':'Settings'};
+if(title)title.textContent=T[name]||name;if(name==='agents')loadStatus();if(name==='peers')loadPeers();if(name==='skills')loadSkills();if(name==='contacts')loadContacts()}
 
 // === MODES ===
 function setMode(m){let btns=document.querySelectorAll('.mode-btn');btns.forEach(b=>{if(b.dataset.mode===m){b.style.background='rgba(0,212,255,0.1)';b.style.color='var(--accent)';b.style.fontWeight='600'}else{b.style.background='transparent';b.style.color='var(--muted)';b.style.fontWeight='500'}});document.getElementById('current-mode').textContent=m.charAt(0).toUpperCase()+m.slice(1);api('mode/set','POST',{mode:m})}
@@ -479,20 +511,49 @@ async function loadSkills(){if(skillsCache){renderSkills(skillsCache);return}try
 function renderSkills(skills){let grid=document.getElementById('skills-grid');if(!grid)return;if(!skills||skills.length===0){grid.innerHTML='<div class=card><div class=item><span class=l>No skills loaded</span></div></div>';return}grid.innerHTML='';skills.forEach(s=>{grid.innerHTML+=`<div class=card><div class=card-hdr><h3>${s.name||'?'}</h3><span class=badge>${s.category||'general'}</span></div><div class=item><span class=l>${s.description||'—'}</span></div><div class=item><span class=l>Role</span><span class=v>${s.role||'general'}</span></div><div class=item><span class=l>LLM</span><span class=v>${s.llm||'auto'}</span></div></div>`})}
 
 // === VOICE ===
+let audioCtx=null,analyserNode=null,vuanimId=null;
 function initVoices(){let v=synth.getVoices();if(v.length===0){setTimeout(initVoices,300);return}
 let ru=v.filter(x=>x.lang.startsWith('ru'));let en=v.filter(x=>x.lang.startsWith('en'));
-for(let i=0;i<6;i++){let pool=i<3?ru:en;if(pool.length===0)pool=v;let p=i%2===0?pool.find(x=>!/Male|Microsoft/.test(x.name)):pool.find(x=>x.name.includes('Male')||x.name.includes('David'));if(!p)p=pool[i%pool.length]||v[i%v.length];voiceProfiles[i]={icon:ICONS[i],voice:p,lang:ru.length?'ru-RU':'en-US'}}updateProfileUI()}
+for(let i=0;i<6;i++){let pool=i<3?ru:en;if(pool.length===0)pool=v;let p=i%2===0?pool.find(x=>!/Male|Microsoft/.test(x.name)):pool.find(x=>x.name.includes('Male')||x.name.includes('David'));if(!p)p=pool[i%pool.length]||v[i%v.length];voiceProfiles[i]={icon:ICONS[i],voice:p,lang:ru.length?'ru-RU':'en-US'}}
+updateProfileUI();let va=document.getElementById('voice-available');if(va)va.textContent=v.length}
 function speak(t,i){i=i||0;if(!voiceEnabled||!voiceProfiles[i])return;synth.cancel();let p=voiceProfiles[i];if(!p)return;let u=new SpeechSynthesisUtterance(t);u.lang=p.lang;u.rate=0.9;if(p.voice)u.voice=p.voice;synth.speak(u)}
-function cycleVoiceMode(){currentProfile=(currentProfile+1)%6;let p=voiceProfiles[currentProfile];let btn=document.getElementById('voice-profile');if(btn&&p)btn.textContent=p.icon+' '+(currentProfile+1)+'/6';speak('Привет, я голос '+(currentProfile+1),currentProfile)}
-function updateProfileUI(){let btn=document.getElementById('voice-profile');let p=voiceProfiles[currentProfile];if(btn&&p)btn.textContent=p.icon+' '+(currentProfile+1)+'/6'}
-function toggleVoice(){voiceEnabled=!voiceEnabled;let btn=document.getElementById('voice-toggle');if(btn){btn.textContent=voiceEnabled?'🔊':'🔇';if(voiceEnabled&&voiceProfiles.length===0)initVoices()}}
+function cycleVoiceMode(){currentProfile=(currentProfile+1)%6;let p=voiceProfiles[currentProfile];
+['voice-profile','voice-profile2'].forEach(id=>{let btn=document.getElementById(id);if(btn&&p)btn.textContent=p.icon+' '+(currentProfile+1)+'/6'});
+let cp=document.getElementById('voice-current-profile');if(cp)cp.textContent=(p?p.icon:'')+' '+(currentProfile+1)+'/6';
+speak('Привет, я голос '+(currentProfile+1),currentProfile)}
+function updateProfileUI(){let p=voiceProfiles[currentProfile];
+['voice-profile','voice-profile2'].forEach(id=>{let btn=document.getElementById(id);if(btn&&p)btn.textContent=p.icon+' '+(currentProfile+1)+'/6'});
+let cp=document.getElementById('voice-current-profile');if(cp)cp.textContent=(p?p.icon:'')+' '+(currentProfile+1)+'/6'}
+function toggleVoice(){voiceEnabled=!voiceEnabled;
+['voice-toggle','voice-toggle2'].forEach(id=>{let btn=document.getElementById(id);if(btn){btn.textContent=voiceEnabled?'🔊':'🔇';btn.style.opacity=voiceEnabled?1:0.5}});
+let st=document.getElementById('voice-status-text');if(st)st.textContent=voiceEnabled?'Вкл':'Выкл';
+if(voiceEnabled&&voiceProfiles.length===0)initVoices()}
+
+// === VU METER ===
+function startVUMeter(stream){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();let src=audioCtx.createMediaStreamSource(stream);analyserNode=audioCtx.createAnalyser();analyserNode.fftSize=256;src.connect(analyserNode);drawVU()}
+function drawVU(){let canvas=document.getElementById('vu-meter');if(!canvas)return;let ctx=canvas.getContext('2d');let w=canvas.width,h=canvas.height;
+ctx.fillStyle='rgba(255,255,255,0.03)';ctx.fillRect(0,0,w,h);
+if(analyserNode){let data=new Uint8Array(analyserNode.frequencyBinCount);analyserNode.getByteFrequencyData(data);let avg=data.reduce((a,b)=>a+b,0)/data.length;let pct=Math.min(avg/128,1);
+let grad=ctx.createLinearGradient(0,0,w,0);grad.addColorStop(0,'#00d4ff');grad.addColorStop(0.6,'#0f8');grad.addColorStop(1,'#ff4757');
+ctx.fillStyle=grad;ctx.fillRect(0,0,w*pct,h);
+ctx.fillStyle='rgba(255,255,255,0.1)';for(let i=0;i<w;i+=4){let bar=data[Math.floor(i/w*data.length)]/255*16;ctx.fillRect(i,h-bar,2,bar)}}
+vuanimId=requestAnimationFrame(drawVU)}
 
 // === PUSH-TO-TALK ===
-async function startPTT(){try{let s=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true}});pushToTalkStream=s;mediaRecorder=new MediaRecorder(s,{mimeType:'audio/webm;codecs=opus'});audioChunks=[];let btn=document.getElementById('ptt-btn');btn.textContent='🔴';btn.style.background='var(--red)';mediaRecorder.ondataavailable=e=>{audioChunks.push(e.data)};mediaRecorder.start(1000)}catch(e){alert('Mic error: '+e.message)}}
-function stopPTT(){if(!mediaRecorder||mediaRecorder.state==='inactive')return;mediaRecorder.stop();let btn=document.getElementById('ptt-btn');btn.textContent='🎤';btn.style.background='';setTimeout(async()=>{if(audioChunks.length===0)return;let blob=new Blob(audioChunks,{type:'audio/webm'});let reader=new FileReader();reader.onload=async()=>{let b64=reader.result.split(',')[1];await api('voice/send','POST',{audio:b64});loadChat()};reader.readAsDataURL(blob);audioChunks=[]},500);if(pushToTalkStream)pushToTalkStream.getTracks().forEach(t=>t.stop())}
+async function startPTT(){try{let s=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true}});pushToTalkStream=s;startVUMeter(s);mediaRecorder=new MediaRecorder(s,{mimeType:'audio/webm;codecs=opus'});audioChunks=[];['ptt-btn','ptt-main'].forEach(id=>{let btn=document.getElementById(id);if(btn){btn.textContent='🔴';btn.style.background='var(--red)'}});
+let vs=document.getElementById('voice-status');if(vs)vs.textContent='🔴 Запись... Отпусти чтобы отправить';
+mediaRecorder.ondataavailable=e=>{audioChunks.push(e.data)};mediaRecorder.start(500)}catch(e){alert('Mic: '+e.message)}}
+function stopPTT(){if(!mediaRecorder||mediaRecorder.state==='inactive')return;mediaRecorder.stop();
+['ptt-btn','ptt-main'].forEach(id=>{let btn=document.getElementById(id);if(btn){btn.textContent='🎤';btn.style.background=''}});
+let vs=document.getElementById('voice-status');if(vs)vs.textContent='⏳ Отправка...';
+if(pushToTalkStream){pushToTalkStream.getTracks().forEach(t=>t.stop());pushToTalkStream=null}
+if(vuanimId){cancelAnimationFrame(vuanimId);vuanimId=null}
+setTimeout(async()=>{if(audioChunks.length===0){if(vs)vs.textContent='Ничего не записано';return}
+let blob=new Blob(audioChunks,{type:'audio/webm'});let reader=new FileReader();reader.onload=async()=>{let b64=reader.result.split(',')[1];await api('voice/send','POST',{audio:b64});if(vs)vs.textContent='✅ Отправлено!';setTimeout(()=>{if(vs)vs.textContent='Нажми 🎤 и говори'},2000)};reader.readAsDataURL(blob);audioChunks=[]},600)}
 
 // === AGENT VOICE ===
-function agentVoice(){let SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert('Voice input requires Chrome');return}let r=new SR();r.lang='ru-RU';r.interimResults=false;let btn=document.getElementById('agent-voice-btn');btn.textContent='🔴';r.onresult=function(e){let t=e.results[0][0].transcript;btn.textContent='🤖';document.getElementById('chat-input').value=t;sendChat()};r.onerror=function(){btn.textContent='🤖'};r.start()}
+function agentVoice(){let SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert('Voice input requires Chrome');return}let r=new SR();r.lang='ru-RU';r.interimResults=true;let btn=document.getElementById('agent-voice-btn');btn.textContent='🔴';let vs=document.getElementById('voice-status');if(vs)vs.textContent='🎤 Слушаю...';r.onresult=function(e){let t='';for(let i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript}document.getElementById('chat-input').value=t;if(e.results[e.results.length-1].isFinal){btn.textContent='🤖';if(vs)vs.textContent='✅ Распознано: '+t.substring(0,40)+'...';sendChat()}};
+r.onerror=function(){btn.textContent='🤖';if(vs)vs.textContent='❌ Ошибка распознавания'};r.start()}
 
 // === SSE STREAM ===
 function startStream(){let sid='sess_'+Date.now();let btn=document.getElementById('send-btn');btn.disabled=true;btn.textContent='Stream...';document.getElementById('stream-status').textContent='🔴 streaming';if(evtSource)evtSource.close();evtSource=new EventSource('/api/v1/stream/'+sid);let box=document.getElementById('messages');let md=document.createElement('div');md.className='chat-msg';md.innerHTML='<span class=role>assistant: </span><span class=text id=stream-text></span>';let ft='';box.appendChild(md);evtSource.onmessage=function(e){try{let d=JSON.parse(e.data);if(d.type==='done'){evtSource.close();evtSource=null;btn.disabled=false;btn.textContent='Send';document.getElementById('stream-status').textContent='✅ done';if(voiceEnabled)speak(ft,currentProfile);return}if(d.type==='voice'){playAudio(d.content);return}let el=document.getElementById('stream-text');if(d.type==='token'){if(el)el.textContent+=d.content;ft+=d.content}else if(d.type==='reasoning'){let r2=document.getElementById('stream-reasoning');if(!r2){r2=document.createElement('div');r2.className='reasoning';r2.id='stream-reasoning';md.appendChild(r2)}r2.textContent+=d.content}}catch(e){}};evtSource.onerror=function(){btn.disabled=false;btn.textContent='Send';document.getElementById('stream-status').textContent='❌ error'}}
@@ -503,7 +564,8 @@ async function refresh(){let s=await api('node/status');let r=await fetch('/api/
 async function loadChat(){let r=await api('chat');let box=document.getElementById('messages');box.innerHTML='';(r.messages||[]).forEach(m=>{let d=document.createElement('div');d.className='chat-msg';d.innerHTML='<span class=role>'+m.role+': </span><span class=text>'+escapeHTML(m.text)+'</span>';box.appendChild(d)});box.scrollTop=box.scrollHeight}function escapeHTML(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
 // === PTT EVENTS ===
-document.addEventListener('DOMContentLoaded',function(){let ptt=document.getElementById('ptt-btn');if(ptt){ptt.addEventListener('mousedown',startPTT);ptt.addEventListener('mouseup',stopPTT);ptt.addEventListener('mouseleave',stopPTT);ptt.addEventListener('touchstart',function(e){e.preventDefault();startPTT()});ptt.addEventListener('touchend',function(e){e.preventDefault();stopPTT()})}});
+function bindPTT(id){let el=document.getElementById(id);if(!el)return;el.addEventListener('mousedown',startPTT);el.addEventListener('mouseup',stopPTT);el.addEventListener('mouseleave',stopPTT);el.addEventListener('touchstart',function(e){e.preventDefault();startPTT()});el.addEventListener('touchend',function(e){e.preventDefault();stopPTT()})}
+document.addEventListener('DOMContentLoaded',function(){bindPTT('ptt-btn');bindPTT('ptt-main')});
 
 // === CONTACTS ===
 async function loadContacts(){try{let r=await api('contacts');if(!r||!r.contacts)return;let el=document.getElementById('contacts-list');let cnt=document.getElementById('contacts-count');if(cnt)cnt.textContent=r.contacts.length;if(!el)return;el.innerHTML='';r.contacts.forEach(c=>{let g=c.group?' ['+c.group+']':'';el.innerHTML+='<div class=item><span class=l>'+c.nickname+g+'</span><span class=v style="font-size:11px;font-family:mono;color:var(--muted)">'+c.node_id+'</span></div>'})}catch(e){}}
