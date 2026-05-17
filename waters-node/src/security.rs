@@ -4,8 +4,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum ShareScope {
+    #[default]
     Personal,
     Group(String),
     Public,
@@ -21,7 +22,7 @@ pub struct ResourcePolicy {
     pub audit_log: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SharePolicy {
     pub node_id: String,
     pub group_token: String,
@@ -127,7 +128,7 @@ impl PrivacyEngine {
         let policy = SharePolicy::new(node_id, token);
         info!("PrivacyEngine: policy created for group '{}'", group);
         self.policies.insert(group.to_string(), policy);
-        self.policies.get(group).unwrap().clone()
+        self.policies.get(group).cloned().unwrap_or_default()
     }
 
     pub fn list(&self) -> Vec<String> {

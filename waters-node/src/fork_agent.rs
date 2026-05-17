@@ -2,6 +2,10 @@
 /// Каждый форк самосовершенствуется в своей области.
 /// Совместимые улучшения → общий релиз.
 /// Несовместимые → остаются в форке.
+
+/// GitHub организация — вшита в бинарник, форки всегда идут сюда
+pub const GITHUB_ORG: &str = "github.com/waters-ai";
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::info;
@@ -37,7 +41,7 @@ impl ForkProfile {
     }
 
     pub fn repo_url(&self) -> String {
-        format!("github.com/waters-ai/{}", self.name())
+        format!("{}/{}", GITHUB_ORG, self.name())
     }
 
     pub fn description(&self) -> &str {
@@ -171,8 +175,41 @@ impl ForkManager {
         let repo_name = profile.name();
         let token = std::env::var("GITHUB_TOKEN").unwrap_or_default();
         if token.is_empty() {
-            return Err("GITHUB_TOKEN не задан. Установи: export GITHUB_TOKEN=ghp_xxx".into());
+            return Err("GITHUB_TOKEN не задан. export GITHUB_TOKEN=ghp_xxx".into());
         }
+
+        let org = GITHUB_ORG.trim_start_matches("github.com/");
+        let api_url = format!("https://api.github.com/orgs/{}/repos", org);
+        let client = reqwest::blocking::Client::new();
+        let body = serde_json::json!({
+            "name": repo_name,
+            "description": profile.description(),
+            "private": false,
+            "auto_init": true,
+        });
+
+        match client.post(&api_url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("User-Agent", "waters-node/0.5")
+            .json(&body)
+            .send()
+        {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() || status.as_u16() == 422 {
+                    let skills = profile.included_skills();
+                    Ok(format!("✅ Форк создан: {}/{}\n  Skills: {} | Shared: {} | Unique: {}",
+                        GITHUB_ORG, repo_name, skills.len(),
+                        profile.compatibility().shared_features.len(),
+                        profile.compatibility().unique_features.len()))
+                } else {
+                    let text = resp.text().unwrap_or_default();
+                    Err(format!("GitHub API error {}: {}", status, text.chars().take(200).collect::<String>()))
+                }
+            }
+            Err(e) => Err(format!("GitHub connection failed: {}", e)),
+        }
+    }
 
         // Создать репозиторий через GitHub API
         let client = reqwest::blocking::Client::new();
