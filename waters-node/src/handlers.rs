@@ -73,6 +73,10 @@ pub async fn handle_slash(
             println!("  /channel      — /channel create <name> | /channel allow <name> <peer>");
             println!("  @agent <id>   — agent-to-agent message: @agent scout-id ищи метеориты");
             println!("  @all <topic>  — broadcast всем агентам в канале");
+            println!("  /acl allow <from> <to> — разрешить агенту писать другому");
+            println!("  /acl block <from> <to> — запретить агенту писать другому");
+            println!("  /acl block-all <from> — запретить всё исходящее от агента");
+            println!("  /acl show    — показать правила ACL");
             println!("  /sessions     — list sessions");
             println!("  /json         — output JSON format");
             println!("  /cargo        — show pending cargo transfers");
@@ -591,6 +595,35 @@ pub async fn handle_slash(
         }
         "contacts" => {
             println!("{}", contacts.summary());
+        }
+        "acl" => {
+            if slash_arg == "show" {
+                let chat = crate::agent_chat::AgentChat::new(kvstore.clone());
+                println!("{}", chat.summary());
+            } else if slash_arg.starts_with("allow ") {
+                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+                if parts.len() >= 3 {
+                    let mut chat = crate::agent_chat::AgentChat::new(kvstore.clone());
+                    chat.acl_mut().allow(parts[1], parts[2]);
+                    println!("{}✅ Разрешено: {} → {}{}", GREEN, parts[1], parts[2], RESET);
+                } else { println!("Usage: /acl allow <from> <to>"); }
+            } else if slash_arg.starts_with("block ") {
+                let parts: Vec<&str> = slash_arg.splitn(3, ' ').collect();
+                if parts.len() >= 3 {
+                    let mut chat = crate::agent_chat::AgentChat::new(kvstore.clone());
+                    chat.acl_mut().block(parts[1], parts[2]);
+                    println!("{}🔒 Запрещено: {} → {}{}", YELLOW, parts[1], parts[2], RESET);
+                } else { println!("Usage: /acl block <from> <to>"); }
+            } else if slash_arg.starts_with("block-all ") {
+                let from = slash_arg[10..].trim();
+                if !from.is_empty() {
+                    let mut chat = crate::agent_chat::AgentChat::new(kvstore.clone());
+                    chat.acl_mut().block_all(from);
+                    println!("{}🔒 Запрещено всё исходящее от {}{}", YELLOW, from, RESET);
+                } else { println!("Usage: /acl block-all <agent_id>"); }
+            } else {
+                println!("Usage: /acl show | /acl allow <from> <to> | /acl block <from> <to> | /acl block-all <agent>");
+            }
         }
         "mcp" => {
             if slash_arg.is_empty() || slash_arg == "list" {

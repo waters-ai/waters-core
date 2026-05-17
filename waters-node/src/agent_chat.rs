@@ -1,6 +1,152 @@
 use crate::group_chat::GroupChat;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
 use tracing::{info, warn};
+
+// ═══════════════════════════════════════════════════════════════
+// Agent-to-Agent ACL — кто кому может писать
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentAcl {
+    /// Разрешённые пары from→to
+    allowed: HashMap<String, HashSet<String>>,
+    /// Запрещённые пары from→to
+    blocked: HashMap<String, HashSet<String>>,
+    /// По умолчанию: разрешено (true) или запрещено (false)
+    default_allow: bool,
+    path: PathBuf,
+}
+
+impl AgentAcl {
+    pub fn new(data_dir: &Path) -> Self {
+        let path = data_dir.join("agent_acl.json");
+        let (allowed, blocked, default_allow) = if path.exists() {
+            match fs::read_to_string(&path) {
+                Ok(content) => {
+                    if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                        let a = serde_json::from_value(data["allowed"].clone()).unwrap_or_default();
+                        let b = serde_json::from_value(data["blocked"].clone()).unwrap_or_default();
+                        let def = data["default_allow"].as_bool().unwrap_or(true);
+                        (a, b, def)
+                    } else {
+                        (HashMap::new(), HashMap::new(), true)
+                    }
+                }
+                Err(_) => (HashMap::new(), HashMap::new(), true),
+            }
+        } else {
+            (HashMap::new(), HashMap::new(), true)
+        };
+
+        AgentAcl {
+            allowed,
+            blocked,
+            default_allow,
+            path,
+        }
+    }
+
+    /// Разрешить from → to
+    pub fn allow(&mut self, from: &str, to: &str) {
+        self.allowed
+            .entry(from.to_string())
+            .or_default()
+            .insert(to.to_string());
+        self.blocked.entry(from.to_string()).or_default().remove(to);
+        self.save();
+        info!("AgentACL: allowed {} → {}", from, to);
+    }
+
+    /// Запретить from → to
+    pub fn block(&mut self, from: &str, to: &str) {
+        self.blocked
+            .entry(from.to_string())
+            .or_default()
+            .insert(to.to_string());
+        self.allowed.entry(from.to_string()).or_default().remove(to);
+        self.save();
+        info!("AgentACL: blocked {} → {}", from, to);
+    }
+
+    /// Запретить from → все (*)
+    pub fn block_all(&mut self, from: &str) {
+        self.blocked
+            .entry(from.to_string())
+            .or_default()
+            .insert("*".to_string());
+        self.save();
+        warn!("AgentACL: blocked {} → * (all agents)", from);
+    }
+
+    /// Проверить, может ли from отправить to
+    pub fn can_send(&self, from: &str, to: &str) -> bool {
+        // Явный запрет from→to
+        if let Some(blocked) = self.blocked.get(from) {
+            if blocked.contains(to) || blocked.contains("*") {
+                return false;
+            }
+        }
+        // Явное разрешение from→to
+        if let Some(allowed) = self.allowed.get(from) {
+            if allowed.contains(to) || allowed.contains("*") {
+                return true;
+            }
+        }
+        self.default_allow
+    }
+
+    /// Удалить все правила для from
+    pub fn reset(&mut self, from: &str) {
+        self.allowed.remove(from);
+        self.blocked.remove(from);
+        self.save();
+        info!("AgentACL: reset rules for {}", from);
+    }
+
+    pub fn summary(&self) -> String {
+        let mut out = format!(
+            "🔒 Agent ACL (default: {})",
+            if self.default_allow {
+                "✅ разрешено"
+            } else {
+                "❌ запрещено"
+            }
+        );
+        for (from, targets) in &self.allowed {
+            out.push_str(&format!(
+                "\n  ✅ {} → [{}]",
+                from,
+                targets.iter().cloned().collect::<Vec<_>>().join(", ")
+            ));
+        }
+        for (from, targets) in &self.blocked {
+            out.push_str(&format!(
+                "\n  ❌ {} → [{}]",
+                from,
+                targets.iter().cloned().collect::<Vec<_>>().join(", ")
+            ));
+        }
+        out
+    }
+
+    fn save(&self) {
+        if let Some(parent) = self.path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let data = serde_json::json!({
+            "allowed": self.allowed,
+            "blocked": self.blocked,
+            "default_allow": self.default_allow,
+        });
+        let _ = fs::write(
+            &self.path,
+            serde_json::to_string_pretty(&data).unwrap_or_default(),
+        );
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentMessage {
@@ -178,15 +324,31 @@ impl AgentMessage {
 
 pub struct AgentChat {
     kvstore: std::sync::Arc<crate::store::KvStore>,
+    acl: AgentAcl,
 }
 
 impl AgentChat {
     pub fn new(kvstore: std::sync::Arc<crate::store::KvStore>) -> Self {
-        AgentChat { kvstore }
+        let acl = AgentAcl::new(&PathBuf::from(".waters"));
+        AgentChat { kvstore, acl }
     }
 
-    /// Отправить сообщение агенту — без человека в канале
+    pub fn acl(&self) -> &AgentAcl {
+        &self.acl
+    }
+    pub fn acl_mut(&mut self) -> &mut AgentAcl {
+        &mut self.acl
+    }
+
+    /// Отправить сообщение агенту — с проверкой ACL
     pub fn send(&self, msg: &AgentMessage, group_id: u8) -> Result<(), Box<dyn std::error::Error>> {
+        if !self.acl.can_send(&msg.from, &msg.to) {
+            warn!(
+                "AgentACL: BLOCKED {} → {} (no permission)",
+                msg.from, msg.to
+            );
+            return Err("Agent communication blocked by owner ACL".into());
+        }
         let channel_key = format!("agent:{}:{}:{}", msg.channel, msg.from, msg.to);
         let db = if group_id >= 1 && group_id <= 6 {
             group_id
@@ -214,7 +376,7 @@ impl AgentChat {
         group_id: u8,
         _count: u32,
     ) -> Vec<AgentMessage> {
-        let stream_key = format!("agent:{}:{}:*", channel, agent_id);
+        let direct_key = format!("agent:{}:{}:{}", channel, "*", agent_id);
         let db = if group_id >= 1 && group_id <= 6 {
             group_id
         } else {
@@ -222,9 +384,6 @@ impl AgentChat {
         };
         let kv = self.kvstore.select_db(db);
         let mut messages = Vec::new();
-
-        // Читаем напрямую из stream, если ключ известен
-        let direct_key = format!("agent:{}:{}:{}", channel, "*", agent_id);
         if let Ok(Some(data)) = kv.get(&direct_key) {
             if let Some(msg) = AgentMessage::from_json(&data) {
                 messages.push(msg);
@@ -261,7 +420,6 @@ impl AgentChat {
     /// Команда для обработки agent-to-agent сообщений из чата
     pub fn parse_agent_command(input: &str) -> Option<AgentMessage> {
         let input = input.trim();
-        // Формат: @agent <id> <action> [json]
         if let Some(body) = input.strip_prefix("@agent ") {
             let parts: Vec<&str> = body.splitn(3, ' ').collect();
             if parts.len() >= 2 {
@@ -277,7 +435,6 @@ impl AgentChat {
                 ));
             }
         }
-        // Формат: @all <topic> [json] — broadcast
         if let Some(body) = input.strip_prefix("@all ") {
             let parts: Vec<&str> = body.splitn(2, ' ').collect();
             let topic = parts[0];
@@ -292,6 +449,7 @@ impl AgentChat {
     }
 
     pub fn summary(&self) -> String {
-        "🤖 Agent-to-Agent Chat:\n  @agent <id> <action> [json] — послать агенту\n  @all <topic> [json] — broadcast всем".to_string()
+        let acl = &self.acl;
+        format!("{}\n\n{}", acl.summary(), "🤖 @agent <id> <action> [json] — послать агенту\n  @all <topic> [json] — broadcast всем")
     }
 }
