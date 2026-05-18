@@ -1,0 +1,86 @@
+{
+  "topic": "tasks.assigned.v1",
+  "type": "task_assignment",
+  "priority": "P0",
+  "assigned_to": "agent.constructor.v1",
+  "assigned_by": "agent.architect.v1",
+  "timestamp": "2026-05-18T00:00:00Z",
+  "title": "WATERS Node v1.0.0 — три модуля: hybrid_llm, distributed_inference, code_review_pipeline",
+  "summary": "Реализовать три новых модуля поверх существующей архитектуры v0.5.0: гибридная LLM (бортовая GGUF + переключение L0-L4), распределённый инференс (6 нод P2P), конвейер ревью кода (3 агента). Полное ТЗ: docs/technical/TZ_V1.0.0.md",
+  "spec": {
+    "tz_file": "docs/technical/TZ_V1.0.0.md",
+    "spec_json": "docs/technical_spec_v1.json",
+    "old_specs": "docs/waters-node/ (v0.3 — архивировать)"
+  },
+  "phases": [
+    {
+      "id": "P1",
+      "name_ru": "Фундамент — hybrid_llm",
+      "name_en": "Foundation — hybrid_llm",
+      "days": 5,
+      "files": [
+        {"path": "waters-node/src/hybrid_llm.rs", "action": "create", "description_ru": "EdgeEngine (GGUF через llama-cpp-rs/candle), SwitchProtocol (L0-L4), LlmCache (Redis DB 14-15), PrefetchCache, SyncQueue (OfflineQueue), DtnLlmPacket"},
+        {"path": "waters-node/src/main.rs", "action": "modify", "description_ru": "HybridLlm оборачивает BridgePool, инициализация при старте"},
+        {"path": "waters-node/src/autonomy.rs", "action": "modify", "description_ru": "Добавить can_use_edge()"},
+        {"path": "waters-node/src/store.rs", "action": "modify", "description_ru": "Добавить EDGE_CACHE_DB = 14"}
+      ],
+      "dependencies_add": ["llama-cpp-rs or candle", "blake3"]
+    },
+    {
+      "id": "P2",
+      "name_ru": "Распределённый — distributed_inference",
+      "name_en": "Distributed — distributed_inference",
+      "days": 4,
+      "files": [
+        {"path": "waters-node/src/distributed.rs", "action": "create", "description_ru": "DistributedCache (gossip-кеш), DomainRouter (ProfileConfig), TokenPool (DeepSeek Flash API), PipelineParallel (feature-gate)"},
+        {"path": "waters-node/src/gossip.rs", "action": "modify", "description_ru": "Добавить DistGossipMessage в протокол"}
+      ]
+    },
+    {
+      "id": "P3",
+      "name_ru": "Безопасность — code_review_pipeline",
+      "name_en": "Security — code_review_pipeline",
+      "days": 3,
+      "files": [
+        {"path": "waters-node/src/code_review.rs", "action": "create", "description_ru": "CodeSandbox (unshare/docker), 3 SubAgent-а (Programmer, SecurityReviewer, OnboardManager), CodeReviewPipeline"},
+        {"path": "waters-node/src/self_deploy.rs", "action": "modify", "description_ru": "Добавить deploy_with_review()"},
+        {"path": "waters-node/src/yasa_agent.rs", "action": "modify", "description_ru": "Добавить YASA-CMD-6, validate_edge_response()"}
+      ]
+    },
+    {
+      "id": "P4",
+      "name_ru": "Интеграция и тесты",
+      "name_en": "Integration and Tests",
+      "days": 3,
+      "files": [
+        {"path": "waters-node/src/main.rs", "action": "modify", "description_ru": "Полная интеграция всех трёх модулей"},
+        {"path": "tests/scenarios.rs", "action": "create", "description_ru": "5 тестов по сценариям"}
+      ]
+    }
+  ],
+  "do_not_touch": [
+    "waters-node/src/a2a.rs",
+    "waters-node/src/mcp_store.rs",
+    "waters-node/src/media_bridge.rs",
+    "waters-node/src/voice*",
+    "waters-node/src/tamagotchi.rs",
+    "waters-node/src/yasa_agent.rs (кроме YASA-CMD-6)"
+  ],
+  "acceptance_criteria": [
+    "EdgeEngine <500ms на RPi4 (модель 1.5B GGUF Q4_K_M)",
+    "L0→L2 переключение <100ms (детекция потери пакетов)",
+    "DistributedCache поиск по 6 нодам <200ms",
+    "PipelineParallel latency ≤ ×3 от локального инференса",
+    "CodeReviewPipeline: 2/3 Approve → AutoDeploy",
+    "CodeSandbox блокирует rm -rf /",
+    "Бинарник <20MB (GGUF файл — отдельно)",
+    "Все 36 существующих тестов проходят"
+  ],
+  "language": {
+    "docs": ["ru", "en", "zh"],
+    "yasa_required": true,
+    "yasa_cmd_6": "Проверяй бортовую LLM — ответ может быть неточным без связи"
+  },
+  "order": "После завершения текущих задач v0.5.0. 15 дней на реализацию.",
+  "report_format": "После каждой фазы: коммит(ы) в waters-ai/waters-core, diffstat, тесты, отклонения от ТЗ."
+}

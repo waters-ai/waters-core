@@ -199,6 +199,152 @@ pub fn convert_tui_to_our(tui_path: &Path) -> Result<SkillManifest>
 
 ---
 
+## 7.5. DTN Cargo Protocol: три протокола обмена между нодами с переменной связью
+
+Когда домашняя нода (переменный IP, периодические сеансы связи) соединяется с
+хаб-нодой (постоянный IP, всегда онлайн), образуется классический DTN-канал с
+задержками и разрывами. В такой топологии работают три протокола:
+
+```
+                  ┌──────────┐         прерывистый         ┌──────────┐
+                  │ НОДА-ДОМ  │ ◄────── DTN-канал ──────►  │ НОДА-ХАБ │
+                  │ is_home   │     (TCP при сеансе)       │ fixed_ip │
+                  │ = true    │                             │ = true   │
+                  └──────────┘                             └──────────┘
+```
+
+### 7.5.1. Agent Cargo — телепортация агента между нодами
+
+**Назначение:** переместить агента со скиллами и состоянием с одной ноды на
+другую — как «отправить посылку в космос».
+
+**Два режима:**
+
+| Режим | Канал | Состав | Размер |
+|-------|-------|--------|--------|
+| `Full` | > 1 Mbps | Скиллы + память + журнал + состояние | ~MB |
+| `Lite` | < 1 Mbps | Только манифест + скиллы (без памяти) | ~KB |
+
+**Два handshake-флоу:**
+
+```
+Push (отправитель инициирует):
+  Sender                         Receiver
+    │                               │
+    ├── OFFER(manifest, mode) ──────▶  "прими агента X в режиме Full"
+    │                               │  (receiver: проверить ресурсы, бриджи)
+    │◀──── ACK(accepted/rejected) ──┤
+    │         или ACK(Lite)         │  "ок" / "нет" / "давай Lite"
+    │                               │
+    ├── SEND(cargo_payload) ────────▶  передача (чанками при необходимости)
+    │                               │
+    │◀──── CONFIRM(landed) ──────────┤  "агент распакован, работает"
+    │                               │
+
+Pull (получатель запрашивает):
+  Sender                         Receiver
+    │                               │
+    │◀──── REQUEST(agent, mode) ─────┤  "пришли агента X в Lite"
+    │                               │
+    ├── OFFER(manifest, mode) ──────▶│
+    │                               │
+    ├── SEND(payload) ──────────────▶│
+    │                               │
+    │◀──── CONFIRM(landed) ──────────┤
+```
+
+**Чанкование:** при узком канале весь cargo разбивается на `CargoChunk`,
+каждый чанк передаётся отдельным gossip-сообщением. При обрыве сеанса —
+resume с последнего подтверждённого чанка.
+
+**Состояния Cargo (state machine):**
+
+```
+OfferSent → AcceptancePending → Transferring → Landed
+                                       ↓
+                                TransferPaused → Transferring (resume)
+                                             ↘ Expired
+
+RequestSent → AwaitingSend → Transferring → Landed
+```
+
+### 7.5.2. Task Sync — синхронизация заданий и отчётов
+
+**Назначение:** при установлении сеанса связи — двусторонняя синхронизация
+очередей задач и отчётов.
+
+```
+Sync Session:
+  Нода-дом ──▶ Хаб:  { reports: [r1, r2], status: {agent_x: done} }
+  Хаб ──▶ Нода-дом:  { new_tasks: [t3, t4], group_update: {mode: hunt} }
+```
+
+**Протокол:**
+- `sync.start` — инициация сеанса, seq последней синхронизации
+- `sync.data` — передача diff (только то, что изменилось с last_seq)
+- `sync.ack` — подтверждение приёма
+
+**Разрешение конфликтов:** приоритет у хаба (ноды с `fixed_ip=true`),
+если обе ноды изменили один и тот же ресурс.
+
+### 7.5.3. Result-Exchange — только обмен результатами
+
+**Назначение:** минимальный протокол для коротких сеансов связи
+(< 100 Kbps, < 30 сек). Только findings, без задач и состояния агентов.
+
+```
+Minimal Session:
+  Нода-дом ──▶ Хаб:  { findings: [{type: meteorite, loc: x,y}...] }
+  Хаб ──▶ Нода-дом:  { ack: true, received: 42 }
+```
+
+**Протокол:**
+- `xchange.data` — пачка findings (без сериализации агента)
+- `xchange.ack` — подтверждение количества принятых записей
+- Никакой state machine, никакого разрешения конфликтов
+
+### 7.5.4. Интеграция с gossip и convo
+
+Новые сообщения в gossip:
+- `cargo.offer`, `cargo.ack`, `cargo.send`, `cargo.confirm` — Push-флоу
+- `cargo.request` — Pull-флоу
+- `cargo.chunk` — чанкованная передача
+- `sync.start`, `sync.data`, `sync.ack` — синхронизация
+- `xchange.data`, `xchange.ack` — обмен результатами
+
+**Чат-аппрув** (через convo.rs):
+```
+📦 Входящий груз: агент "scout-us" (Lite)
+    Отправитель: node-5 (192.168.1.5)
+    Миссия: "search-meteorites"
+    Нужны бриджи: [duckduckgo]
+
+    > Принять? (да/нет)
+    > Если да: Full или Lite?
+```
+
+### 7.5.5. Модель ноды для DTN
+
+Два новых поля в `NodeIdentity`:
+
+```rust
+pub struct NodeIdentity {
+    // ... существующие поля ...
+    pub is_home_node: bool,   // нода с переменным IP
+    pub fixed_ip: bool,       // нода с постоянным IP
+}
+```
+
+Новый модуль `cargo.rs` содержит:
+- `CargoMode` (Full | Lite)
+- `CargoStatus` — state machine (10 состояний)
+- `AgentCargo`, `CargoManifest`, `AgentSnapshot` — структуры груза
+- `CargoChunk` — для чанкования
+- `SyncSession`, `TaskReport`, `TaskAssignment` — синхронизация
+- `ResultExchange`, `Finding` — обмен результатами
+- `CargoGossipMessage` — enum всех gossip-сообщений для доставки
+- `CargoEngine` — управление очередями, проверка TTL
+
 ## 8. Структура модулей v0.3 (с изменениями)
 
 ```
@@ -226,7 +372,8 @@ waters-node/src/
 ├── api.rs           # ⚡ Есть: +event stream (P1)
 ├── mcp.rs           # ✅ Есть: MCP client
 ├── autonomy.rs      # ✅ Есть: L0-L4
-├── dtn.rs           # ✅ Есть: DTN
+├── cargo.rs         # 🔴 НОВЫЙ: agent cargo + task sync + result exchange (P1)
+├── dtn.rs           # ✅ Есть: DTN (обновить: приоритетная очередь для cargo)
 ├── journal.rs       # ⚡ Есть: +per-task journal (P1)
 ├── store.rs         # ✅ Есть: Redis (feature-gated)
 ├── kafka.rs         # ⚡ Есть: +military mode (P2)

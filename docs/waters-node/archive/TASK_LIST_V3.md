@@ -90,6 +90,251 @@ pub fn flush_offline_queue() -> Result<Vec<JournalEntry>>;
 
 ---
 
+## Фаза 1.3: Agent Cargo Protocol (P1, ~2 дня)
+
+### Задача 1.3.1: Модели данных Cargo/Sync/Exchange
+
+**Файл:** `cargo.rs` (новый)
+
+**Что нужно:** Создать модуль cargo.rs со всеми типами данных для трёх протоколов.
+
+**Ключевые структуры:**
+
+```rust
+// Режимы передачи агента
+pub enum CargoMode { Full, Lite }
+
+// State machine груза
+pub enum CargoStatus {
+    OfferSent, OfferRejected, AcceptancePending,
+    Transferring, TransferPaused, Landed, Recalled, Expired,
+    RequestSent, AwaitingSend,
+}
+
+// Манифест груза
+pub struct CargoManifest {
+    pub agent_name: String,
+    pub skills: Vec<String>,
+    pub mode: CargoMode,
+    pub required_bridges: Vec<String>,
+    pub mission: String,
+    pub sender_node: String,
+}
+
+// Снэпшот агента для передачи
+pub struct AgentSnapshot {
+    pub name: String,
+    pub skills: Vec<SkillSnapshot>,
+    pub memory: Option<Vec<u8>>,       // только при Full
+    pub journal: Vec<CargoJournalEntry>,
+    pub state: HashMap<String, String>,
+}
+
+// Груз = манифест + payload
+pub struct AgentCargo {
+    pub cargo_id: String,
+    pub manifest: CargoManifest,
+    pub payload: AgentSnapshot,
+    pub ttl_secs: u64,
+    pub reply_to: String,
+    pub created_at: String,
+}
+
+// Чанк для узких каналов
+pub struct CargoChunk {
+    pub cargo_id: String,
+    pub seq: u32,
+    pub total: u32,
+    pub data: Vec<u8>,
+    pub checksum: u32,
+}
+
+// Синхронизация задач и отчётов
+pub struct SyncSession {
+    pub session_id: String,
+    pub last_seq: u64,
+    pub reports: Vec<TaskReport>,
+    pub new_tasks: Vec<TaskAssignment>,
+    pub status_updates: Vec<AgentStatusUpdate>,
+}
+
+// Обмен только результатами
+pub struct ResultExchange {
+    pub session_id: String,
+    pub source_node: String,
+    pub findings: Vec<Finding>,
+}
+
+// Все gossip-сообщения для cargo
+pub enum CargoGossipMessage {
+    CargoOffer { .. }, CargoAck { .. }, CargoSend { .. },
+    CargoConfirm { .. }, CargoRequest { .. }, CargoChunkMsg { .. },
+    SyncStart { .. }, SyncData { .. }, SyncAck { .. },
+    XchangeData { .. }, XchangeAck { .. },
+}
+```
+
+**Также:** `CargoEngine` — менеджер очередей с методами push/accept/reject/expire,
+проверкой TTL, списком активных грузов.
+
+**Критерий приёмки:**
+- Все структуры сериализуются в JSON/bincode
+- CargoStatus.is_terminal() корректно определяет конечные состояния
+- CargoEngine::expire() освобождает память по TTL
+- Тест: pack → unpack → идентичность
+
+### Задача 1.3.2: Push/Pull handshake через gossip
+
+**Файлы:** `cargo.rs`, `gossip.rs`
+
+**Что нужно:** Реализовать два handshake-флоя:
+
+**Push (отправитель инициирует):**
+```
+Sender: OFFER(manifest, mode) → Receiver
+Receiver: ACK(accepted/rejected/mode_override) → Sender
+Sender: SEND(AgentCargo) → Receiver
+Receiver: CONFIRM(landed) → Sender
+```
+
+**Pull (получатель запрашивает):**
+```
+Receiver: REQUEST(agent_name, mode) → Sender
+Sender: OFFER(manifest, mode) → Receiver
+Sender: SEND(AgentCargo) → Receiver
+Receiver: CONFIRM(landed) → Sender
+```
+
+Новые event-типы в gossip:
+- `cargo.offer`, `cargo.ack`, `cargo.send`, `cargo.confirm`
+- `cargo.request`
+
+**Критерий приёмки:**
+- Push-флоу: агент уходит с ноды A на ноду B
+- Pull-флоу: агент запрашивается с ноды B у ноды A
+- При отказе → статус OfferRejected, груз не уходит
+- При переопределении режима (ACK(Lite) вместо Full) → отправляется Lite
+
+### Задача 1.3.3: Чанкование и resume
+
+**Файл:** `cargo.rs`
+
+**Что нужно:** При большом размере AgentCargo (> ноего порога, напр. 100 KB)
+автоматически разбивать на CargoChunk и передавать чанками.
+
+```rust
+pub fn chunkify(cargo: &AgentCargo, max_size: usize) -> Vec<CargoChunk>;
+pub fn dechunkify(chunks: &[CargoChunk]) -> Result<AgentCargo>;
+```
+
+При обрыве сеанса: получатель помнит, какие seq получил.
+При новом сеансе: отправитель шлёт только недостающие чанки.
+
+**Критерий приёмки:**
+- Chunk → dechunk → совпадает с оригиналом
+- Checksum каждого чанка валидируется
+- При потере 2 из 10 чанков — досылаются только 2
+- Resume: после TransferPaused → Transferring с last_good_seq+1
+
+### Задача 1.3.4: Sync и Result-Exchange протоколы
+
+**Файлы:** `cargo.rs`, `gossip.rs`
+
+**Что нужно:**
+
+**Task Sync** (двусторонняя):
+- `sync.start` — инициация с last_seq
+- `sync.data` — diff-пакет (только новые/изменённые записи)
+- `sync.ack` — подтверждение
+- Разрешение конфликтов: приоритет у ноды с fixed_ip=true
+
+**Result-Exchange** (односторонняя, findings only):
+- `xchange.data` — пачка findings
+- `xchange.ack` — количество принятых записей
+- Без state machine, без чанкования, без seq
+
+**Критерий приёмки:**
+- Sync: после сеанса обе ноды имеют одинаковые seq
+- Sync: конфликт разрешается в пользу fixed_ip
+- Xchange: findings отправлены и подтверждены за один сеанс
+- Xchange: размер сообщения < 100 KB
+
+### Задача 1.3.5: Чат-аппрув для входящих Offer/Request
+
+**Файлы:** `convo.rs`, `cargo.rs`
+
+**Что нужно:** Когда нода получает `cargo.offer` или `cargo.request`,
+в чат приходит сообщение с запросом подтверждения:
+
+```
+📦 Входящий груз: агент "scout-us" (Lite)
+    Отправитель: node-5 (192.168.1.5)
+    Размер: 142 KB (2 чанка)
+    Миссия: "search-meteorites"
+    Нужны бриджи: [duckduckgo]
+
+    > Принять? (да/нет)
+    > Если да: Full или Lite?
+```
+
+Ответ "да" (с опциональным переопределением режима) → ACK(accepted).
+Ответ "нет" → ACK(rejected).
+
+**Критерий приёмки:**
+- При получении `cargo.offer` → сообщение в чат
+- Ответ "да" → запускается Transferring
+- Ответ "нет" → статус OfferRejected, отправитель уведомлён
+- Ответ "Lite" на Full-offer → отправляется Lite-версия
+
+### Задача 1.3.6: Интеграция с NodeIdentity
+
+**Файл:** `node.rs`
+
+**Что нужно:** Два новых поля:
+
+```rust
+pub struct NodeIdentity {
+    // ... существующие поля ...
+    pub is_home_node: bool,    // нода с переменным IP
+    pub fixed_ip: bool,        // нода с постоянным IP
+    pub cargo_sent: u64,
+    pub cargo_received: u64,
+    pub cargo_pending: u64,
+    pub last_sync_seq: u64,
+}
+```
+
+- `is_home_node` и `fixed_ip` — из config.toml или CLI-флага
+- `cargo_*` — счётчики для мониторинга
+- `last_sync_seq` — для resume синхронизации
+
+Также обновить announce-сообщение: публиковать cargo-статистику.
+
+**Критерий приёмки:**
+- cargo_* счётчики увеличиваются при отправке/приёме
+- `is_home_node` и `fixed_ip` отображаются в `/status`
+- announce включает cargo-поля
+
+### Задача 1.3.7: Интеграция с DTN-очередью
+
+**Файл:** `dtn.rs`
+
+**Что нужно:** Добавить приоритетную очередь для cargo-сообщений.
+Обычный gossip-трафик имеет низкий приоритет, cargo — высокий.
+
+```rust
+pub fn enqueue_cargo(msg: CargoGossipMessage);
+pub fn dequeue_next() -> Option<CargoGossipMessage>;
+// cargo всегда выбирается первым, gossip — когда cargo пуст
+```
+
+**Критерий приёмки:**
+- При одновременной отправке cargo + gossip → cargo уходит первым
+- Обрыв соединения: cargo остаётся в очереди, не теряется
+- После восстановления: cargo досылается с последнего чанка
+
+---
+
 ## Фаза 2: Bridges Config + Group Resources (P0, ~2 дня)
 
 ### Задача 2.1: MCP Bridges Config
@@ -300,11 +545,14 @@ pub fn read_errors(agent_id: &str, since: &DateTime<Utc>) -> Vec<JournalEntry>;
 ## Порядок выполнения
 
 ```
-День 1-2:  Задача 1.1 (Streaming) + Задача 1.2 (Crash Recovery)
-День 3-4:  Задача 2.1 (Bridges Config) + Задача 2.2 (Group Resources)
-День 5:    Задача 3.1 (Chat Approval) + Задача 3.2 (Task Binding)
-День 6-7:  Задача 4.1 (Personal Agents) + Задача 4.2 (Journal)
-День 8-9:  Задача 5.1 (Event Stream) + Задача 5.2 (Kafka)
+День 1-2:   Задача 1.1 (Streaming) + Задача 1.2 (Crash Recovery)
+День 3-4:   Задача 1.3.1 (Cargo Models) + Задача 1.3.2 (Handshake)
+День 5:     Задача 1.3.3 (Chunking) + Задача 1.3.4 (Sync & Xchange)
+День 6:     Задача 1.3.5 (Chat Approval) + Задача 1.3.6 (NodeIdentity) + Задача 1.3.7 (DTN Queue)
+День 7-8:   Задача 2.1 (Bridges Config) + Задача 2.2 (Group Resources)
+День 9:     Задача 3.1 (Chat Approval) + Задача 3.2 (Task Binding)
+День 10-11: Задача 4.1 (Personal Agents) + Задача 4.2 (Journal)
+День 12-13: Задача 5.1 (Event Stream) + Задача 5.2 (Kafka)
 ```
 
 Каждый день:
@@ -319,9 +567,12 @@ pub fn read_errors(agent_id: &str, since: &DateTime<Utc>) -> Vec<JournalEntry>;
 
 - [ ] Streaming LLM: токены приходят по одному, отмена работает
 - [ ] Crash recovery: kill -9 не теряет данные
+- [ ] Agent Cargo: Full/Lite, Push/Pull, чанкование, resume
+- [ ] Task Sync: двусторонняя синхронизация, разрешение конфликтов
+- [ ] Result Exchange: findings-only протокол для узких каналов
+- [ ] Chat approval cargo: входящие Offer/Request через чат
 - [ ] Bridges config: JSON-файл, статус ✅/⬜ в `/bridges`
 - [ ] Group resources: группа усиливает качественное направление
-- [ ] Chat approval: входящие подключения через чат
 - [ ] Per-task resources: у каждой задачи свои бриджи и базы
 - [ ] Personal agents: агент использует личные ресурсы ноды
 - [ ] Agent journal: per-task, фильтры по level

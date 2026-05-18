@@ -1,0 +1,129 @@
+{
+  "meta": {
+    "title_ru": "WATERS Node v1.0.0 — Техническая спецификация",
+    "title_en": "WATERS Node v1.0.0 — Technical Specification",
+    "title_zh": "WATERS Node v1.0.0 — 技术规范",
+    "version": "1.0.0",
+    "date": "2026-05-18",
+    "author": "agent.architect.v1",
+    "status": "утверждено",
+    "format": "yasa_technical_v2"
+  },
+  "modules": [
+    {
+      "code": "HYBRID_LLM",
+      "title_ru": "Гибридная LLM",
+      "title_en": "Hybrid LLM",
+      "title_zh": "混合 LLM",
+      "file": "waters-node/src/hybrid_llm.rs",
+      "dependencies": ["llama-cpp-rs", "candle", "blake3"],
+      "interfaces": [
+        {
+          "name": "HybridLlm::query(prompt, mode) -> Result<String>",
+          "description_ru": "Основная точка входа, заменяет bridge_pool.call()",
+          "description_en": "Main entry point, replaces bridge_pool.call()"
+        },
+        {
+          "name": "HybridLlm::prefetch_for(scenario) -> Result<()>",
+          "description_ru": "Упреждающая загрузка ответов",
+          "description_en": "Prefetch responses for likely scenarios"
+        },
+        {
+          "name": "HybridLlm::sync_after_reconnect() -> Result<SyncReport>",
+          "description_ru": "Синхронизация офлайн-очереди при восстановлении связи",
+          "description_en": "Sync offline queue on reconnection"
+        }
+      ],
+      "switch_protocol": {
+        "L0": "Remote + validate",
+        "L1": "Remote + fallback",
+        "L2": "Edge on simple, queue on complex",
+        "L3": "Edge only + DTN log",
+        "L4": "SOS only"
+      }
+    },
+    {
+      "code": "DISTRIBUTED_INFERENCE",
+      "title_ru": "Распределённый инференс",
+      "title_en": "Distributed Inference",
+      "title_zh": "分布式推理",
+      "file": "waters-node/src/distributed.rs",
+      "submodes": [
+        {
+          "code": "REDIS_CACHE",
+          "title_ru": "Распределённый кеш",
+          "title_en": "Distributed Cache",
+          "max_latency_ms": 200,
+          "hit_rate_target": 80
+        },
+        {
+          "code": "PIPELINE_PARALLEL",
+          "title_ru": "Конвейерный параллелизм",
+          "title_en": "Pipeline Parallelism",
+          "feature_gate": "pipeline-parallel",
+          "latency_multiplier": 3
+        },
+        {
+          "code": "TOKEN_FEDERATION",
+          "title_ru": "Федерация токенов",
+          "title_en": "Token Federation",
+          "provider": "DeepSeek Flash API"
+        },
+        {
+          "code": "DOMAIN_SPEC",
+          "title_ru": "Доменная специализация",
+          "title_en": "Domain Specialization",
+          "source": "ProfileConfig.llm_model"
+        }
+      ]
+    },
+    {
+      "code": "CODE_REVIEW",
+      "title_ru": "Конвейер ревью кода",
+      "title_en": "Code Review Pipeline",
+      "title_zh": "代码审查管道",
+      "file": "waters-node/src/code_review.rs",
+      "agents": [
+        {
+          "role": "Programmer",
+          "task_ru": "Пишет код + тесты",
+          "task_en": "Writes code and tests"
+        },
+        {
+          "role": "Security Reviewer",
+          "task_ru": "Проверяет YASA + OWASP",
+          "task_en": "Checks YASA + OWASP"
+        },
+        {
+          "role": "Onboard Manager",
+          "task_ru": "Оценивает RAM/CPU/compat",
+          "task_en": "Evaluates RAM/CPU/compat"
+        }
+      ],
+      "voting": {
+        "both_approve": "AutoDeploy",
+        "one_reject": "EscalateToOwner",
+        "both_reject": "Blocked"
+      }
+    }
+  ],
+  "migration": {
+    "phases": [
+      {"name_ru": "Фундамент", "name_en": "Foundation", "days": 5, "order": 1},
+      {"name_ru": "Распределённый", "name_en": "Distributed", "days": 4, "order": 2},
+      {"name_ru": "Безопасность", "name_en": "Security", "days": 3, "order": 3},
+      {"name_ru": "Интеграция", "name_en": "Integration", "days": 3, "order": 4}
+    ],
+    "total_days": 15,
+    "binary_size_mb": 20,
+    "tests_existing": 36
+  },
+  "edge_llm_table": [
+    {"sector_ru": "Агрономия", "sector_en": "Agriculture", "model": "qwen2.5-3b-q4_k_m.gguf", "ram_gb": 4, "device": "RPi4/Jetson"},
+    {"sector_ru": "Доставка", "sector_en": "Delivery", "model": "tinylama-1.1b-q4_k_m.gguf", "ram_gb": 2, "device": "Jetson Nano"},
+    {"sector_ru": "Дом", "sector_en": "Home", "model": "qwen2.5-3b-q4_k_m.gguf", "ram_gb": 4, "device": "RPi4/PC"},
+    {"sector_ru": "Туризм", "sector_en": "Tourism", "model": "tinylama-1.1b-q4_k_m.gguf", "ram_gb": 2, "device": "Smartphone"},
+    {"sector_ru": "Медицина", "sector_en": "Health", "model": "qwen2.5-3b-q4_k_m.gguf", "ram_gb": 4, "device": "RPi4"},
+    {"sector_ru": "Универсальный", "sector_en": "Fallback", "model": "qwen2.5-1.5b-q4_k_m.gguf", "ram_gb": 2, "device": "Any"}
+  ]
+}
