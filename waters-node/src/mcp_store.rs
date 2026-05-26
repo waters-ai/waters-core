@@ -218,8 +218,8 @@ impl McpStore {
                                             });
                                         }
                                     }
-                }
-            }
+                                }
+                            }
                             info!("McpStore: fetched {} skills from {}", results.len(), tap);
                             return Some(results);
                         }
