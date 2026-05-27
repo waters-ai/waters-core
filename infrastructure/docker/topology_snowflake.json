@@ -1,0 +1,251 @@
+{
+  "schema_version": "1.0",
+  "name": "Docker Topology — WATERS Снежинка v0.6.0",
+  "scenario": "snowflake",
+  "cost_estimate_usd": "350+/мес",
+  "phase": "0 (Зарождение)",
+  "description": "Первая схема развертывания сети WATERS 'Снежинка' с 6 узлами + Центром Познания (Beacon)",
+  "beacon": {
+    "name": "WATERS Beacon (Центр Познания)",
+    "ip": "203.0.113.10",
+    "purpose": "Координационный центр сети, хранение глобального состояния и метаданных",
+    "services": {
+      "broker": {
+        "name": "Apache Kafka (KRaft)",
+        "image": "apache/kafka:latest",
+        "nodes": 3,
+        "ports": ["9092:9092", "9093:9093"],
+        "volumes": ["beacon-kafka-data:/var/lib/kafka/data"],
+        "environment": {
+          "KAFKA_PROCESS_ROLES": "broker,controller",
+          "KAFKA_NODE_ID": "1",
+          "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@beacon:9093,2@node-1:9093,3@node-2:9093",
+          "KAFKA_LISTENERS": "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093",
+          "KAFKA_ADVERTISED_LISTENERS": "PLAINTEXT://203.0.113.10:9092",
+          "KAFKA_AUTO_CREATE_TOPICS_ENABLE": "true",
+          "CLUSTER_ID": "waters-kafka-cluster-beacon"
+        }
+      },
+      "cache": {
+        "name": "Redis Sentinel",
+        "image": "redis:7-alpine",
+        "nodes": 3,
+        "ports": ["6379:6379"],
+        "volumes": ["beacon-redis-data:/data"],
+        "command": "redis-sentinel /sentinel/sentinel.conf",
+        "environment": {
+          "SENTIAL_MASTER_NAME": "mymaster",
+          "SENTIAL_QUORUM": "2"
+        }
+      },
+      "vector_db": {
+        "name": "ChromaDB",
+        "image": "chromadb/chroma:latest",
+        "nodes": 1,
+        "ports": ["8000:8000"],
+        "volumes": ["beacon-chroma-data:/chroma/chroma"],
+        "environment": {
+          "ALLOW_RESET": "true",
+          "IS_PERSISTENT": "true"
+        }
+      },
+      "graph_db": {
+        "name": "Neo4j",
+        "image": "neo4j:latest",
+        "nodes": 1,
+        "ports": ["7474:7474", "7687:7687"],
+        "volumes": [
+          "beacon-neo4j-data:/data",
+          "beacon-neo4j-logs:/logs"
+        ],
+        "environment": {
+          "NEO4J_AUTH": "neo4j/waters2026",
+          "NEO4J_ACCEPT_LICENSE_AGREEMENT": "yes"
+        }
+      },
+      "struct_db": {
+        "name": "TypeDB Cluster",
+        "image": "vaticle/typedb-cluster:latest",
+        "nodes": 3,
+        "ports": ["1729:1729"],
+        "volumes": ["beacon-typedb-data:/typedb/data"],
+        "environment": {
+          "TYPEDB_CLUSTER_SERVER_NETWORK_INTERFACE": "0.0.0.0",
+          "TYPEDB_CLUSTER_SERVER_NETWORK_PORT": "1729",
+          "TYPEDB_CLUSTER_LICENSE_PATH": "/typedb/license.xml"
+        }
+      },
+      "multimodal": {
+        "name": "ImageBind",
+        "type": "gpu",
+        "nodes": 1,
+        "purpose": "Мультимодальные эмбеддинги (GPU-режим для центра познания)",
+        "environment": {
+          "CUDA_VISIBLE_DEVICES": "0"
+        }
+      },
+      "opencode": {
+        "name": "OpenCode Beacon",
+        "instances": 1,
+        "purpose": "Экземпляр для координации сети и мета-задач",
+        "agent_type": "beacon-coordinator"
+      }
+    }
+  },
+  "nodes": {
+    "node-1": {
+      "name": "WATERS Node-1 (Ангел - Carbon)",
+      "ip": "203.0.113.11",
+      "purpose": "Узел исполнения агентов Архитектора и Конструктора",
+      "services": {
+        "opencode": {
+          "name": "OpenCode Node-1",
+          "instances": 2,
+          "purpose": "Экземпляры для агентов Архитектора и Конструктора",
+          "agent_types": ["architect", "constructor"]
+        }
+      }
+    },
+    "node-2": {
+      "name": "WATERS Node-2 (Ангел - Carbon)",
+      "ip": "203.0.113.12",
+      "purpose": "Узел исполнения агентов Интегратора и Директора по Смыслу",
+      "services": {
+        "opencode": {
+          "name": "OpenCode Node-2",
+          "instances": 2,
+          "purpose": "Экземпляры для агентов Интегратора и Директора по Смыслу",
+          "agent_types": ["integrator", "meaning"]
+        }
+      }
+    },
+    "node-3": {
+      "name": "WATERS Node-3 (Ангел - Carbon)",
+      "ip": "203.0.113.13",
+      "purpose": "Узел исполнения агентов Законодателя и Хранителя",
+      "services": {
+        "opencode": {
+          "name": "OpenCode Node-3",
+          "instances": 2,
+          "purpose": "Экземпляры для агентов Законодателя и Хранителя",
+          "agent_types": ["lawkeeper", "keeper"]
+        }
+      }
+    },
+    "node-4": {
+      "name": "WATERS Node-4 (Ангел - Silicon)",
+      "ip": "203.0.113.14",
+      "purpose": "Узел специализированных вычислений и мультимедиа обработки",
+      "services": {
+        "multimodal": {
+          "name": "SigLIP",
+          "type": "cpu",
+          "nodes": 1,
+          "purpose": "Мультимодальные эмбеддинги (оптимизированный CPU-режим)"
+        },
+        "opencode": {
+          "name": "OpenCode Node-4",
+          "instances": 1,
+          "purpose": "Экземпляр для мультимедиа агентов",
+          "agent_types": ["media-specialist"]
+        }
+      }
+    },
+    "node-5": {
+      "name": "WATERS Node-5 (Серафим - Carbon)",
+      "ip": "203.0.113.15",
+      "purpose": "Узел высокой доступности и резервного копирования",
+      "services": {
+        "cache": {
+          "name": "Redis Replica",
+          "image": "redis:7-alpine",
+          "nodes": 2,
+          "ports": ["6379:6379"],
+          "volumes": ["node-5-redis-data:/data"],
+          "command": "redis-server --replicaof beacon 6379"
+        },
+        "opencode": {
+          "name": "OpenCode Node-5",
+          "instances": 1,
+          "purpose": "Экземпляр для мониторинга и резервирования",
+          "agent_types": ["reliability-engineer"]
+        }
+      }
+    },
+    "node-6": {
+      "name": "WATERS Node-6 (Серафим - Silicon)",
+      "ip": "203.0.113.16",
+      "purpose": "Узел ускорения ИИ вычислений и специализированных задач",
+      "services": {
+        "multimodal": {
+          "name": "CLIP Accelerator",
+          "type": "gpu",
+          "nodes": 1,
+          "purpose": "Мультимодальные эмбеддинги (GPU-ускорение)",
+          "environment": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          }
+        },
+        "vector_db": {
+          "name": "Qdrant",
+          "image": "qdrant/qdrant:latest",
+          "nodes": 1,
+          "ports": ["6333:6333"],
+          "volumes": ["node-6-qdrant-data:/qdrant/storage"],
+          "environment": {
+            "QDRANT__SERVICE__GRPC__PORT": "6334"
+          }
+        },
+        "opencode": {
+          "name": "OpenCode Node-6",
+          "instances": 1,
+          "purpose": "Экземпляр для ИИ-агентов и исследовательских задач",
+          "agent_types": ["ai-researcher"]
+        }
+      }
+    }
+  },
+  "networks": {
+    "waters-net": {
+      "driver": "bridge",
+      "subnet": "172.20.0.0/16",
+      "ipam": {
+        "config": [
+          {
+            "subnet": "172.20.0.0/16",
+            "gateway": "172.20.0.1"
+          }
+        ]
+      }
+    }
+  },
+  "volumes": {
+    "beacon-kafka-data": null,
+    "beacon-redis-data": null,
+    "beacon-chroma-data": null,
+    "beacon-neo4j-data": null,
+    "beacon-neo4j-logs": null,
+    "beacon-typedb-data": null,
+    "node-5-redis-data": null,
+    "node-6-qdrant-data": null
+  },
+  "topics": {
+    "hivemind": [
+      "planners.questions.v1",
+      "planners.answers.v1",
+      "planners.presentations.v1",
+      "planners.meeting.v1",
+      "metrics.raw.v1",
+      "metrics.kpi.v1",
+      "agent.events.v1",
+      "node.status.v1",
+      "sync.global.v1"
+    ]
+  },
+  "node_roles": {
+    "angel-carbon": ["node-1", "node-2", "node-3"],
+    "angel-silicon": ["node-4"],
+    "seraphim-carbon": ["node-5"],
+    "seraphim-silicon": ["node-6"]
+  }
+}

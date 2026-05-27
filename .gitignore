@@ -11,3 +11,7 @@
 .env
 .env.*
 !.env.example
+
+# WATERS Node v0.6.0 documentation (server-only, not for Git)
+docs/waters-node-v0.6.0-quantum-spec.md
+docs/waters-node-v0.6.0-quantum-spec-detailed.md
