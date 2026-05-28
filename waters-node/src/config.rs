@@ -14,6 +14,30 @@ pub struct Config {
     pub ollama: Option<OllamaConfig>,
     #[serde(default)]
     pub kafka: Option<KafkaConfig>,
+    #[serde(default)]
+    pub edge: Option<EdgeConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct EdgeConfig {
+    #[serde(default = "default_edge_model_path")]
+    pub model_path: String,
+    #[serde(default = "default_edge_n_threads")]
+    pub n_threads: usize,
+    #[serde(default = "default_edge_n_ctx")]
+    pub n_ctx: usize,
+}
+
+fn default_edge_model_path() -> String {
+    "/models/llama-2-7b-chat.gguf".into()
+}
+
+fn default_edge_n_threads() -> usize {
+    4
+}
+
+fn default_edge_n_ctx() -> usize {
+    2048
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,6 +77,7 @@ impl Default for Config {
             redis: None,
             ollama: None,
             kafka: None,
+            edge: None,
         }
     }
 }
@@ -126,33 +151,43 @@ fn default_name() -> String {
     }
     crate::tunnel::suggest_node_name("waters-node")
 }
+
 fn default_workspace() -> String {
     ".".into()
 }
+
 fn default_session_dir() -> String {
     ".waters/sessions".into()
 }
+
 fn default_redis_url() -> String {
     "redis://127.0.0.1:6379".into()
 }
+
 fn default_llm_provider() -> String {
     "ollama".into()
 }
+
 fn default_ollama_url() -> String {
     "http://127.0.0.1:11434".into()
 }
+
 fn default_ollama_model() -> String {
     "qwen2.5:14b".into()
 }
+
 fn default_topic() -> String {
     "mission.1.orders.v1".into()
 }
+
 fn default_findings_topic() -> String {
     "mission.1.findings.v1".into()
 }
+
 fn default_heartbeat_topic() -> String {
     "mission.1.heartbeat.v1".into()
 }
+
 fn default_agents_topic() -> String {
     "mission.1.agents.v1".into()
 }
@@ -161,25 +196,5 @@ impl Config {
     pub fn from_file(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)?;
         Ok(toml::from_str(&content)?)
-    }
-
-    pub fn default() -> Self {
-        Config {
-            node: NodeConfig {
-                name: default_name(),
-                id: None,
-                profile: default_profile(),
-                workspace: default_workspace(),
-                session_dir: default_session_dir(),
-                llm_provider: default_llm_provider(),
-            },
-            profiles: HashMap::new(),
-            kafka: None,
-            redis: None,
-            ollama: Some(OllamaConfig {
-                url: default_ollama_url(),
-                model: default_ollama_model(),
-            }),
-        }
     }
 }

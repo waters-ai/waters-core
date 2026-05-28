@@ -37,6 +37,8 @@ pub mod mcp_store;
 pub mod node_manager;
 pub mod tamagotchi;
 pub mod yasa_agent;
+pub mod identity;
+mod hybrid_llm;
 mod store;
 mod bridge;
 mod journal;
@@ -107,6 +109,18 @@ async fn main() -> Result<()> {
     let existing_id = node::Node::load_state(&state_path).ok().flatten();
     let mut node = node::Node::new(&cfg.node.name, existing_id);
 
+     // Generate node identity using entropy collection and fractal bootstrap
+     let host_prefs = identity::HostPreferences {
+         node_name: cfg.node.name.clone(),
+         owner_name: "unknown".to_string(),
+         characteristics: "default".to_string(),
+     };
+    let node_identity = identity::NodeIdentity::generate(&host_prefs)
+        .expect("Failed to generate node identity");
+    
+    // Update node with cryptographic identity
+    node.set_identity(node_identity.clone());
+
     print_banner(env!("CARGO_PKG_VERSION"));
 
     let id_short = node.id()[..8].to_string();
@@ -122,6 +136,13 @@ async fn main() -> Result<()> {
     if kvstore.is_connected() {
         println!("  {}KvStore{}   ✅ Redis connected", BOLD, RESET);
     }
+
+    // Initialize HybridLlm for hybrid LLM functionality
+     let hybrid_llm = std::sync::Arc::new(hybrid_llm::HybridLlm::new(
+         std::sync::Arc::new(bridge::BridgePool::with_kvstore(kvstore.clone())),
+         &cfg,
+         kvstore.clone(),
+     ));
 
     let mut bridge_pool = bridge::BridgePool::with_kvstore(kvstore.clone());
 
@@ -313,6 +334,7 @@ async fn main() -> Result<()> {
 
     let mut session_mgr = session::SessionManager::new(&PathBuf::from(&cfg.node.session_dir));
     let mut offline_queue = offline::OfflineQueue::new(&std::path::Path::new(".waters"));
+    let mut autonomy_engine = autonomy::AutonomyEngine::new();
 
     // Crash recovery: check for checkpoint first
     if let Ok(Some(cp)) = session::SessionManager::resume_from_checkpoint() {
@@ -432,12 +454,14 @@ async fn main() -> Result<()> {
     // One-shot mode
     if let Some(prompt_text) = args.prompt {
         session_mgr.add_message("user", &prompt_text);
-        match bridge_pool.call("llm-ollama", &prompt_text)
-            .or_else(|_| bridge_pool.call("llm-deepseek", &prompt_text))
-        {
-            Ok(r) => { println!("{}", r); session_mgr.add_message("assistant", &r); }
-            Err(_) => demo_response(&prompt_text),
-        }
+        let autonomy_level = autonomy_engine.determine_level(
+            kvstore.is_connected(), // kafka_ok (using Redis as proxy for connectivity)
+            bridge_pool.get("llm-ollama").is_some() || bridge_pool.get("llm-deepseek").is_some(), // llm_ok
+            bridge_pool.get("llm-ollama").is_some(), // llm_is_local
+        );
+        let response = hybrid_llm.query(&prompt_text, autonomy_level).await;
+        println!("{}", response);
+        session_mgr.add_message("assistant", &response);
         session_mgr.save()?;
         return Ok(());
     }
