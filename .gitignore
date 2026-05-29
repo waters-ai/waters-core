@@ -1,0 +1,39 @@
+# Secrets (эти файлы не попадут в Git)
+.env
+.env.*
+.serve_password
+.secret_*
+*.enc
+.secrets/
+
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.prof
+*.rlib
+*.rmeta
+*.d
+
+# Nested repos и runtime-папки (игнорируем)
+/live/
+/waters-node-v2/
+/waters-node2/
+
+# Logs and temporary files
+*.log
+*.pid
+*.tmp
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+*.iml
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Chroma data
+.chroma_data/
